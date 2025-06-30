@@ -52,7 +52,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use tokio::sync::Mutex as TokioMutex;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Thread-safe wrapper for StdRng
 #[derive(Debug)]
@@ -412,9 +412,12 @@ impl State {
         let sealed_block = payload.block();
         let value = Value::new(sealed_block.clone_block());
 
-        info!(
-            "Proposed value for height {} round {} with payload {:?}",
-            height, round, payload_id
+        debug!(
+            "Proposed value for height {} round {} with payload {:?}, value_id: {}",
+            height,
+            round,
+            payload_id,
+            value.id()
         );
 
         let locally_proposed = LocallyProposedValue::new(height, round, value.clone());
@@ -598,8 +601,11 @@ impl State {
         let value_id = certificate.value_id;
 
         info!(
-            "Committing value at height {} round {} with value_id {:?}",
-            height, round, value_id
+            "Committing value at height {} round {} with value_id {:?} (as B256: {})",
+            height,
+            round,
+            value_id,
+            value_id.as_b256()
         );
 
         // Try to find the value that matches the value_id
@@ -608,16 +614,34 @@ impl State {
 
         // Check the decided round first
         if let Ok(Some(proposal)) = self.get_undecided_proposal(height, round, value_id).await {
+            info!(
+                "Found proposal in decided round {} with value_id matching",
+                round
+            );
             value = Some(proposal.value);
+        } else {
+            info!(
+                "No proposal found in decided round {} for value_id {:?}",
+                round, value_id
+            );
         }
 
         // If not found, search all rounds (the proposal might have been from an earlier round)
         if value.is_none() {
+            info!(
+                "Searching all rounds from 0 to {} for value_id {:?}",
+                round.as_i64(),
+                value_id
+            );
             for check_round in 0..=round.as_i64() as u32 {
                 if let Ok(Some(proposal)) = self
                     .get_undecided_proposal(height, Round::new(check_round), value_id)
                     .await
                 {
+                    info!(
+                        "Found proposal in round {} with matching value_id",
+                        check_round
+                    );
                     value = Some(proposal.value);
                     break;
                 }
@@ -625,13 +649,36 @@ impl State {
         }
 
         // If we still don't have the value, this is an error
-        let value = value.ok_or_else(|| {
-            eyre::eyre!(
-                "Could not find proposal for value_id {:?} at height {}",
-                value_id,
-                height
-            )
-        })?;
+        let value = match value {
+            Some(v) => v,
+            None => {
+                // List all proposals at this height to debug
+                error!(
+                    "Failed to find proposal for value_id {:?} at height {}",
+                    value_id, height
+                );
+                for check_round in 0..=round.as_i64() as u32 {
+                    if let Ok(proposals) = self
+                        .get_undecided_proposals(height, Round::new(check_round))
+                        .await
+                    {
+                        for proposal in proposals {
+                            error!(
+                                "  Available proposal: round {} value_id {:?} (B256: {})",
+                                check_round,
+                                proposal.value.id(),
+                                proposal.value.id().as_b256()
+                            );
+                        }
+                    }
+                }
+                return Err(eyre::eyre!(
+                    "Could not find proposal for value_id {:?} at height {}",
+                    value_id,
+                    height
+                ));
+            }
+        };
 
         // 1. Store the decided value first (for persistence)
         self.store
@@ -643,6 +690,13 @@ impl State {
         let sealed_block = reth_primitives::SealedBlock::seal_slow(block.clone());
         let payload =
             <reth_node_ethereum::EthEngineTypes as PayloadTypes>::block_to_payload(sealed_block);
+
+        debug!(
+            "Sending new_payload with block_number: {}, parent_hash: {}",
+            payload.block_number(),
+            payload.parent_hash()
+        );
+
         let payload_status = self.engine_handle.new_payload(payload).await?;
 
         if payload_status.status != PayloadStatusEnum::Valid {
@@ -1208,7 +1262,7 @@ pub fn encode_value(value: &Value) -> Bytes {
     // Convert block to its bincode-compatible representation
     let block_repr = value.block.as_repr();
 
-    // Serialize the bincode-compatible representation
+    // Serialize the block
     match bincode::serialize(&block_repr) {
         Ok(bytes) => Bytes::from(bytes),
         Err(e) => {
@@ -1259,10 +1313,12 @@ fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<MalachiteCo
 
 /// Decode a value from its byte representation
 pub fn decode_value(bytes: Bytes) -> Option<Value> {
-    use reth_primitives_traits::serde_bincode_compat::{Block as BlockRepr, SerdeBincodeCompat};
+    use reth_primitives_traits::serde_bincode_compat::SerdeBincodeCompat;
 
-    // Deserialize the bincode-compatible representation
-    match bincode::deserialize::<BlockRepr<'_, _, _>>(&bytes) {
+    // Deserialize the block representation
+    match bincode::deserialize::<<reth_primitives::Block as SerdeBincodeCompat>::BincodeRepr<'_>>(
+        &bytes,
+    ) {
         Ok(block_repr) => {
             // Convert from bincode-compatible representation back to Block
             let block = reth_primitives::Block::from_repr(block_repr);
@@ -1492,6 +1548,35 @@ mod tests {
         assert_eq!(state.total_parts, Some(0)); // Fin at sequence 0 means 0 total parts
         assert!(state.proposer.is_none()); // No proposer set
         assert!(!state.is_done()); // Not done because no proposer
+    }
+
+    #[test]
+    fn test_encode_decode_value_preserves_hash() {
+        use reth_primitives::Block;
+
+        // Create a block
+        let block: Block = Block::default();
+        let original_hash = block.header.hash_slow();
+
+        // Create a Value
+        let value = Value::new(block.clone());
+
+        // Encode the value
+        let encoded = encode_value(&value);
+        assert!(!encoded.is_empty(), "Encoded value should not be empty");
+
+        // Decode the value
+        let decoded = decode_value(encoded).expect("Should decode successfully");
+
+        // Check that the block is preserved
+        assert_eq!(decoded.block, block, "Block should be preserved");
+
+        // Check that the hash is correct
+        assert_eq!(
+            *decoded.id().as_b256(),
+            original_hash,
+            "Hash should be preserved through encode/decode"
+        );
     }
 
     #[test]

@@ -219,15 +219,18 @@ where
     ) -> Result<(), StoreError> {
         let mut provider_rw = self.provider_rw()?;
 
-        let key = ProposalKey::new(proposal.height, proposal.round, &proposal.value.id());
+        let value_id = proposal.value.id();
+        let key = ProposalKey::new(proposal.height, proposal.round, &value_id);
         let stored = StoredProposal {
             proposal: proposal.clone(),
         };
 
         debug!(
-            "Storing undecided proposal for height {} round {}",
+            "Storing undecided proposal for height {} round {} with value_id {:?} (B256: {})",
             proposal.height.0,
-            proposal.round.as_u32().unwrap_or(0)
+            proposal.round.as_u32().unwrap_or(0),
+            value_id,
+            value_id.as_b256()
         );
 
         {
@@ -252,11 +255,12 @@ where
 
         let key = ProposalKey::new(height, round, &value_id);
 
-        trace!(
-            "Getting undecided proposal for height {} round {} value_id {:?}",
+        debug!(
+            "Getting undecided proposal for height {} round {} value_id {:?} (B256: {})",
             height.0,
             round.as_u32().unwrap_or(0),
-            value_id
+            value_id,
+            value_id.as_b256()
         );
 
         match tx.get::<UndecidedProposals>(key)? {

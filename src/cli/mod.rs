@@ -146,5 +146,7 @@ fn custom_malachite_chain() -> ChainSpec {
         .chain(Chain::from_id(2600))
         .genesis(genesis)
         .paris_activated()
+        .shanghai_activated()
+        .cancun_activated()
         .build()
 }
