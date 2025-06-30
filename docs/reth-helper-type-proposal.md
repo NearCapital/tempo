@@ -188,9 +188,8 @@ flowchart LR
 
 **Problems with current approach:**
 1. **Double conversion**: Block is fully serialized to ExecutionPayload, then fully deserialized back to Block
-2. **Data loss**: Some block metadata might be lost in conversion
-3. **Performance overhead**: Unnecessary allocations and copies
-4. **Inflexibility**: Can't preserve original encoded data (important for Optimism)
+2. **Performance overhead**: Unnecessary allocations and copies
+3. **Inflexibility**: Can't preserve original encoded data (important for Optimism)
 
 ### New Flow (With Helper Type)
 
