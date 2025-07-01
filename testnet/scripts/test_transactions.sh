@@ -26,104 +26,20 @@ error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
+# Check if cast is available
+if ! command -v cast &> /dev/null; then
+    error "cast command not found. Please install foundry: https://getfoundry.sh/"
+    exit 1
+fi
+
 # Test account with known private key for testing
 # This is a well-known test private key - DO NOT use in production
 TEST_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 TEST_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 
-# Function to send a test transaction
-send_transaction() {
-    local port=$1
-    local nonce=$2
-    local value=$3
-    local to_address=$4
-    
-    # Create transaction data
-    local tx_data=$(cat <<EOF
-{
-    "jsonrpc": "2.0",
-    "method": "eth_sendTransaction",
-    "params": [{
-        "from": "$TEST_ADDRESS",
-        "to": "$to_address",
-        "value": "$value",
-        "gas": "0x5208",
-        "gasPrice": "0x3b9aca00",
-        "nonce": "$nonce"
-    }],
-    "id": 1
-}
-EOF
-    )
-    
-    local response=$(curl -s -X POST http://127.0.0.1:$port \
-        -H "Content-Type: application/json" \
-        -d "$tx_data" 2>/dev/null || echo "")
-    
-    if [ -n "$response" ] && echo "$response" | grep -q "result"; then
-        echo "$response" | grep -o '"result":"0x[0-9a-fA-F]*"' | cut -d'"' -f4
-    else
-        error "Failed to send transaction: $response"
-        echo ""
-    fi
-}
-
-# Function to get transaction by hash
-get_transaction() {
-    local port=$1
-    local tx_hash=$2
-    
-    local response=$(curl -s -X POST http://127.0.0.1:$port \
-        -H "Content-Type: application/json" \
-        -d "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getTransactionByHash\",\"params\":[\"$tx_hash\"],\"id\":1}" 2>/dev/null || echo "")
-    
-    echo "$response"
-}
-
-# Function to get transaction receipt
-get_receipt() {
-    local port=$1
-    local tx_hash=$2
-    
-    local response=$(curl -s -X POST http://127.0.0.1:$port \
-        -H "Content-Type: application/json" \
-        -d "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getTransactionReceipt\",\"params\":[\"$tx_hash\"],\"id\":1}" 2>/dev/null || echo "")
-    
-    echo "$response"
-}
-
-# Function to import test account
-import_account() {
-    local port=$1
-    
-    # First unlock the account if needed
-    local unlock_response=$(curl -s -X POST http://127.0.0.1:$port \
-        -H "Content-Type: application/json" \
-        -d "{\"jsonrpc\":\"2.0\",\"method\":\"personal_importRawKey\",\"params\":[\"${TEST_PRIVATE_KEY#0x}\",\"password\"],\"id\":1}" 2>/dev/null || echo "")
-    
-    if echo "$unlock_response" | grep -q "result"; then
-        log "Test account imported on port $port"
-        return 0
-    else
-        # Account might already exist, try to unlock it
-        local unlock_response=$(curl -s -X POST http://127.0.0.1:$port \
-            -H "Content-Type: application/json" \
-            -d "{\"jsonrpc\":\"2.0\",\"method\":\"personal_unlockAccount\",\"params\":[\"$TEST_ADDRESS\",\"password\",300],\"id\":1}" 2>/dev/null || echo "")
-        
-        if echo "$unlock_response" | grep -q "true"; then
-            log "Test account unlocked on port $port"
-            return 0
-        fi
-    fi
-    
-    # If personal API is not available, we'll need to sign transactions client-side
-    log "Note: personal API not available on port $port, will use raw transactions"
-    return 1
-}
-
-# Function to wait for transaction to be mined
-wait_for_transaction() {
-    local port=$1
+# Function to wait for transaction receipt with timeout
+wait_for_receipt() {
+    local rpc_url=$1
     local tx_hash=$2
     local timeout=$3
     local start_time=$(date +%s)
@@ -136,13 +52,9 @@ wait_for_transaction() {
             return 1  # Timeout
         fi
         
-        local receipt_response=$(get_receipt $port $tx_hash)
-        if echo "$receipt_response" | grep -q "\"transactionHash\":\"$tx_hash\""; then
-            # Check if blockNumber exists and is not null
-            if echo "$receipt_response" | grep -q "\"blockNumber\":\"0x[0-9a-fA-F]" && \
-               ! echo "$receipt_response" | grep -q "\"blockNumber\":null"; then
-                return 0  # Transaction mined
-            fi
+        local receipt=$(cast receipt --rpc-url "$rpc_url" "$tx_hash" --json 2>/dev/null || echo "")
+        if [ -n "$receipt" ] && echo "$receipt" | jq -e '.blockNumber != null' >/dev/null 2>&1; then
+            return 0  # Transaction mined
         fi
         
         sleep 1
@@ -162,45 +74,71 @@ TEST_TO_ADDRESSES=(
     "0x90F79bf6EB2c4f870365E785982E1f101E93b906"
 )
 
-# Try to import/unlock accounts on all nodes
-for i in $(seq 0 $((NUM_NODES - 1))); do
-    port=$((8545 + i))
-    import_account $port || true
-done
-
 # Send transactions from different nodes
 log "Sending test transactions..."
-tx_count=0
+failed_count=0
 
 for i in $(seq 0 $((NUM_NODES - 1))); do
     port=$((8545 + i))
+    rpc_url="http://127.0.0.1:$port"
     to_address=${TEST_TO_ADDRESSES[$i]}
-    value="0x$(printf '%x' $((1000000000000000000 + i * 100000000000000000)))" # 1 + 0.1*i ETH in wei
-    nonce="0x$(printf '%x' $tx_count)"
+    value_wei=$((1000000000000000000 + i * 100000000000000000)) # 1 + 0.1*i ETH in wei
     
-    log "Sending transaction from node $i (port $port) to $to_address..."
-    tx_hash=$(send_transaction $port $nonce $value $to_address)
+    log "Sending transaction to node $i (port $port) recipient: $to_address..."
     
-    if [ -n "$tx_hash" ]; then
+    # Send transaction using cast
+    tx_hash=$(cast send \
+        --rpc-url "$rpc_url" \
+        --private-key "$TEST_PRIVATE_KEY" \
+        --value "${value_wei}wei" \
+        "$to_address" \
+        --json 2>/dev/null | jq -r '.transactionHash' 2>/dev/null || echo "")
+    
+    if [ -n "$tx_hash" ] && [ "$tx_hash" != "null" ]; then
         TX_HASHES+=("$tx_hash")
         log "Transaction sent: $tx_hash"
-        tx_count=$((tx_count + 1))
     else
-        error "Failed to send transaction from node $i"
+        error "Failed to send transaction to node $i"
+        failed_count=$((failed_count + 1))
+        
+        # Try to get more info about the failure
+        log "Checking account balance..."
+        balance=$(cast balance --rpc-url "$rpc_url" "$TEST_ADDRESS" 2>/dev/null || echo "unknown")
+        log "Account balance: $balance"
     fi
     
     # Small delay between transactions
     sleep 1
 done
 
+# Check if any transactions were successfully sent
+if [ ${#TX_HASHES[@]} -eq 0 ]; then
+    error "No transactions were successfully sent!"
+    
+    # Check if the test account has balance on any node
+    log "Checking test account balance on all nodes..."
+    for i in $(seq 0 $((NUM_NODES - 1))); do
+        port=$((8545 + i))
+        rpc_url="http://127.0.0.1:$port"
+        balance=$(cast balance --rpc-url "$rpc_url" "$TEST_ADDRESS" 2>/dev/null || echo "error")
+        log "Node $i balance: $balance"
+    done
+    
+    exit 1
+fi
+
+if [ $failed_count -gt 0 ]; then
+    log "Warning: $failed_count out of $NUM_NODES transaction attempts failed"
+fi
+
 # Wait for transactions to be mined with timeout
 log "Waiting for transactions to be mined (timeout: 60s per transaction)..."
-for i in "${!TX_HASHES[@]}"; do
-    tx_hash="${TX_HASHES[$i]}"
-    node_port=$((8545 + i))
+for tx_hash in "${TX_HASHES[@]}"; do
+    # Use the first node's RPC for waiting
+    rpc_url="http://127.0.0.1:8545"
     
     log "Waiting for transaction $tx_hash to be mined..."
-    if wait_for_transaction $node_port $tx_hash 60; then
+    if wait_for_receipt "$rpc_url" "$tx_hash" 60; then
         log "  ✓ Transaction $tx_hash has been mined"
     else
         error "  ✗ Transaction $tx_hash was not mined within timeout"
@@ -217,23 +155,20 @@ for tx_hash in "${TX_HASHES[@]}"; do
     
     for i in $(seq 0 $((NUM_NODES - 1))); do
         port=$((8545 + i))
+        rpc_url="http://127.0.0.1:$port"
         
-        # Get transaction
-        tx_response=$(get_transaction $port $tx_hash)
-        if echo "$tx_response" | grep -q "\"hash\":\"$tx_hash\""; then
+        # Get transaction using cast
+        tx_data=$(cast tx --rpc-url "$rpc_url" "$tx_hash" --json 2>/dev/null || echo "")
+        
+        if [ -n "$tx_data" ] && echo "$tx_data" | jq -e '.hash' >/dev/null 2>&1; then
             log "  ✓ Transaction found on node $i"
             success_count=$((success_count + 1))
             
             # Also check receipt
-            receipt_response=$(get_receipt $port $tx_hash)
-            if echo "$receipt_response" | grep -q "\"transactionHash\":\"$tx_hash\""; then
-                block_num=$(echo "$receipt_response" | grep -o '"blockNumber":"0x[0-9a-fA-F]*"' | cut -d'"' -f4)
-                if [ -n "$block_num" ]; then
-                    block_dec=$((16#${block_num#0x}))
-                    log "  ✓ Receipt found on node $i (block $block_dec)"
-                else
-                    log "  ✓ Receipt found on node $i"
-                fi
+            receipt=$(cast receipt --rpc-url "$rpc_url" "$tx_hash" --json 2>/dev/null || echo "")
+            if [ -n "$receipt" ] && echo "$receipt" | jq -e '.blockNumber' >/dev/null 2>&1; then
+                block_num=$(echo "$receipt" | jq -r '.blockNumber')
+                log "  ✓ Receipt found on node $i (block $block_num)"
             else
                 log "  ✗ Receipt not found on node $i"
             fi
