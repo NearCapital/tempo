@@ -2,17 +2,17 @@
 //!
 //! This utility generates a genesis.json file with accounts derived from mnemonics.
 
+use alloy::signers::local::MnemonicBuilder;
+use alloy::signers::local::coins_bip39::English;
+use alloy::signers::utils::secret_key_to_address;
 use alloy_genesis::{Genesis, GenesisAccount};
 use alloy_primitives::{Address, B256, Bytes, U256};
 use clap::Parser;
 use eyre::Result;
-use serde_json;
-use std::{collections::BTreeMap, fs, path::PathBuf};
-use alloy::signers::local::coins_bip39::English;
-use alloy::signers::local::MnemonicBuilder;
-use alloy::signers::utils::secret_key_to_address;
 use rayon::prelude::*;
+use serde_json;
 use simple_tqdm::ParTqdm;
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 /// Genesis generator CLI arguments
 #[derive(Debug, Clone, Parser)]
@@ -24,7 +24,11 @@ pub struct Args {
     pub output: PathBuf,
 
     /// Mnemonic phrase for account generation (12 or 24 words)
-    #[arg(short, long, default_value = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about")]
+    #[arg(
+        short,
+        long,
+        default_value = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    )]
     pub mnemonic: String,
 
     /// Number of accounts to generate from the mnemonic
@@ -50,24 +54,30 @@ pub struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    
-    println!("Generating genesis file with {} accounts from mnemonic...", args.accounts);
-    
+
+    println!(
+        "Generating genesis file with {} accounts from mnemonic...",
+        args.accounts
+    );
+
     // Generate accounts from mnemonic
     let accounts = generate_accounts_from_mnemonic(&args.mnemonic, args.accounts);
-    
+
     // Convert balance from ETH to wei
     let balance_wei = U256::from(args.balance) * U256::from(10u64.pow(18));
-    
+
     // Create genesis accounts
     let mut alloc = BTreeMap::new();
     for (i, address) in accounts.iter().enumerate() {
-        alloc.insert(*address, GenesisAccount {
-            balance: balance_wei,
-            ..Default::default()
-        });
+        alloc.insert(
+            *address,
+            GenesisAccount {
+                balance: balance_wei,
+                ..Default::default()
+            },
+        );
     }
-    
+
     // Create genesis configuration
     let genesis = Genesis {
         config: Default::default(),
@@ -89,16 +99,16 @@ fn main() -> Result<()> {
     } else {
         serde_json::to_string(&genesis)
     }?;
-    
+
     // Write to file
     fs::write(&args.output, json_output)?;
-    
+
     println!("\nGenesis file generated successfully!");
     println!("Output file: {}", args.output.display());
     println!("Chain ID: {}", args.chain_id);
     println!("Accounts: {}", args.accounts);
     println!("Balance per account: {} ETH", args.balance);
-    
+
     Ok(())
 }
 
