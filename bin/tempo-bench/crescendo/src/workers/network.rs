@@ -19,12 +19,15 @@ pub async fn network_worker(worker_id: usize) {
         .pool_idle_timeout(Duration::from_secs(90))
         .pool_max_idle_per_host(100)
         .retry_canceled_requests(true)
+
         .build({
             let mut connector = HttpConnector::new();
             connector.set_nodelay(true);
             connector.set_keepalive(Some(Duration::from_secs(60)));
             connector
         });
+
+    let target_url = config.target_urls.get(worker_id % config.target_urls.len()).unwrap();
 
     loop {
         if let Some(txs) = TX_QUEUE.pop_at_most(config.batch_factor).await {
@@ -45,7 +48,7 @@ pub async fn network_worker(worker_id: usize) {
 
             let req = Request::builder()
                 .method("POST")
-                .uri(&config.target_url)
+                .uri(target_url)
                 .header("Content-Type", "application/json")
                 .body(Full::new(Bytes::from(json_body.into_bytes())))
                 .unwrap();
