@@ -1,11 +1,13 @@
 use alloy::primitives::U256;
+use reth_evm::{SpecFor, TxEnvFor};
 use reth_rpc::eth::{EthApi, RpcNodeCore};
 use reth_rpc_convert::RpcConvert;
 use reth_rpc_eth_api::{
     EthApiTypes, FromEvmError, RpcNodeCoreExt,
     helpers::{
-        EthApiSpec, EthFees, EthState, FullEthApi, LoadBlock, LoadFee, LoadPendingBlock, LoadState,
-        SpawnBlocking, Trace, pending_block::PendingEnvBuilder, spec::SignersForApi,
+        Call, EthApiSpec, EthCall, EthFees, EthState, FullEthApi, LoadBlock, LoadFee,
+        LoadPendingBlock, LoadState, SpawnBlocking, Trace, estimate::EstimateCall,
+        pending_block::PendingEnvBuilder, spec::SignersForApi,
     },
 };
 use reth_rpc_eth_types::{
@@ -229,5 +231,53 @@ where
     N: RpcNodeCore,
     EthApiError: FromEvmError<N::Evm>,
     Rpc: RpcConvert<Primitives = N::Primitives>,
+{
+}
+
+impl<N, Rpc> EthCall for TempoEthApi<N, Rpc>
+where
+    N: RpcNodeCore,
+    EthApiError: FromEvmError<N::Evm>,
+    Rpc: RpcConvert<
+            Primitives = N::Primitives,
+            Error = EthApiError,
+            TxEnv = TxEnvFor<N::Evm>,
+            Spec = SpecFor<N::Evm>,
+        >,
+{
+}
+
+impl<N, Rpc> Call for TempoEthApi<N, Rpc>
+where
+    N: RpcNodeCore,
+    EthApiError: FromEvmError<N::Evm>,
+    Rpc: RpcConvert<
+            Primitives = N::Primitives,
+            Error = EthApiError,
+            TxEnv = TxEnvFor<N::Evm>,
+            Spec = SpecFor<N::Evm>,
+        >,
+{
+    #[inline]
+    fn call_gas_limit(&self) -> u64 {
+        self.inner.gas_cap()
+    }
+
+    #[inline]
+    fn max_simulate_blocks(&self) -> u64 {
+        self.inner.max_simulate_blocks()
+    }
+}
+
+impl<N, Rpc> EstimateCall for TempoEthApi<N, Rpc>
+where
+    N: RpcNodeCore,
+    EthApiError: FromEvmError<N::Evm>,
+    Rpc: RpcConvert<
+            Primitives = N::Primitives,
+            Error = EthApiError,
+            TxEnv = TxEnvFor<N::Evm>,
+            Spec = SpecFor<N::Evm>,
+        >,
 {
 }
