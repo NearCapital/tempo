@@ -1,20 +1,18 @@
 use crate::args::TempoArgs;
-use alloy::network::Ethereum;
 use alloy_eips::{eip7840::BlobParams, merge::EPOCH_SLOTS};
 use alloy_rpc_types_engine::{ExecutionData, PayloadAttributes};
 use reth_chainspec::{EthChainSpec, EthereumHardforks, Hardforks};
 use reth_engine_local::LocalPayloadAttributesBuilder;
-use reth_ethereum::rpc::eth::core::EthRpcConverterFor;
 use reth_ethereum_engine_primitives::EthPayloadAttributes;
 use reth_ethereum_primitives::EthPrimitives;
 use reth_evm::{
-    ConfigureEvm, EvmFactory, EvmFactoryFor, NextBlockEnvAttributes, SpecFor,
-    eth::spec::{EthExecutorSpec, EthSpec},
+    ConfigureEvm, EvmFactory, EvmFactoryFor, NextBlockEnvAttributes,
+    eth::spec::EthExecutorSpec,
     revm::{context::TxEnv, primitives::Address},
 };
 use reth_malachite::MalachiteConsensusBuilder;
 use reth_node_api::{
-    AddOnsContext, EngineTypes, FullNodeComponents, FullNodeTypes, HeaderTy, NodeAddOns, NodeTypes,
+    AddOnsContext, EngineTypes, FullNodeComponents, FullNodeTypes, NodeAddOns, NodeTypes,
     PayloadAttributesBuilder, PayloadTypes,
 };
 use reth_node_builder::{
@@ -24,8 +22,7 @@ use reth_node_builder::{
     },
     rpc::{
         BasicEngineApiBuilder, BasicEngineValidatorBuilder, EngineApiBuilder, EngineValidatorAddOn,
-        EngineValidatorBuilder, EthApiBuilder, EthApiCtx, PayloadValidatorBuilder, RethRpcAddOns,
-        RpcAddOns,
+        EngineValidatorBuilder, EthApiBuilder, PayloadValidatorBuilder, RethRpcAddOns, RpcAddOns,
     },
 };
 use reth_node_ethereum::{
@@ -34,16 +31,13 @@ use reth_node_ethereum::{
 };
 use reth_provider::{EthStorage, providers::ProviderFactoryBuilder};
 use reth_rpc_builder::Identity;
-use reth_rpc_eth_api::{
-    FromEvmError, RpcConvert, RpcConverter, helpers::pending_block::BuildPendingEnv,
-};
-use reth_rpc_eth_types::{EthApiError, receipt::EthReceiptConverter};
+use reth_rpc_eth_api::FromEvmError;
+use reth_rpc_eth_types::EthApiError;
 use reth_tracing::tracing::{debug, info};
 use reth_transaction_pool::{TransactionValidationTaskExecutor, blobstore::DiskFileBlobStore};
 use std::{default::Default, sync::Arc, time::SystemTime};
 use tempo_chainspec::spec::{TEMPO_BASE_FEE, TempoChainSpec};
 use tempo_evm::evm::TempoEvmFactory;
-use tempo_rpc::eth::TempoEthApi;
 use tempo_transaction_pool::{TempoTransactionPool, validator::TempoTransactionValidator};
 
 /// Type configuration for a regular Ethereum node.
@@ -402,33 +396,29 @@ where
 
 ///// Builds [`TempoEthApi`]
 //#[derive(Debug, Default)]
-//pub struct TempoEthApiBuilder;
-//
-//pub type TempoRpcConverter<N> =
-//    RpcConverter<Ethereum, <N as FullNodeComponents>::Evm, EthReceiptConverter<TempoChainSpec>>;
+//pub struct TempoEthApiBuilder {
+//    inner: EthereumEthApiBuilder,
+//}
 //
 //impl<N> EthApiBuilder<N> for TempoEthApiBuilder
 //where
 //    N: FullNodeComponents<
-//            Types: NodeTypes<ChainSpec: Hardforks + EthereumHardforks>,
-//            Evm: ConfigureEvm<NextBlockEnvCtx: BuildPendingEnv<HeaderTy<N::Types>>>,
+//            Types: NodeTypes<
+//                ChainSpec: EthereumHardforks + Clone + 'static,
+//                Payload: EngineTypes<ExecutionData = ExecutionData>
+//                             + PayloadTypes<PayloadAttributes = PayloadAttributes>,
+//                Primitives = EthPrimitives,
+//            >,
+//            Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
 //        >,
-//    EthRpcConverterFor<N>: RpcConvert<
-//            Primitives = EthPrimitives,
-//            TxEnv = TxEnv,
-//            Error = EthApiError,
-//            Network = Ethereum,
-//            Spec = EthSpec,
-//        >,
+//    EthereumEthApiBuilder: EthApiBuilder<N>,
 //    EthApiError: FromEvmError<N::Evm>,
+//    EvmFactoryFor<N::Evm>: EvmFactory<Tx = TxEnv>,
 //{
-//    type EthApi = TempoEthApi<N, TempoRpcConverter<N>>;
+//    type EthApi = TempoEthApi<N, EthRpcConverterFor<N>>;
 //
 //    async fn build_eth_api(self, ctx: EthApiCtx<'_, N>) -> eyre::Result<Self::EthApi> {
-//        let eth_api_inner = ctx
-//            .eth_api_builder()
-//            .map_converter(|converter| converter.with_network())
-//            .build();
+//        let eth_api_inner = self.inner.build_eth_api(ctx).await?;
 //        Ok(TempoEthApi::new(eth_api_inner))
 //    }
 //}
