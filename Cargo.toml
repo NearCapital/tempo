@@ -106,6 +106,7 @@ reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", rev = "3
 ] }
 reth-provider = { git = "https://github.com/paradigmxyz/reth", rev = "3425a31a2f0a45deefb3b1f6e33cf0858a280ebb", package = "reth-provider" }
 reth-rpc-builder = { git = "https://github.com/paradigmxyz/reth", rev = "3425a31a2f0a45deefb3b1f6e33cf0858a280ebb", package = "reth-rpc-builder" }
+reth-rpc-convert = { git = "https://github.com/paradigmxyz/reth", rev = "3425a31a2f0a45deefb3b1f6e33cf0858a280ebb", package = "reth-rpc-convert" }
 reth-rpc-eth-api = { git = "https://github.com/paradigmxyz/reth", rev = "3425a31a2f0a45deefb3b1f6e33cf0858a280ebb", package = "reth-rpc-eth-api" }
 reth-storage-api = { git = "https://github.com/paradigmxyz/reth", rev = "3425a31a2f0a45deefb3b1f6e33cf0858a280ebb", package = "reth-storage-api" }
 reth-tasks = { git = "https://github.com/paradigmxyz/reth", rev = "3425a31a2f0a45deefb3b1f6e33cf0858a280ebb", package = "reth-tasks" }

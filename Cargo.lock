@@ -12018,6 +12018,8 @@ name = "tempo-rpc"
 version = "0.1.0"
 dependencies = [
  "alloy-evm",
+ "reth-rpc",
+ "reth-rpc-convert",
 ]
 
 [[package]]
