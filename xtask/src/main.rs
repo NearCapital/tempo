@@ -186,7 +186,7 @@ fn generate_config(
     for (instance, (name, dst, cfg)) in configurations.iter().enumerate() {
         let eth_dst = cfg.storage_directory.with_file_name("reth_storage");
         let command = format!(
-            "cargo run --release --bin tempo -- \\\n--consensus-config {dst} \\\n--datadir {eth_dst} \\\n--instance {instance}"
+            "cargo run --release --bin tempo-commonware -- \\\n--consensus-config {dst} \\\n--datadir {eth_dst} \\\n--instance {instance} \\\n--http"
         );
         println!("{name}: {command}");
     }
