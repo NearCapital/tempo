@@ -236,19 +236,7 @@ where
             broadcast: Broadcast,
             latest_proposed: Arc<RwLock<Option<Block<reth_ethereum_primitives::Block>>>>,
             mut syncer: marshal::Mailbox<BlsScheme, Block<reth_ethereum_primitives::Block>>,
-        ) -> eyre::Result<()>
-// // TODO: Figure out if we can reduce the trait bounds to just what's necessary.
-        // // Needed to repeat the generic parameter from the outer func (err code e0401).
-        // where
-        //     TFullNodeComponents: FullNodeComponents,
-        //     TFullNodeComponents::Types: NodeTypes,
-        //     <TFullNodeComponents::Types as NodeTypes>::Payload: PayloadTypes<
-        //             PayloadAttributes = alloy_rpc_types_engine::PayloadAttributes,
-        //             ExecutionData = alloy_rpc_types_engine::ExecutionData,
-        //             BuiltPayload = reth_ethereum_engine_primitives::EthBuiltPayload,
-        //         >,
-        //     <<TFullNodeComponents as FullNodeTypes>::Provider as DatabaseProviderFactory>::ProviderRW: Send,
-        {
+        ) -> eyre::Result<()> {
             let Some(latest_proposed) = latest_proposed.read().await.clone() else {
                 return Err(eyre!("there was no latest block to broadcast"));
             };
@@ -271,15 +259,15 @@ where
 
     #[instrument(
         skip_all,
+        ret(Display),
         err(level = Level::WARN)
     )]
-    fn handle_genesis(&mut self, genesis: Genesis) -> eyre::Result<()> {
-        genesis
-            .response
-            .send(self.genesis_block.digest())
-            .map_err(|_| {
-                eyre!("failed returning genesis block digest: return channel was already closed")
-            })
+    fn handle_genesis(&mut self, genesis: Genesis) -> eyre::Result<Digest> {
+        let genesis_digest = self.genesis_block.digest();
+        genesis.response.send(genesis_digest).map_err(|_| {
+            eyre!("failed returning genesis block digest: return channel was already closed")
+        })?;
+        Ok(genesis_digest)
     }
 
     fn handle_propose(&mut self, propose: Propose) {
