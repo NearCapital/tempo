@@ -204,12 +204,12 @@ impl CommonwareRunnerExt for commonware_runtime::tokio::Runner {
         F: Future<Output = Result<(), E>>,
         E: Send + Sync + From<std::io::Error> + From<reth_tasks::PanickedTaskError> + 'static,
     {
-        let mut reth_task_manager = TaskManager::current();
-        let reth_cli_context = reth::CliContext {
-            task_executor: reth_task_manager.executor(),
-        };
-
         let res = self.start(move |ctx| async {
+            let mut reth_task_manager = TaskManager::current();
+            let reth_cli_context = reth::CliContext {
+                task_executor: reth_task_manager.executor(),
+            };
+
             let res = run_to_completion_or_panic(
                 &mut reth_task_manager,
                 run_until_ctrl_c(command(ctx, reth_cli_context)),
