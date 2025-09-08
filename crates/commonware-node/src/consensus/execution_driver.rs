@@ -254,6 +254,7 @@ where
                 broadcast.payload,
                 latest_proposed.digest(),
             );
+
             syncer.broadcast(latest_proposed).await;
             Ok(())
         }

@@ -107,10 +107,12 @@ where
     type Cfg = ();
 
     fn read_cfg(buf: &mut impl Buf, _cfg: &Self::Cfg) -> Result<Self, commonware_codec::Error> {
-        // XXX: this does not advance `buf`. Also, it assumes that the rlp header is fully contained
-        // in the first chunk of `buf`. As per `bytes::Buf::chunk`'s documentation, the first slice
-        // should never be empty is there are remaining bytes. We hence don't worry about edge cases
-        // where the very tiny rlp header is spread over more than one chunk.
+        // XXX: this does not advance `buf`. Also, it assumes that the rlp
+        // header is fully contained in the first chunk of `buf`. As per
+        // `bytes::Buf::chunk`'s documentation, the first slice should never be
+        // empty is there are remaining bytes. We hence don't worry about edge
+        // cases where the very tiny rlp header is spread over more than one
+        // chunk.
         let header = alloy_rlp::Header::decode(&mut buf.chunk()).map_err(|rlp_err| {
             commonware_codec::Error::Wrapped("reading RLP header", rlp_err.into())
         })?;
@@ -138,7 +140,8 @@ where
     TBlock: reth_primitives_traits::Block,
 {
     fn encode_size(&self) -> usize {
-        alloy_rlp::Encodable::length(self.0.as_ref())
+        use alloy_rlp::Encodable as _;
+        self.0.length()
     }
 }
 
