@@ -1,7 +1,6 @@
 //! xtask is a Swiss army knife of tools that help with running and testing tempo.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::PathBuf;
 use clap::Parser;
 use commonware_cryptography::{PrivateKeyExt as _, Signer as _};
 use eyre::{Context, ensure};
@@ -184,8 +183,8 @@ fn generate_config(
         eprintln!("\t{bootstrapper}");
     }
     eprintln!("To start validators, run:");
-    for (instance, (name, dst, cfg)) in configurations.iter().enumerate() {
-        let eth_dst = output.join(name).with_file_name("reth_storage");
+    for (instance, (name, dst, _)) in configurations.iter().enumerate() {
+        let eth_dst = output.join(name).join("reth_storage");
         let command = format!(
             "cargo run --release --bin tempo-commonware -- \
                 \\\n--filter-directives \"debug,net=warn,reth_ecies=warn\" \
