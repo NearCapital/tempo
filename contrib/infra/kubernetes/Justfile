@@ -6,3 +6,6 @@ create-service-account cluster user="terraform":
     @cat /tmp/talos_kubeconfig | yq ".clusters[0].cluster.server"
     @cat /tmp/talos_kubeconfig | yq ".users[0].user.token"
     @rm /tmp/talos_kubeconfig
+
+argocd-password:
+    kubectl get secrets argocd-initial-admin-secret -n argocd -o json | jq -r .data.password | base64 -d

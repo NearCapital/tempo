@@ -5,7 +5,7 @@ resource "kubernetes_namespace" "tailscale" {
 }
 
 resource "tailscale_oauth_client" "kubernetes_operator" {
-  description = "OAuth client for Kubernetes operator on ${var.cluster_name}"
+  description = "Kubernetes operator on ${var.cluster_name}"
 
   tags = [
     "tag:k8s-operator"
@@ -44,26 +44,5 @@ resource "helm_release" "tailscale_operator" {
   depends_on = [
     kubernetes_namespace.tailscale,
     tailscale_oauth_client.kubernetes_operator
-  ]
-}
-
-resource "kubernetes_manifest" "tailscale_dns_config" {
-  manifest = {
-    "apiVersion" = "tailscale.com/v1alpha1"
-    "kind" = "DNSConfig"
-    "metadata" = {
-      "name" = "ts-dns"
-    }
-    "spec" = {
-      "nameserver" = {
-        "service" = {
-          "clusterIP" = "10.96.0.11"
-        }
-      }
-    }
-  }
-
-  depends_on = [
-    helm_release.tailscale_operator
   ]
 }
