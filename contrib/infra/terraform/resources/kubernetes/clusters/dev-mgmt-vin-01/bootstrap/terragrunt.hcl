@@ -18,7 +18,7 @@ terraform {
 
 inputs = {
   # Cluster configuration
-  cluster_name = "dev-mgmt-chi-01"
+  cluster_name = "dev-vin-01"
   
   # Tailscale operator configuration
   tailscale_operator_version = "1.86.2"
@@ -34,6 +34,5 @@ inputs = {
   onepassword_connect_version = "2.0.3"
 
   external_clusters = {
-//    "dev-mgmt-dal-01" = "dev-mgmt-dal-01-ts-operator.tail388b2e.ts.net"
   }
 }
