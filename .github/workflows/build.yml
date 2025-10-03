@@ -28,7 +28,7 @@ jobs:
     runs-on: depot-ubuntu-latest-16
     strategy:
       matrix:
-        binary: [tempo, tempo-bench, tempo-commonware, tempo-sidecar]
+        binary: [tempo, tempo-bench, tempo-sidecar]
     steps:
       - uses: actions/checkout@v2
       - uses: dtolnay/rust-toolchain@stable
