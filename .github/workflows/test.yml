@@ -66,8 +66,7 @@ jobs:
           platforms: linux/amd64
           tags: tempo-node:latest
       - name: Run tests
-        run: cargo nextest run --exclude tempo-e2e-tests --no-fail-fast --workspace
-
+        run: cargo nextest run -p tempo-e2e-tests
   test-success:
     name: test success
     runs-on: depot-ubuntu-latest-4
