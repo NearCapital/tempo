@@ -1,0 +1,34 @@
+[package]
+name = "tempo-e2e-tests"
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+alloy = { workspace = true, features = [
+    "full",
+    "providers",
+    "signers",
+    "signer-mnemonic-all-languages",
+] }
+eyre.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros"] }
+commonware-utils.workspace = true
+commonware-cryptography.workspace = true
+indexmap.workspace = true
+tempo-commonware-node-config.workspace = true
+tempo-commonware-node-cryptography.workspace = true
+rand.workspace = true
+reth-network-peers = { workspace = true, features = ["secp256k1"] }
+camino = "1.2.1"
+secp256k1 = { version = "0.30", default-features = false, features = ["global-context", "recovery", "rand"] }
+toml.workspace = true
+testcontainers = { version = "0.25.0", features = ["http_wait"] }
+uuid = { version = "1.18.1", features = ["v4"] }
+url = "2.5.7"
