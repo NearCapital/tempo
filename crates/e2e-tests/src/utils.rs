@@ -26,7 +26,8 @@ impl Node {
 }
 
 pub async fn setup_validators(count: usize) -> Vec<Node> {
-    let hostnames = (1..count).map(|i| format!("node-{i}")).collect::<Vec<_>>();
+    let prefix = &Uuid::new_v4().to_string()[..8];
+    let hostnames = (1..count).map(|i| format!("{}-node-{i}", prefix).collect::<Vec<_>>();
 
     let configs = generate_commonware_config(hostnames.clone());
 
