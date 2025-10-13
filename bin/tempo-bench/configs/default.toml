@@ -1,0 +1,29 @@
+# Default configuration for tempo-bench
+
+[benchmark]
+# Test duration in seconds
+duration = 30
+
+# Number of accounts for pre-generation
+accounts = 100
+
+# Number of workers to send transactions
+workers = 10
+
+# Mnemonic for generating accounts
+mnemonic = "test test test test test test test test test test test junk"
+
+# Chain ID
+chain_id = 1337
+
+# Token address used when creating TIP20 transfer calldata
+token_address = "0x20c0000000000000000000000000000000000000"
+
+# Target URLs for network connections
+target_urls = ["http://localhost:8545"]
+
+# Total network connections
+total_connections = 100
+
+# Disable binding worker threads to specific CPU cores
+disable_thread_pinning = false

@@ -1,3 +1,4 @@
+use crate::config::BenchConfig;
 use alloy::{
     network::TxSignerSync,
     primitives::{Address, TxKind, U256},
@@ -36,49 +37,49 @@ sol! {
 /// Run maximum TPS throughput benchmarking
 #[derive(Parser, Debug)]
 pub struct MaxTpsArgs {
+    /// Path to TOML configuration file
+    #[arg(short, long)]
+    config: Option<String>,
+
     /// Target transactions per second
     #[arg(short, long)]
-    tps: u64,
+    tps: Option<u64>,
 
     /// Test duration in seconds
-    #[arg(short, long, default_value = "30")]
-    duration: u64,
+    #[arg(short, long)]
+    duration: Option<u64>,
 
     /// Number of accounts for pre-generation
-    #[arg(short, long, default_value = "100")]
-    accounts: u64,
+    #[arg(short, long)]
+    accounts: Option<u64>,
 
     /// Number of workers to send transactions
-    #[arg(short, long, default_value = "10")]
-    workers: usize,
+    #[arg(short, long)]
+    workers: Option<usize>,
 
     /// Mnemonic for generating accounts
-    #[arg(
-        short,
-        long,
-        default_value = "test test test test test test test test test test test junk"
-    )]
-    mnemonic: String,
+    #[arg(short, long)]
+    mnemonic: Option<String>,
 
     /// Chain ID
-    #[arg(long, default_value = "1337")]
-    chain_id: u64,
+    #[arg(long)]
+    chain_id: Option<u64>,
 
     /// Token address used when creating TIP20 transfer calldata
-    #[arg(long, default_value = "0x20c0000000000000000000000000000000000000")]
-    token_address: Address,
+    #[arg(long)]
+    token_address: Option<Address>,
 
     /// Target URLs for network connections
-    #[arg(long, default_values_t = vec!["http://localhost:8545".to_string()])]
-    target_urls: Vec<String>,
+    #[arg(long)]
+    target_urls: Option<Vec<String>>,
 
     /// Total network connections
-    #[arg(long, default_value = "100")]
-    total_connections: u64,
+    #[arg(long)]
+    total_connections: Option<u64>,
 
     /// Disable binding worker threads to specific CPU cores, letting the OS scheduler handle placement.
     #[arg(long)]
-    disable_thread_pinning: bool,
+    disable_thread_pinning: Option<bool>,
 
     /// File descriptor limit to set
     #[arg(long)]
@@ -87,13 +88,65 @@ pub struct MaxTpsArgs {
 
 impl MaxTpsArgs {
     pub async fn run(self) -> eyre::Result<()> {
+        // Load config from file if provided
+        let config = if let Some(config_path) = &self.config {
+            BenchConfig::from_file(config_path)
+                .with_context(|| format!("Failed to load config from {}", config_path))?
+        } else {
+            BenchConfig::default()
+        };
+
+        let benchmark_config = config.benchmark.unwrap_or_default();
+
+        // Merge CLI args with config (CLI args take precedence)
+        let tps = self
+            .tps
+            .or(benchmark_config.initial_ratelimit)
+            .ok_or_else(|| eyre::eyre!("TPS must be specified via --tps or config file"))?;
+
+        let duration = self.duration.or(benchmark_config.duration).unwrap_or(30);
+
+        let accounts = self.accounts.or(benchmark_config.accounts).unwrap_or(100);
+
+        let workers = self.workers.or(benchmark_config.workers).unwrap_or(10);
+
+        let mnemonic = self
+            .mnemonic
+            .or(benchmark_config.mnemonic)
+            .unwrap_or_else(|| {
+                "test test test test test test test test test test test junk".to_string()
+            });
+
+        let chain_id = self.chain_id.or(benchmark_config.chain_id).unwrap_or(1337);
+
+        let token_address = self
+            .token_address
+            .or(benchmark_config.token_address)
+            .unwrap_or_else(|| "0x20c0000000000000000000000000000000000000".parse().unwrap());
+
+        let target_urls = self
+            .target_urls
+            .or(benchmark_config.target_urls)
+            .unwrap_or_else(|| vec!["http://localhost:8545".to_string()]);
+
+        let total_connections = self
+            .total_connections
+            .or(benchmark_config.total_connections)
+            .unwrap_or(100);
+
+        let disable_thread_pinning = self
+            .disable_thread_pinning
+            .or(benchmark_config.disable_thread_pinning)
+            .unwrap_or(false);
+
+        let fd_limit = self.fd_limit.or(benchmark_config.fd_limit);
+
         // Set file descriptor limit if provided
-        if let Some(fd_limit) = self.fd_limit {
+        if let Some(fd_limit) = fd_limit {
             increase_nofile_limit(fd_limit).context("Failed to increase nofile limit")?;
         }
 
-        let target_urls: Vec<Url> = self
-            .target_urls
+        let target_urls: Vec<Url> = target_urls
             .iter()
             .map(|s| {
                 s.parse::<Url>()
@@ -103,14 +156,14 @@ impl MaxTpsArgs {
             .wrap_err("failed parsing input target URLs")?;
 
         // Generate all transactions
-        let total_txs = self.tps * self.duration;
+        let total_txs = tps * duration;
         let transactions = Arc::new(
             generate_transactions(
                 total_txs,
-                self.accounts,
-                &self.mnemonic,
-                self.chain_id,
-                self.token_address,
+                accounts,
+                &mnemonic,
+                chain_id,
+                token_address,
                 &target_urls[0],
             )
             .await
@@ -126,17 +179,17 @@ impl MaxTpsArgs {
         // Spawn workers and send transactions
         send_transactions(
             transactions,
-            self.workers,
-            self.total_connections,
+            workers,
+            total_connections,
             target_urls,
-            self.tps,
-            self.disable_thread_pinning,
+            tps,
+            disable_thread_pinning,
             tx_counter,
         )
         .context("Failed to send transactions")?;
 
         // Wait for all sender threads to finish
-        std::thread::sleep(Duration::from_secs(self.duration));
+        std::thread::sleep(Duration::from_secs(duration));
         println!("Finished sending transactions");
 
         Ok(())

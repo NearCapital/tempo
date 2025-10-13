@@ -7,3 +7,10 @@ scripts/data
 .idea
 **/.env
 **/.envrc
+
+# Data directory
+data/
+
+# Debug logs
+debug*.log
+*.log

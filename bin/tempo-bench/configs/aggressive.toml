@@ -1,0 +1,10 @@
+inherits = "default.toml"
+
+[benchmark]
+initial_ratelimit = 250
+disable_thread_pinning = true
+ratelimit_thresholds = [
+    [500, 1_000],
+    [5_000, 2_500],
+    [5_000, 25000],
+]

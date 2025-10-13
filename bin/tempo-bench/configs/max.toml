@@ -1,0 +1,20 @@
+inherits = "default.toml"
+
+[benchmark]
+# Maximum TPS for stress testing
+initial_ratelimit = 25000
+
+# Use more accounts to avoid nonce conflicts
+accounts = 50000
+
+# More workers for parallel sending
+workers = 16
+
+# Higher connection pool
+total_connections = 200
+
+# Disable thread pinning for macOS
+disable_thread_pinning = true
+
+# Test duration
+duration = 30
