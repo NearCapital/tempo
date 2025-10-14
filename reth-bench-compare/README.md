@@ -1,11 +1,11 @@
-# Python Analysis Tools
+# Reth Bench Compare Tools
 
 This directory contains Python scripts and libraries for analyzing tempo benchmark logs.
 
 ## Directory Structure
 
 ```
-python_analysis/
+reth-bench-compare/
 ├── lib/                    # Shared library code
 │   ├── __init__.py
 │   └── log_analysis.py    # Core log analysis functions
