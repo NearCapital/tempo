@@ -68,6 +68,8 @@ def run_tempo_bench(duration_seconds: int) -> None:
         "--bin",
         "tempo-bench",
         "run-max-tps",
+        "--duration",
+        str(duration_seconds),
         "--tps",
         "20000",
         "--target-urls",

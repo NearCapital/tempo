@@ -480,7 +480,7 @@ def start_tempo_node(log_path: Path, extra_args: Optional[list[str]] = None) -> 
 
     process = tempo_process
 
-    bench_log_path = SCRIPT_DIR / "bench.log"
+    bench_log_path = log_path.parent / "bench.log"
 
     def stream_reader(proc: subprocess.Popen[str], destination: Path, bench_log: Path) -> None:
         if not proc.stdout:
@@ -642,12 +642,13 @@ def print_comparison(before_file: Path, after_file: Path) -> None:
 
 def main() -> None:
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    logs_dir = SCRIPT_DIR / "python_analysis" / "logs"
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    main_log = logs_dir / f"debug_main_{timestamp}.log"
-    feature_log = logs_dir / f"debug_feature_{timestamp}.log"
-    main_metrics = logs_dir / f"metrics_main_{timestamp}.json"
-    feature_metrics = logs_dir / f"metrics_feature_{timestamp}.json"
+    base_logs_dir = SCRIPT_DIR / "python_analysis" / "logs"
+    run_dir = base_logs_dir / timestamp
+    run_dir.mkdir(parents=True, exist_ok=True)
+    main_log = run_dir / "debug_main.log"
+    feature_log = run_dir / "debug_feature.log"
+    main_metrics = run_dir / "metrics_main.json"
+    feature_metrics = run_dir / "metrics_feature.json"
 
     # Feature-specific arguments for testing engine worker counts
     feature_args = [

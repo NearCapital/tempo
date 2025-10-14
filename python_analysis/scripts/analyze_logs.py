@@ -20,6 +20,25 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib.log_analysis import analyze_log
 
 
+def resolve_log_path(path: Path) -> Path:
+    """Return the concrete log file path, allowing directory inputs."""
+    if path.is_dir():
+        # Prefer well-known filenames
+        candidates = [
+            path / "debug_main.log",
+            path / "debug_feature.log",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        # Fallback: any .log file in the directory
+        glob_matches = sorted(path.glob("*.log"))
+        if glob_matches:
+            return glob_matches[0]
+        raise FileNotFoundError(f"No .log files found in directory: {path}")
+    return path
+
+
 def compare_logs(before_summary: dict, after_summary: dict) -> None:
     """Print comparison between two log summaries."""
     print("\n" + "=" * 80)
@@ -105,7 +124,7 @@ def main():
         print(f"  {sys.argv[0]} <log_file> --save <output>    # Save metrics to JSON")
         sys.exit(1)
 
-    log1_path = Path(sys.argv[1])
+    log1_path = resolve_log_path(Path(sys.argv[1]))
 
     # Analyze first log
     summary1 = analyze_log(log1_path, label=log1_path.stem)
@@ -118,7 +137,7 @@ def main():
 
     # Check if we have a second log to compare
     elif len(sys.argv) >= 3 and sys.argv[2] != "--save":
-        log2_path = Path(sys.argv[2])
+        log2_path = resolve_log_path(Path(sys.argv[2]))
         summary2 = analyze_log(log2_path, label=log2_path.stem)
 
         # Compare the two
