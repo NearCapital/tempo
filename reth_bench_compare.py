@@ -414,12 +414,25 @@ def update_reth_revision(label: str, commit: str) -> None:
     print(f"=== Switching to {label} commit {commit} ===")
 
     original = cargo_toml.read_text()
-    pattern = r'(git = "https://github.com/paradigmxyz/reth", rev = ")([^"]*)(")'
+    # More robust pattern that handles variable whitespace
+    pattern = r'(git\s*=\s*"https://github\.com/paradigmxyz/reth",\s*rev\s*=\s*")([^"]*)(")'
     updated, count = re.subn(pattern, r"\g<1>" + commit + r"\g<3>", original)
-    if count == 0:
-        raise RuntimeError("Unable to locate Reth git revision in Cargo.toml")
-    cargo_toml.write_text(updated)
 
+    if count == 0:
+        raise RuntimeError(
+            "Unable to locate Reth git revision in Cargo.toml. "
+            "Expected format: git = \"https://github.com/paradigmxyz/reth\", rev = \"...\""
+        )
+
+    # Validate we updated the expected number of reth dependencies (should be 50+)
+    if count < 50:
+        raise RuntimeError(
+            f"Only updated {count} reth dependencies. Expected 50+. "
+            "This may indicate an incomplete Cargo.toml or pattern mismatch."
+        )
+
+    print(f"Updated {count} reth dependencies from their current revision to {commit[:7]}...")
+    cargo_toml.write_text(updated)
     print("")
     print("Updating reth dependency...")
     run_command(["cargo", "update", "-p", "reth"], cwd=SCRIPT_DIR)
