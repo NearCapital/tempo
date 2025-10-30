@@ -3,7 +3,7 @@
 //! This module handles parsing the `#[contract(InterfaceName)]` attribute and
 //! extracting interface function signatures for trait generation.
 
-use crate::utils;
+use crate::utils::{self, try_extract_type_ident};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Ident, Type};
@@ -83,8 +83,8 @@ impl InterfaceFunction {
 /// Constructs the event enum type path from an interface type.
 /// Convention: ITIP20 -> ITIP20Events
 pub(crate) fn get_event_enum_path(interface_type: &Type) -> syn::Result<TokenStream> {
-    let interface_ident = extract_interface_ident(interface_type)?;
-    let event_enum_ident = format!("{}Events", interface_ident);
+    let interface_ident = try_extract_type_ident(interface_type)?;
+    let event_enum_ident = format!("{interface_ident}Events");
     let event_enum: Ident = syn::parse_str(&event_enum_ident).expect("Valid identifier");
 
     if let Type::Path(type_path) = interface_type {
@@ -101,23 +101,8 @@ pub(crate) fn get_event_enum_path(interface_type: &Type) -> syn::Result<TokenStr
 
 // TODO(rusowsky): Implement automatic method discovery from sol! generated interfaces.
 pub(crate) fn parse_interface(interface_type: &Type) -> syn::Result<Interface> {
-    let interface_ident = extract_interface_ident(interface_type)?;
+    let interface_ident = try_extract_type_ident(interface_type)?;
     get_interface_metadata(&interface_ident, interface_type)
-}
-
-/// Extracts the identifier from an interface type path.
-///
-/// Handles simple paths like `ITIP20` and qualified paths like `crate::ITIP20`.
-fn extract_interface_ident(ty: &Type) -> syn::Result<Ident> {
-    if let Type::Path(type_path) = ty
-        && let Some(segment) = type_path.path.segments.last()
-    {
-        return Ok(segment.ident.clone());
-    }
-    Err(syn::Error::new_spanned(
-        ty,
-        "Interface type must be a simple path or qualified path",
-    ))
 }
 
 // TODO(rusowsky): Implement automatic method discovery from sol! generated interfaces.
@@ -146,6 +131,11 @@ fn get_interface_metadata(
             functions: get_imini_token_functions(interface_type),
             events: get_imini_token_events(interface_type),
             errors: Vec::new(),
+        }),
+        "IErrorTest" => Ok(Interface {
+            functions: get_ierror_test_functions(interface_type),
+            events: Vec::new(),
+            errors: get_ierror_test_errors(interface_type),
         }),
         _ => {
             eprintln!(
@@ -753,6 +743,39 @@ fn get_imini_token_events(interface_type: &Type) -> Vec<InterfaceEvent> {
     ]
 }
 
+// Test interface for error constructor generation
+fn get_ierror_test_functions(interface_type: &Type) -> Vec<InterfaceFunction> {
+    use syn::parse_quote;
+
+    vec![InterfaceFunction {
+        name: "dummy",
+        params: vec![],
+        return_type: parse_quote!(()),
+        is_view: false,
+        call_type_path: quote!(#interface_type::dummyCall),
+    }]
+}
+
+fn get_ierror_test_errors(interface_type: &Type) -> Vec<InterfaceError> {
+    use syn::parse_quote;
+
+    vec![
+        InterfaceError {
+            name: "simple_error",
+            params: vec![],
+            error_type_path: quote!(#interface_type::SimpleError),
+        },
+        InterfaceError {
+            name: "parameterized_error",
+            params: vec![
+                ("code", parse_quote!(U256)),
+                ("addr", parse_quote!(Address)),
+            ],
+            error_type_path: quote!(#interface_type::ParameterizedError),
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -761,11 +784,11 @@ mod tests {
     #[test]
     fn test_extract_interface_ident() {
         let ty: Type = parse_quote!(ITIP20);
-        let ident = extract_interface_ident(&ty).unwrap();
+        let ident = try_extract_type_ident(&ty).unwrap();
         assert_eq!(ident.to_string(), "ITIP20");
 
         let ty: Type = parse_quote!(crate::ITIP20);
-        let ident = extract_interface_ident(&ty).unwrap();
+        let ident = try_extract_type_ident(&ty).unwrap();
         assert_eq!(ident.to_string(), "ITIP20");
     }
 

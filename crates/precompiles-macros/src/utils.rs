@@ -140,6 +140,27 @@ pub(crate) fn is_unit(ty: &Type) -> bool {
     matches!(ty, Type::Tuple(tuple) if tuple.elems.is_empty())
 }
 
+/// Extracts the identifier (last segment) from a type path.
+///
+/// For example, given `Foo::Bar::Baz`, this returns `Ok(Baz)`.
+/// Given a simple type like `MyType`, this returns `Ok(MyType)`.
+///
+/// # Errors
+///
+/// Returns an error if the type is not a path type or has no segments.
+pub(crate) fn try_extract_type_ident(ty: &Type) -> syn::Result<syn::Ident> {
+    if let Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+    {
+        return Ok(segment.ident.clone());
+    }
+
+    Err(syn::Error::new_spanned(
+        ty,
+        "Interface type must be a simple path or qualified path",
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,5 +213,27 @@ mod tests {
 
         let non_unit: Type = parse_quote!(bool);
         assert!(!is_unit(&non_unit));
+    }
+
+    #[test]
+    fn test_try_extract_type_ident() {
+        // Simple path
+        let ty: Type = parse_quote!(ITIP20);
+        let ident = try_extract_type_ident(&ty).unwrap();
+        assert_eq!(ident.to_string(), "ITIP20");
+
+        // Qualified path
+        let ty: Type = parse_quote!(crate::ITIP20);
+        let ident = try_extract_type_ident(&ty).unwrap();
+        assert_eq!(ident.to_string(), "ITIP20");
+
+        // Nested path
+        let ty: Type = parse_quote!(foo::bar::Baz);
+        let ident = try_extract_type_ident(&ty).unwrap();
+        assert_eq!(ident.to_string(), "Baz");
+
+        // Non-path type should return error
+        let ty: Type = parse_quote!(&str);
+        assert!(try_extract_type_ident(&ty).is_err());
     }
 }

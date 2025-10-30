@@ -766,3 +766,50 @@ fn test_multi_interface_contract() {
     let result = token.call(&calldata, &sender).unwrap();
     assert_eq!(U256::abi_decode(&result.bytes).unwrap(), U256::from(1));
 }
+
+#[test]
+fn test_error_constructors() {
+    sol! {
+        interface IErrorTest {
+            function dummy() external;
+            error SimpleError();
+            error ParameterizedError(uint256 code, address addr);
+        }
+    }
+
+    use IErrorTest::IErrorTestErrors as ErrorTestError;
+
+    #[contract(IErrorTest)]
+    pub struct ErrorTestContract {
+        pub dummy: U256,
+    }
+
+    impl<S: storage::PrecompileStorageProvider> ErrorTestContractCall for ErrorTestContract<'_, S> {
+        fn dummy(&mut self, _s: Address) -> error::Result<()> {
+            Ok(())
+        }
+    }
+
+    // Test parameterless error constructor
+    let error = ErrorTestError::simple_error();
+    assert!(matches!(
+        error,
+        ErrorTestError::SimpleError(IErrorTest::SimpleError {})
+    ));
+
+    // Test parameterized error constructor
+    let code = U256::from(42);
+    let addr = test_address(5);
+    let error = ErrorTestError::parameterized_error(code, addr);
+
+    match error {
+        ErrorTestError::ParameterizedError(e) => {
+            assert_eq!(e.code, code);
+            assert_eq!(e.addr, addr);
+        }
+        _ => panic!("Expected ParameterizedError"),
+    }
+
+    // If this compiles, it proves the constructor is const
+    const _ERROR: ErrorTestError = ErrorTestError::simple_error();
+}

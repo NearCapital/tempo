@@ -3,33 +3,27 @@
 //! This module generates private `_emit_*` methods for each event defined in the
 //! contract's interfaces.
 
-use crate::interface::{InterfaceEvent, get_event_enum_path};
+use crate::{
+    interface::{InterfaceEvent, get_event_enum_path},
+    utils::try_extract_type_ident,
+};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Ident, Type, parse2};
 
 /// Extracts the final identifier from an event type path.
-///
-/// For example: `ITIP20::Transfer` -> `Transfer`
 fn extract_event_variant_name(event_type_path: &TokenStream) -> Ident {
-    // Parse the token stream as a Type::Path
     let type_path: Type =
         parse2(event_type_path.clone()).expect("event_type_path should be a valid type path");
 
-    if let Type::Path(type_path) = type_path {
-        if let Some(segment) = type_path.path.segments.last() {
-            return segment.ident.clone();
-        }
-    }
-
-    panic!("Failed to extract variant name from event_type_path");
+    try_extract_type_ident(&type_path).expect("Failed to extract event variant name from type path")
 }
 
 /// Generates event emission helper methods for a contract.
 ///
 /// Creates private `_emit_<event_name>()` methods that take event parameters
 /// and call `self.storage.emit_event()` with the properly constructed event.
-pub(crate) fn gen_event_emission_helpers(
+pub(crate) fn gen_event_helpers(
     contract_ident: &Ident,
     interface_type: &Type,
     events: &[InterfaceEvent],
@@ -46,7 +40,7 @@ pub(crate) fn gen_event_emission_helpers(
 
     let methods: Vec<_> = events
         .iter()
-        .map(|event| gen_single_emission_helper(&event_enum_path, event))
+        .map(|event| gen_emission_helper(&event_enum_path, event))
         .collect();
 
     quote! {
@@ -57,15 +51,11 @@ pub(crate) fn gen_event_emission_helpers(
 }
 
 /// Generates a single event emission helper method.
-fn gen_single_emission_helper(
-    event_enum_path: &TokenStream,
-    event: &InterfaceEvent,
-) -> TokenStream {
+fn gen_emission_helper(event_enum_path: &TokenStream, event: &InterfaceEvent) -> TokenStream {
     let method_name = format!("_emit_{}", event.name);
     let method_ident: Ident = syn::parse_str(&method_name).expect("Valid identifier");
 
     // Extract the event variant name from the event_type_path
-    // e.g., ITIP20::Transfer -> Transfer
     let variant_ident = extract_event_variant_name(&event.event_type_path);
 
     let event_type_path = &event.event_type_path;

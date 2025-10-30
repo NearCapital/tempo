@@ -4,6 +4,7 @@
 //! into a fully-functional contract with type-safe getter/setter methods.
 
 mod dispatcher;
+mod errors;
 mod events;
 mod interface;
 mod storage;
@@ -120,18 +121,18 @@ fn gen_contract_impl(
     fields: &[FieldInfo],
 ) -> syn::Result<proc_macro2::TokenStream> {
     // Parse and aggregate functions/events/errors from all interfaces
-    let (all_funcs, event_helpers, all_errs) = interfaces.iter().try_fold(
+    let (all_funcs, all_errors, events) = interfaces.iter().try_fold(
         (Vec::new(), Vec::new(), Vec::new()),
-        |(mut funcs, mut helpers, mut errs), interface| {
+        |(mut funcs, mut errs, mut events), interface| {
             let parsed = interface::parse_interface(interface)?;
             funcs.extend(parsed.functions);
-            errs.extend(parsed.errors);
-            helpers.push(events::gen_event_emission_helpers(
-                ident,
-                interface,
-                &parsed.events,
-            ));
-            Ok::<_, syn::Error>((funcs, helpers, errs))
+
+            if !parsed.errors.is_empty() {
+                errs.push((interface.clone(), parsed.errors));
+            }
+
+            events.push(events::gen_event_helpers(ident, interface, &parsed.events));
+            Ok::<_, syn::Error>((funcs, errs, events))
         },
     )?;
 
@@ -140,11 +141,13 @@ fn gen_contract_impl(
     let getters = traits::find_getters(&all_funcs, fields);
     let trait_output = traits::gen_trait_and_impl(ident, interfaces, &getters);
     let dispatcher_output = dispatcher::gen_dispatcher(ident, interfaces, &getters);
+    let errors = errors::gen_error_helpers(&all_errors);
 
     Ok(quote! {
         #trait_output
         #dispatcher_output
-        #(#event_helpers)*
+        #(#events)*
+        #errors
     })
 }
 

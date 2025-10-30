@@ -201,7 +201,10 @@ pub fn metadata<T: SolCall>(f: impl FnOnce() -> Result<T::Return>) -> Precompile
 }
 
 #[inline]
-pub fn view<T: SolCall>(calldata: &[u8], f: impl FnOnce(T) -> Result<T::Return>) -> PrecompileResult {
+pub fn view<T: SolCall>(
+    calldata: &[u8],
+    f: impl FnOnce(T) -> Result<T::Return>,
+) -> PrecompileResult {
     let Ok(call) = T::abi_decode(calldata) else {
         return Ok(PrecompileOutput::new_reverted(VIEW_FUNC_GAS, Bytes::new()));
     };
