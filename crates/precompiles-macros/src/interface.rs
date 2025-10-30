@@ -23,6 +23,39 @@ pub(crate) struct InterfaceFunction {
     pub call_type_path: TokenStream,
 }
 
+/// Represents a single event from a sol! interface.
+#[derive(Debug, Clone)]
+pub(crate) struct InterfaceEvent {
+    /// Event name, normalized to snake_case
+    pub name: &'static str,
+    /// Event parameters as (name, type, indexed) tuples
+    pub params: Vec<(&'static str, Type, bool)>,
+    /// Path to the Event struct for this event
+    pub event_type_path: TokenStream,
+}
+
+/// Represents a single error from a sol! interface.
+#[derive(Debug, Clone)]
+pub(crate) struct InterfaceError {
+    /// Error name
+    pub name: &'static str,
+    /// Error parameters as (name, type) pairs
+    pub params: Vec<(&'static str, Type)>,
+    /// Path to the Error struct for this error
+    pub error_type_path: TokenStream,
+}
+
+/// Complete interface metadata including functions, events, and errors.
+#[derive(Debug, Clone)]
+pub(crate) struct Interface {
+    /// Function definitions
+    pub functions: Vec<InterfaceFunction>,
+    /// Event definitions
+    pub events: Vec<InterfaceEvent>,
+    /// Error definitions
+    pub errors: Vec<InterfaceError>,
+}
+
 /// Classification of function types for dispatcher routing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FunctionKind {
@@ -47,10 +80,29 @@ impl InterfaceFunction {
     }
 }
 
-// TODO(rusowsky): Implement automatic method discovery from sol! generated interfaces.
-pub(crate) fn parse_interface(interface_type: &Type) -> syn::Result<Vec<InterfaceFunction>> {
+/// Constructs the event enum type path from an interface type.
+/// Convention: ITIP20 -> ITIP20Events
+pub(crate) fn get_event_enum_path(interface_type: &Type) -> syn::Result<TokenStream> {
     let interface_ident = extract_interface_ident(interface_type)?;
-    get_interface_functions(&interface_ident, interface_type)
+    let event_enum_ident = format!("{}Events", interface_ident);
+    let event_enum: Ident = syn::parse_str(&event_enum_ident).expect("Valid identifier");
+
+    if let Type::Path(type_path) = interface_type {
+        // Preserve the path prefix if it exists (e.g., crate::ITIP20 -> crate::ITIP20Events)
+        let mut path = type_path.path.clone();
+        if let Some(last_segment) = path.segments.last_mut() {
+            last_segment.ident = event_enum;
+        }
+        Ok(quote!(#path))
+    } else {
+        Ok(quote!(#event_enum))
+    }
+}
+
+// TODO(rusowsky): Implement automatic method discovery from sol! generated interfaces.
+pub(crate) fn parse_interface(interface_type: &Type) -> syn::Result<Interface> {
+    let interface_ident = extract_interface_ident(interface_type)?;
+    get_interface_metadata(&interface_ident, interface_type)
 }
 
 /// Extracts the identifier from an interface type path.
@@ -69,20 +121,41 @@ fn extract_interface_ident(ty: &Type) -> syn::Result<Ident> {
 }
 
 // TODO(rusowsky): Implement automatic method discovery from sol! generated interfaces.
-fn get_interface_functions(
+fn get_interface_metadata(
     interface_ident: &Ident,
     interface_type: &Type,
-) -> syn::Result<Vec<InterfaceFunction>> {
+) -> syn::Result<Interface> {
     let interface_name = interface_ident.to_string();
     match interface_name.as_str() {
-        "ITIP20" => Ok(get_itip20_functions(interface_type)),
-        "ITestToken" => Ok(get_itest_token_functions(interface_type)),
-        "IMetadata" => Ok(get_imetadata_functions(interface_type)),
+        "ITIP20" => Ok(Interface {
+            functions: get_itip20_functions(interface_type),
+            events: get_itip20_events(interface_type),
+            errors: get_itip20_errors(interface_type),
+        }),
+        "ITestToken" => Ok(Interface {
+            functions: get_itest_token_functions(interface_type),
+            events: Vec::new(),
+            errors: Vec::new(),
+        }),
+        "IMetadata" => Ok(Interface {
+            functions: get_imetadata_functions(interface_type),
+            events: Vec::new(),
+            errors: Vec::new(),
+        }),
+        "IMiniToken" => Ok(Interface {
+            functions: get_imini_token_functions(interface_type),
+            events: get_imini_token_events(interface_type),
+            errors: Vec::new(),
+        }),
         _ => {
             eprintln!(
                 "Warning: Interface '{interface_name}' not in registry. No trait methods will be generated."
             );
-            Ok(Vec::new())
+            Ok(Interface {
+                functions: Vec::new(),
+                events: Vec::new(),
+                errors: Vec::new(),
+            })
         }
     }
 }
@@ -328,6 +401,209 @@ fn get_itip20_functions(interface_type: &Type) -> Vec<InterfaceFunction> {
     ]
 }
 
+// TODO(rusowsky): Implement automatic event discovery from sol! generated interfaces.
+fn get_itip20_events(interface_type: &Type) -> Vec<InterfaceEvent> {
+    use syn::parse_quote;
+
+    vec![
+        // Core token events
+        InterfaceEvent {
+            name: "transfer",
+            params: vec![
+                ("from", parse_quote!(Address), true),
+                ("to", parse_quote!(Address), true),
+                ("amount", parse_quote!(U256), false),
+            ],
+            event_type_path: quote!(#interface_type::Transfer),
+        },
+        InterfaceEvent {
+            name: "approval",
+            params: vec![
+                ("owner", parse_quote!(Address), true),
+                ("spender", parse_quote!(Address), true),
+                ("amount", parse_quote!(U256), false),
+            ],
+            event_type_path: quote!(#interface_type::Approval),
+        },
+        InterfaceEvent {
+            name: "mint",
+            params: vec![
+                ("to", parse_quote!(Address), true),
+                ("amount", parse_quote!(U256), false),
+            ],
+            event_type_path: quote!(#interface_type::Mint),
+        },
+        InterfaceEvent {
+            name: "burn",
+            params: vec![
+                ("from", parse_quote!(Address), true),
+                ("amount", parse_quote!(U256), false),
+            ],
+            event_type_path: quote!(#interface_type::Burn),
+        },
+        InterfaceEvent {
+            name: "burn_blocked",
+            params: vec![
+                ("from", parse_quote!(Address), true),
+                ("amount", parse_quote!(U256), false),
+            ],
+            event_type_path: quote!(#interface_type::BurnBlocked),
+        },
+        InterfaceEvent {
+            name: "transfer_with_memo",
+            params: vec![
+                ("from", parse_quote!(Address), true),
+                ("to", parse_quote!(Address), true),
+                ("amount", parse_quote!(U256), false),
+                ("memo", parse_quote!(B256), false),
+            ],
+            event_type_path: quote!(#interface_type::TransferWithMemo),
+        },
+        // Admin events
+        InterfaceEvent {
+            name: "transfer_policy_update",
+            params: vec![
+                ("updater", parse_quote!(Address), true),
+                ("new_policy_id", parse_quote!(u64), true),
+            ],
+            event_type_path: quote!(#interface_type::TransferPolicyUpdate),
+        },
+        InterfaceEvent {
+            name: "supply_cap_update",
+            params: vec![
+                ("updater", parse_quote!(Address), true),
+                ("new_supply_cap", parse_quote!(U256), true),
+            ],
+            event_type_path: quote!(#interface_type::SupplyCapUpdate),
+        },
+        InterfaceEvent {
+            name: "pause_state_update",
+            params: vec![
+                ("updater", parse_quote!(Address), true),
+                ("is_paused", parse_quote!(bool), false),
+            ],
+            event_type_path: quote!(#interface_type::PauseStateUpdate),
+        },
+        InterfaceEvent {
+            name: "update_quote_token",
+            params: vec![
+                ("updater", parse_quote!(Address), true),
+                ("new_quote_token", parse_quote!(Address), true),
+            ],
+            event_type_path: quote!(#interface_type::UpdateQuoteToken),
+        },
+        InterfaceEvent {
+            name: "quote_token_update_finalized",
+            params: vec![
+                ("updater", parse_quote!(Address), true),
+                ("new_quote_token", parse_quote!(Address), true),
+            ],
+            event_type_path: quote!(#interface_type::QuoteTokenUpdateFinalized),
+        },
+    ]
+}
+
+// TODO(rusowsky): Implement automatic error discovery from sol! generated interfaces.
+fn get_itip20_errors(interface_type: &Type) -> Vec<InterfaceError> {
+    use syn::parse_quote;
+
+    vec![
+        // Balance and allowance errors
+        InterfaceError {
+            name: "insufficient_balance",
+            params: vec![
+                ("account", parse_quote!(Address)),
+                ("balance", parse_quote!(U256)),
+                ("needed", parse_quote!(U256)),
+            ],
+            error_type_path: quote!(#interface_type::InsufficientBalance),
+        },
+        InterfaceError {
+            name: "insufficient_allowance",
+            params: vec![
+                ("owner", parse_quote!(Address)),
+                ("spender", parse_quote!(Address)),
+                ("allowance", parse_quote!(U256)),
+                ("needed", parse_quote!(U256)),
+            ],
+            error_type_path: quote!(#interface_type::InsufficientAllowance),
+        },
+        // Supply errors
+        InterfaceError {
+            name: "supply_cap_exceeded",
+            params: vec![
+                ("supply_cap", parse_quote!(U256)),
+                ("total_supply", parse_quote!(U256)),
+                ("amount", parse_quote!(U256)),
+            ],
+            error_type_path: quote!(#interface_type::SupplyCapExceeded),
+        },
+        InterfaceError {
+            name: "invalid_supply_cap",
+            params: vec![("supply_cap", parse_quote!(U256))],
+            error_type_path: quote!(#interface_type::InvalidSupplyCap),
+        },
+        // Access control errors
+        InterfaceError {
+            name: "unauthorized",
+            params: vec![("account", parse_quote!(Address))],
+            error_type_path: quote!(#interface_type::Unauthorized),
+        },
+        // State errors
+        InterfaceError {
+            name: "paused",
+            params: vec![],
+            error_type_path: quote!(#interface_type::Paused),
+        },
+        InterfaceError {
+            name: "not_paused",
+            params: vec![],
+            error_type_path: quote!(#interface_type::NotPaused),
+        },
+        // Transfer policy errors
+        InterfaceError {
+            name: "invalid_transfer_policy",
+            params: vec![("policy_id", parse_quote!(u64))],
+            error_type_path: quote!(#interface_type::InvalidTransferPolicy),
+        },
+        InterfaceError {
+            name: "transfer_policy_violation",
+            params: vec![
+                ("from", parse_quote!(Address)),
+                ("to", parse_quote!(Address)),
+                ("policy_id", parse_quote!(u64)),
+            ],
+            error_type_path: quote!(#interface_type::TransferPolicyViolation),
+        },
+        // Address errors
+        InterfaceError {
+            name: "invalid_address",
+            params: vec![("address", parse_quote!(Address))],
+            error_type_path: quote!(#interface_type::InvalidAddress),
+        },
+        // Amount errors
+        InterfaceError {
+            name: "invalid_amount",
+            params: vec![("amount", parse_quote!(U256))],
+            error_type_path: quote!(#interface_type::InvalidAmount),
+        },
+        // Quote token errors
+        InterfaceError {
+            name: "no_pending_quote_token_update",
+            params: vec![],
+            error_type_path: quote!(#interface_type::NoPendingQuoteTokenUpdate),
+        },
+        InterfaceError {
+            name: "quote_token_update_not_ready",
+            params: vec![
+                ("current_time", parse_quote!(U256)),
+                ("ready_time", parse_quote!(U256)),
+            ],
+            error_type_path: quote!(#interface_type::QuoteTokenUpdateNotReady),
+        },
+    ]
+}
+
 // Test interface for E2E dispatcher tests
 fn get_itest_token_functions(interface_type: &Type) -> Vec<InterfaceFunction> {
     use syn::parse_quote;
@@ -437,6 +713,46 @@ fn get_imetadata_functions(interface_type: &Type) -> Vec<InterfaceFunction> {
     ]
 }
 
+// Mini token test interface for event emission testing
+fn get_imini_token_functions(interface_type: &Type) -> Vec<InterfaceFunction> {
+    use syn::parse_quote;
+
+    vec![InterfaceFunction {
+        name: "mint",
+        params: vec![
+            ("to", parse_quote!(Address)),
+            ("amount", parse_quote!(U256)),
+        ],
+        return_type: parse_quote!(()),
+        is_view: false,
+        call_type_path: quote!(#interface_type::mintCall),
+    }]
+}
+
+fn get_imini_token_events(interface_type: &Type) -> Vec<InterfaceEvent> {
+    use syn::parse_quote;
+
+    vec![
+        InterfaceEvent {
+            name: "transfer",
+            params: vec![
+                ("from", parse_quote!(Address), true),
+                ("to", parse_quote!(Address), true),
+                ("amount", parse_quote!(U256), false),
+            ],
+            event_type_path: quote!(#interface_type::Transfer),
+        },
+        InterfaceEvent {
+            name: "mint",
+            params: vec![
+                ("to", parse_quote!(Address), true),
+                ("amount", parse_quote!(U256), false),
+            ],
+            event_type_path: quote!(#interface_type::Mint),
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -454,31 +770,70 @@ mod tests {
     }
 
     #[test]
+    fn test_get_event_enum_path() {
+        // Simple path
+        let ty: Type = parse_quote!(ITIP20);
+        let path = get_event_enum_path(&ty).unwrap();
+        assert_eq!(path.to_string(), "ITIP20Events");
+
+        // Qualified path
+        let ty: Type = parse_quote!(crate::ITIP20);
+        let path = get_event_enum_path(&ty).unwrap();
+        assert_eq!(path.to_string(), "crate :: ITIP20Events");
+
+        // Test with ITestToken
+        let ty: Type = parse_quote!(ITestToken);
+        let path = get_event_enum_path(&ty).unwrap();
+        assert_eq!(path.to_string(), "ITestTokenEvents");
+    }
+
+    #[test]
     fn test_parse_interface_itip20() {
         let ty: Type = parse_quote!(ITIP20);
-        let functions = parse_interface(&ty).unwrap();
+        let parsed = parse_interface(&ty).unwrap();
 
         // Should have 28 functions
-        assert_eq!(functions.len(), 28);
+        assert_eq!(parsed.functions.len(), 28);
+
+        // Should have 11 events (matching sol! interface)
+        assert_eq!(parsed.events.len(), 11);
+
+        // Should have 13 errors
+        assert_eq!(parsed.errors.len(), 13);
 
         // Check a few specific functions
-        let name_fn = functions.iter().find(|f| f.name == "name");
+        let name_fn = parsed.functions.iter().find(|f| f.name == "name");
         assert!(name_fn.is_some());
         assert!(name_fn.unwrap().is_view);
         assert!(name_fn.unwrap().params.is_empty());
 
-        let balance_of_fn = functions.iter().find(|f| f.name == "balance_of");
+        let balance_of_fn = parsed.functions.iter().find(|f| f.name == "balance_of");
         assert!(balance_of_fn.is_some());
         assert_eq!(balance_of_fn.unwrap().params.len(), 1);
+
+        // Check a few specific events
+        let transfer_event = parsed.events.iter().find(|e| e.name == "transfer");
+        assert!(transfer_event.is_some());
+        assert_eq!(transfer_event.unwrap().params.len(), 3);
+
+        // Check a few specific errors
+        let insufficient_balance_error = parsed
+            .errors
+            .iter()
+            .find(|e| e.name == "insufficient_balance");
+        assert!(insufficient_balance_error.is_some());
+        assert_eq!(insufficient_balance_error.unwrap().params.len(), 3);
     }
 
     #[test]
     fn test_parse_unknown_interface() {
         let ty: Type = parse_quote!(UnknownInterface);
-        let functions = parse_interface(&ty).unwrap();
+        let parsed = parse_interface(&ty).unwrap();
 
-        // Should return empty vec for unknown interfaces
-        assert!(functions.is_empty());
+        // Should return empty vecs for unknown interfaces
+        assert!(parsed.functions.is_empty());
+        assert!(parsed.events.is_empty());
+        assert!(parsed.errors.is_empty());
     }
 
     #[test]

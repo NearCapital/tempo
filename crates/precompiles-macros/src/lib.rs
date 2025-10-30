@@ -4,6 +4,7 @@
 //! into a fully-functional contract with type-safe getter/setter methods.
 
 mod dispatcher;
+mod events;
 mod interface;
 mod storage;
 mod traits;
@@ -118,12 +119,21 @@ fn gen_contract_impl(
     interfaces: &[Type],
     fields: &[FieldInfo],
 ) -> syn::Result<proc_macro2::TokenStream> {
-    // Parse and aggregate functions from all interfaces
-    let mut all_funcs = Vec::new();
-    for interface in interfaces {
-        let funcs = interface::parse_interface(interface)?;
-        all_funcs.extend(funcs);
-    }
+    // Parse and aggregate functions/events/errors from all interfaces
+    let (all_funcs, event_helpers, all_errs) = interfaces.iter().try_fold(
+        (Vec::new(), Vec::new(), Vec::new()),
+        |(mut funcs, mut helpers, mut errs), interface| {
+            let parsed = interface::parse_interface(interface)?;
+            funcs.extend(parsed.functions);
+            errs.extend(parsed.errors);
+            helpers.push(events::gen_event_emission_helpers(
+                ident,
+                interface,
+                &parsed.events,
+            ));
+            Ok::<_, syn::Error>((funcs, helpers, errs))
+        },
+    )?;
 
     // TODO(rusowsky): Check for selector collisions across all interfaces
 
@@ -134,6 +144,7 @@ fn gen_contract_impl(
     Ok(quote! {
         #trait_output
         #dispatcher_output
+        #(#event_helpers)*
     })
 }
 
