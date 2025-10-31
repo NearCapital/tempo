@@ -9,8 +9,8 @@ use quote::quote;
 use syn::{Ident, Type};
 
 // TODO(rusowsky): Implement automatic method discovery from sol! generated interfaces.
-mod tests;
-mod tip20;
+mod registry;
+use registry::*;
 
 /// Represents a single function from a sol! interface.
 #[derive(Debug, Clone)]
@@ -116,11 +116,79 @@ fn get_interface_metadata(
 ) -> syn::Result<Interface> {
     let interface_name = interface_ident.to_string();
     match interface_name.as_str() {
+        // crates/contracts/src/precompiles/tip20.rs
         "ITIP20" => Ok(Interface {
-            functions: tip20::get_itip20_functions(interface_type),
-            events: tip20::get_itip20_events(interface_type),
-            errors: tip20::get_itip20_errors(interface_type),
+            functions: tip20::get_functions(interface_type),
+            events: tip20::get_events(interface_type),
+            errors: tip20::get_errors(interface_type),
         }),
+        "IRolesAuth" => Ok(Interface {
+            functions: roles_auth::get_functions(interface_type),
+            events: roles_auth::get_events(interface_type),
+            errors: roles_auth::get_errors(interface_type),
+        }),
+
+        // crates/contracts/src/precompiles/tip20_factory.rs
+        "ITIP20Factory" => Ok(Interface {
+            functions: tip20_factory::get_functions(interface_type),
+            events: tip20_factory::get_events(interface_type),
+            errors: tip20_factory::get_errors(interface_type),
+        }),
+
+        // crates/contracts/src/precompiles/tip20_rewards_registry.rs
+        "ITIP20RewardsRegistry" => Ok(Interface {
+            functions: tip20_rewards_registry::get_functions(interface_type),
+            events: tip20_rewards_registry::get_events(interface_type),
+            errors: tip20_rewards_registry::get_errors(interface_type),
+        }),
+
+        // crates/contracts/src/precompiles/tip403_registry.rs
+        "ITIP403Registry" => Ok(Interface {
+            functions: tip403_registry::get_functions(interface_type),
+            events: tip403_registry::get_events(interface_type),
+            errors: tip403_registry::get_errors(interface_type),
+        }),
+
+        // crates/contracts/src/precompiles/tip4217_registry.rs
+        "ITIP4217Registry" => Ok(Interface {
+            functions: tip4217_registry::get_functions(interface_type),
+            events: tip4217_registry::get_events(interface_type),
+            errors: tip4217_registry::get_errors(interface_type),
+        }),
+
+        // crates/contracts/src/precompiles/tip_fee_manager.rs
+        "IFeeManager" => Ok(Interface {
+            functions: fee_manager::get_functions(interface_type),
+            events: fee_manager::get_events(interface_type),
+            errors: fee_manager::get_errors(interface_type),
+        }),
+        "ITIPFeeAMM" => Ok(Interface {
+            functions: tip_fee_amm::get_functions(interface_type),
+            events: tip_fee_amm::get_events(interface_type),
+            errors: tip_fee_amm::get_errors(interface_type),
+        }),
+
+        // crates/contracts/src/precompiles/stablecoin_exchange.rs
+        "IStablecoinExchange" => Ok(Interface {
+            functions: stablecoin_exchange::get_functions(interface_type),
+            events: stablecoin_exchange::get_events(interface_type),
+            errors: stablecoin_exchange::get_errors(interface_type),
+        }),
+
+        // crates/contracts/src/precompiles/nonce.rs
+        "INonce" => Ok(Interface {
+            functions: nonce::get_functions(interface_type),
+            events: nonce::get_events(interface_type),
+            errors: nonce::get_errors(interface_type),
+        }),
+
+        // crates/contracts/src/precompiles/tip_account_registrar.rs
+        "ITipAccountRegistrar" => Ok(Interface {
+            functions: tip_account_registrar::get_functions(interface_type),
+            events: tip_account_registrar::get_events(interface_type),
+            errors: tip_account_registrar::get_errors(interface_type),
+        }),
+
         // Test interfaces
         "ITestToken" => Ok(Interface {
             functions: tests::get_itest_token_functions(interface_type),
@@ -142,6 +210,8 @@ fn get_interface_metadata(
             events: Vec::new(),
             errors: tests::get_ierror_test_errors(interface_type),
         }),
+
+        // Unknown interface
         _ => {
             eprintln!(
                 "Warning: Interface '{interface_name}' not in registry. No trait methods will be generated."

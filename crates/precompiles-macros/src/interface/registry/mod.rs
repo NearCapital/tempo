@@ -1,0 +1,12 @@
+pub(crate) mod fee_manager;
+pub(crate) mod nonce;
+pub(crate) mod roles_auth;
+pub(crate) mod stablecoin_exchange;
+pub(crate) mod tests;
+pub(crate) mod tip20;
+pub(crate) mod tip20_factory;
+pub(crate) mod tip20_rewards_registry;
+pub(crate) mod tip403_registry;
+pub(crate) mod tip4217_registry;
+pub(crate) mod tip_account_registrar;
+pub(crate) mod tip_fee_amm;

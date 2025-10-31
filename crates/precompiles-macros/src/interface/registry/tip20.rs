@@ -5,7 +5,7 @@ use crate::{
 use quote::quote;
 use syn::parse_quote;
 
-pub(crate) fn get_itip20_functions(interface_type: &Type) -> Vec<InterfaceFunction> {
+pub(crate) fn get_functions(interface_type: &Type) -> Vec<InterfaceFunction> {
     vec![
         // Metadata functions (view, no parameters)
         InterfaceFunction {
@@ -243,7 +243,7 @@ pub(crate) fn get_itip20_functions(interface_type: &Type) -> Vec<InterfaceFuncti
     ]
 }
 
-pub(crate) fn get_itip20_events(interface_type: &Type) -> Vec<InterfaceEvent> {
+pub(crate) fn get_events(interface_type: &Type) -> Vec<InterfaceEvent> {
     vec![
         // Core token events
         InterfaceEvent {
@@ -342,7 +342,7 @@ pub(crate) fn get_itip20_events(interface_type: &Type) -> Vec<InterfaceEvent> {
     ]
 }
 
-pub(crate) fn get_itip20_errors(interface_type: &Type) -> Vec<InterfaceError> {
+pub(crate) fn get_errors(interface_type: &Type) -> Vec<InterfaceError> {
     vec![
         // Balance and allowance errors
         InterfaceError {
