@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use crate::{
     error::Result,
-    storage::{StorageOps, StorageType},
+    storage::{Storable, StorageOps},
 };
 
 /// A zero-sized marker type representing an 32-bytes storage slot.
@@ -54,9 +54,8 @@ impl<T, const SLOT: [u64; 4]> Slot<T, SLOT> {
 
     /// Reads a value from storage at this slot.
     ///
-    /// This method encapsulates:
-    /// 1. Reading the raw U256 from storage using the slot number
-    /// 2. Converting the U256 to the target type T
+    /// This method delegates to the `Storable::load` implementation,
+    /// which may read one or more consecutive slots depending on `T::SLOT_COUNT`.
     ///
     /// # Example
     ///
@@ -67,17 +66,15 @@ impl<T, const SLOT: [u64; 4]> Slot<T, SLOT> {
     #[inline]
     pub fn read<S: StorageOps>(storage: &mut S) -> Result<T>
     where
-        T: StorageType,
+        T: Storable,
     {
-        let value = storage.sload(Self::slot())?;
-        T::from_u256(value)
+        T::load(storage, Self::slot())
     }
 
     /// Writes a value to storage at this slot.
     ///
-    /// This method encapsulates:
-    /// 1. Converting the value to U256
-    /// 2. Writing the U256 to storage at the slot number
+    /// This method delegates to the `Storable::store` implementation,
+    /// which may write one or more consecutive slots depending on `T::SLOT_COUNT`.
     ///
     /// # Example
     ///
@@ -88,9 +85,28 @@ impl<T, const SLOT: [u64; 4]> Slot<T, SLOT> {
     #[inline]
     pub fn write<S: StorageOps>(storage: &mut S, value: T) -> Result<()>
     where
-        T: StorageType,
+        T: Storable,
     {
-        storage.sstore(Self::slot(), value.to_u256())
+        value.store(storage, Self::slot())
+    }
+
+    /// Deletes the value at this slot (sets all slots to zero).
+    ///
+    /// This method delegates to the `Storable::delete` implementation,
+    /// which sets `T::SLOT_COUNT` consecutive slots to zero.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// type NamedSlot = Slot<String, { [0, 0, 0, 0] }>;
+    /// NamedSlot::delete(&mut contract)?;
+    /// ```
+    #[inline]
+    pub fn delete<S: StorageOps>(storage: &mut S) -> Result<()>
+    where
+        T: Storable,
+    {
+        T::delete(storage, Self::slot())
     }
 }
 

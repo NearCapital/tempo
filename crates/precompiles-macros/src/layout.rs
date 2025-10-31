@@ -1,4 +1,7 @@
-use crate::{FieldInfo, FieldKind, utils::extract_mapping_types};
+use crate::{
+    FieldInfo, FieldKind,
+    utils::{extract_mapping_types, is_custom_struct},
+};
 use alloy::primitives::U256;
 use quote::{format_ident, quote};
 use syn::{Ident, Type, Visibility};
@@ -18,48 +21,88 @@ pub(crate) struct AllocatedField<'a> {
 pub(crate) fn allocate_slots(fields: &[FieldInfo]) -> syn::Result<Vec<AllocatedField<'_>>> {
     let (mut used, mut next) = (std::collections::HashSet::new(), U256::ZERO);
 
-    // First pass: collect custom slots (both #[slot] and #[base_slot]) and validate no duplicates
+    // First pass: classify fields, collect custom slots, and validate no duplicates
+    let mut classified_fields: Vec<(FieldKind<'_>, usize)> = Vec::new();
     for field in fields.iter() {
-        if let Some(slot) = field.slot
-            && !used.insert(slot)
-        {
-            return Err(syn::Error::new_spanned(
-                &field.name,
-                format!("Duplicate slot assignment: slot {slot} is already used"),
-            ));
+        let kind = classify_field(&field.ty)?;
+
+        // Determine how many slots this field occupies
+        let slot_count = match &kind {
+            FieldKind::StorageBlock(_) => {
+                field.slot_count.ok_or_else(|| {
+                    syn::Error::new_spanned(
+                        &field.name,
+                        "custom structs fields that derive `Storable` require `#[slot_count(N)]` attribute to specify how many slots they need",
+                    )
+                })?
+            }
+            _ => 1, // `Direct`, `Mapping`, and `NestedMapping` all use 1 slot for the base (no slot collision)
+        };
+
+        classified_fields.push((kind, slot_count));
+
+        // Validate explicit slot assignments and reserve all slots
+        if let Some(slot) = field.slot {
+            for i in 0..slot_count {
+                let slot_i = slot.saturating_add(U256::from(i));
+                if !used.insert(slot_i) {
+                    return Err(syn::Error::new_spanned(
+                        &field.name,
+                        format!("duplicate slot assignment: slot `{slot_i}` is already used"),
+                    ));
+                }
+            }
         }
-        if let Some(base_slot) = field.base_slot
-            && !used.insert(base_slot)
-        {
-            return Err(syn::Error::new_spanned(
-                &field.name,
-                format!("Duplicate slot assignment: slot {base_slot} is already used"),
-            ));
+        if let Some(base_slot) = field.base_slot {
+            for i in 0..slot_count {
+                let slot_i = base_slot.saturating_add(U256::from(i));
+                if !used.insert(slot_i) {
+                    return Err(syn::Error::new_spanned(
+                        &field.name,
+                        format!("duplicate slot assignment: slot `{slot_i}` is already used"),
+                    ));
+                }
+            }
         }
     }
 
-    // Second pass: allocate slots and classify fields
+    // Second pass: allocate slots for auto-assigned fields
     fields
         .iter()
-        .map(|field| {
+        .zip(classified_fields)
+        .map(|(field, (kind, slot_count))| {
             let assigned_slot = if let Some(explicit) = field.slot {
                 // #[slot(N)] assigns to slot N without changing next counter
                 explicit
             } else if let Some(base) = field.base_slot {
-                // #[base_slot(N)] assigns to slot N and resets next counter to N+1
-                next = base.saturating_add(U256::from(1));
+                // #[base_slot(N)] assigns to slot N and resets next counter to N+slot_count
+                next = base.saturating_add(U256::from(slot_count));
                 base
             } else {
-                // Auto-assign from current next counter
-                while used.contains(&next) {
+                // Auto-assign from current next counter, ensuring slot_count consecutive slots are available
+                loop {
+                    let mut all_available = true;
+                    for i in 0..slot_count {
+                        if used.contains(&next.saturating_add(U256::from(i))) {
+                            all_available = false;
+                            break;
+                        }
+                    }
+                    if all_available {
+                        break;
+                    }
                     next = next.saturating_add(U256::from(1));
                 }
+
                 let slot = next;
-                used.insert(slot);
-                next = next.saturating_add(U256::from(1));
+                // Mark all slots as used
+                for i in 0..slot_count {
+                    used.insert(slot.saturating_add(U256::from(i)));
+                }
+                next = next.saturating_add(U256::from(slot_count));
                 slot
             };
-            let kind = classify_field(&field.ty)?;
+
             Ok(AllocatedField {
                 info: field,
                 assigned_slot,
@@ -71,19 +114,25 @@ pub(crate) fn allocate_slots(fields: &[FieldInfo]) -> syn::Result<Vec<AllocatedF
 
 /// Classify a field based on its type
 fn classify_field(ty: &Type) -> syn::Result<FieldKind<'_>> {
+    // First check if it's a Mapping type
     if let Some((key_ty, value_ty)) = extract_mapping_types(ty) {
         if let Some((key2_ty, value2_ty)) = extract_mapping_types(value_ty) {
-            Ok(FieldKind::NestedMapping {
+            return Ok(FieldKind::NestedMapping {
                 key1: key_ty,
                 key2: key2_ty,
                 value: value2_ty,
-            })
+            });
         } else {
-            Ok(FieldKind::Mapping {
+            return Ok(FieldKind::Mapping {
                 key: key_ty,
                 value: value_ty,
-            })
+            });
         }
+    }
+
+    // If not a mapping, check if it's a multi-slot `Storable` type (user-defined struct).
+    if is_custom_struct(ty) {
+        Ok(FieldKind::StorageBlock(ty))
     } else {
         Ok(FieldKind::Direct)
     }
@@ -148,6 +197,7 @@ pub(crate) fn gen_getters_and_setters(
 
     let getter_name = format_ident!("_get_{}", field_name);
     let setter_name = format_ident!("_set_{}", field_name);
+    let cleaner_name = format_ident!("_clear_{}", field_name);
 
     match &allocated.kind {
         FieldKind::Direct => {
@@ -158,6 +208,11 @@ pub(crate) fn gen_getters_and_setters(
                     #[inline]
                     fn #getter_name(&mut self) -> crate::error::Result<#field_ty> {
                         crate::storage::Slot::<#field_ty, {#slot_limbs}>::read(self)
+                    }
+
+                    #[inline]
+                    fn #cleaner_name(&mut self) -> crate::error::Result<()> {
+                        crate::storage::Slot::<#field_ty, {#slot_limbs}>::delete(self)
                     }
 
                     #[inline]
@@ -178,6 +233,14 @@ pub(crate) fn gen_getters_and_setters(
                     #[inline]
                     fn #getter_name(&mut self, key: #key_ty) -> crate::error::Result<#value_ty> {
                         crate::storage::Mapping::<#key_ty, #value_ty, {#slot_limbs}>::read(
+                            self,
+                            key,
+                        )
+                    }
+
+                    #[inline]
+                    fn #cleaner_name(&mut self, key: #key_ty) -> crate::error::Result<()> {
+                        crate::storage::Mapping::<#key_ty, #value_ty, {#slot_limbs}>::delete(
                             self,
                             key,
                         )
@@ -219,6 +282,19 @@ pub(crate) fn gen_getters_and_setters(
                     }
 
                     #[inline]
+                    fn #cleaner_name(
+                        &mut self,
+                        key1: #key1_ty,
+                        key2: #key2_ty,
+                    ) -> crate::error::Result<()> {
+                        crate::storage::Mapping::<#key1_ty, crate::storage::Mapping<#key2_ty, #value_ty, {#dummy_slot}>, {#slot_limbs}>::delete_nested(
+                            self,
+                            key1,
+                            key2,
+                        )
+                    }
+
+                    #[inline]
                     fn #setter_name(
                         &mut self,
                         key1: #key1_ty,
@@ -230,6 +306,76 @@ pub(crate) fn gen_getters_and_setters(
                             key1,
                             key2,
                             value,
+                        )
+                    }
+                }
+            }
+        }
+        FieldKind::StorageBlock(ty) => {
+            let slot_limbs = slot_to_limbs(allocated.assigned_slot);
+            // Get the slot_count from the attribute (guaranteed to exist by allocate_slots)
+            let expected_slot_count = allocated
+                .info
+                .slot_count
+                .expect("custom structs fields must impl `trait Storable`");
+
+            // Generate a unique const name for the validation
+            let validation_const = format_ident!(
+                "_VALIDATE_SLOT_COUNT_{}",
+                field_name.to_string().to_uppercase()
+            );
+
+            quote! {
+                impl<'a, S: crate::storage::PrecompileStorageProvider> #struct_name<'a, S> {
+                    // Compile-time validation: ensure slot_count attribute matches Storable::SLOT_COUNT
+                    const #validation_const: () = {
+                        const EXPECTED: usize = #expected_slot_count;
+                        const ACTUAL: usize = <#ty as crate::storage::Storable>::SLOT_COUNT;
+
+                        // This will fail at compile time if they don't match
+                        if EXPECTED != ACTUAL {
+                            panic!(
+                                concat!(
+                                    "`slot_count` mismatch for field `",
+                                    stringify!(#field_name),
+                                    "`: attribute specifies `",
+                                    stringify!(#expected_slot_count),
+                                    "` but type implements a different `SLOT_COUNT`"
+                                )
+                            );
+                        }
+                    };
+
+                    #[inline]
+                    fn #getter_name(&mut self) -> crate::error::Result<#ty> {
+                        // Reference the validation const to ensure it's evaluated
+                        let _ = Self::#validation_const;
+
+                        <#ty as crate::storage::Storable>::load(
+                            self,
+                            ::alloy::primitives::U256::from_limbs(#slot_limbs),
+                        )
+                    }
+
+                    #[inline]
+                    fn #cleaner_name(&mut self) -> crate::error::Result<()> {
+                        // Reference the validation const to ensure it's evaluated
+                        let _ = Self::#validation_const;
+
+                        <#ty as crate::storage::Storable>::delete(
+                            self,
+                            ::alloy::primitives::U256::from_limbs(#slot_limbs),
+                        )
+                    }
+
+                    #[inline]
+                    fn #setter_name(&mut self, value: #ty) -> crate::error::Result<()> {
+                        // Reference the validation const to ensure it's evaluated
+                        let _ = Self::#validation_const;
+
+                        value.store(
+                            self,
+                            ::alloy::primitives::U256::from_limbs(#slot_limbs),
                         )
                     }
                 }

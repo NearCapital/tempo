@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use crate::{
     error::Result,
     storage::{
-        StorageKey, StorageOps, StorageType,
+        Storable, StorageKey, StorageOps,
         slots::{double_mapping_slot, mapping_slot},
     },
 };
@@ -61,10 +61,9 @@ impl<K, V, const SLOT: [u64; 4]> Mapping<K, V, SLOT> {
 
     /// Reads a value from the mapping at the given key.
     ///
-    /// This method encapsulates:
-    /// 1. Computing the storage slot via keccak256(key || base_slot)
-    /// 2. Reading the raw U256 from storage
-    /// 3. Converting the U256 to the target type V
+    /// This method:
+    /// 1. Computes the storage slot via keccak256(key || base_slot)
+    /// 2. Delegates to `Storable::load`, which may read one or more consecutive slots
     ///
     /// # Example
     ///
@@ -76,19 +75,17 @@ impl<K, V, const SLOT: [u64; 4]> Mapping<K, V, SLOT> {
     pub fn read<S: StorageOps>(storage: &mut S, key: K) -> Result<V>
     where
         K: StorageKey,
-        V: StorageType,
+        V: Storable,
     {
         let slot = mapping_slot(key.as_storage_bytes(), Self::slot());
-        let value = storage.sload(slot)?;
-        V::from_u256(value)
+        V::load(storage, slot)
     }
 
     /// Writes a value to the mapping at the given key.
     ///
-    /// This method encapsulates:
-    /// 1. Computing the storage slot via keccak256(key || base_slot)
-    /// 2. Converting the value to U256
-    /// 3. Writing the U256 to storage
+    /// This method:
+    /// 1. Computes the storage slot via keccak256(key || base_slot)
+    /// 2. Delegates to `Storable::store`, which may write one or more consecutive slots
     ///
     /// # Example
     ///
@@ -100,10 +97,32 @@ impl<K, V, const SLOT: [u64; 4]> Mapping<K, V, SLOT> {
     pub fn write<S: StorageOps>(storage: &mut S, key: K, value: V) -> Result<()>
     where
         K: StorageKey,
-        V: StorageType,
+        V: Storable,
     {
         let slot = mapping_slot(key.as_storage_bytes(), Self::slot());
-        storage.sstore(slot, value.to_u256())
+        value.store(storage, slot)
+    }
+
+    /// Deletes the value from the mapping at the given key (sets all slots to zero).
+    ///
+    /// This method:
+    /// 1. Computes the storage slot via keccak256(key || base_slot)
+    /// 2. Delegates to `Storable::delete`, which sets `V::SLOT_COUNT` consecutive slots to zero
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// type NamedMapping = Mapping<Address, U256, { [10, 0, 0, 0] }>;
+    /// NamedMapping::delete(&mut contract, user_address)?;
+    /// ```
+    #[inline]
+    pub fn delete<S: StorageOps>(storage: &mut S, key: K) -> Result<()>
+    where
+        K: StorageKey,
+        V: Storable,
+    {
+        let slot = mapping_slot(key.as_storage_bytes(), Self::slot());
+        V::delete(storage, slot)
     }
 }
 
@@ -112,8 +131,9 @@ impl<K1, K2, V, const SLOT: [u64; 4], const DUMMY: [u64; 4]>
 {
     /// Reads a value from a nested mapping at the given keys.
     ///
-    /// This method computes the storage slot using the double mapping formula:
-    /// `keccak256(k2 || keccak256(k1 || base_slot))`
+    /// This method:
+    /// 1. Computes the storage slot using: `keccak256(k2 || keccak256(k1 || base_slot))`
+    /// 2. Delegates to `Storable::load`, which may read one or more consecutive slots
     ///
     /// # Example
     ///
@@ -130,21 +150,21 @@ impl<K1, K2, V, const SLOT: [u64; 4], const DUMMY: [u64; 4]>
     where
         K1: StorageKey,
         K2: StorageKey,
-        V: StorageType,
+        V: Storable,
     {
         let slot = double_mapping_slot(
             key1.as_storage_bytes(),
             key2.as_storage_bytes(),
             Self::slot(),
         );
-        let value = storage.sload(slot)?;
-        V::from_u256(value)
+        V::load(storage, slot)
     }
 
     /// Writes a value to a nested mapping at the given keys.
     ///
-    /// This method computes the storage slot using the double mapping formula:
-    /// `keccak256(k2 || keccak256(k1 || base_slot))`
+    /// This method:
+    /// 1. Computes the storage slot using: `keccak256(k2 || keccak256(k1 || base_slot))`
+    /// 2. Delegates to `Storable::store`, which may write one or more consecutive slots
     ///
     /// # Example
     ///
@@ -162,14 +182,45 @@ impl<K1, K2, V, const SLOT: [u64; 4], const DUMMY: [u64; 4]>
     where
         K1: StorageKey,
         K2: StorageKey,
-        V: StorageType,
+        V: Storable,
     {
         let slot = double_mapping_slot(
             key1.as_storage_bytes(),
             key2.as_storage_bytes(),
             Self::slot(),
         );
-        storage.sstore(slot, value.to_u256())
+        value.store(storage, slot)
+    }
+
+    /// Deletes a value from a nested mapping at the given keys (sets all slots to zero).
+    ///
+    /// This method:
+    /// 1. Computes the storage slot using: `keccak256(k2 || keccak256(k1 || base_slot))`
+    /// 2. Delegates to `Storable::delete`, which sets `V::SLOT_COUNT` consecutive slots to zero
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// type NestedMapping = Mapping<Address, Mapping<Address, U256, { [0, 0, 0, 0] }>, { [11, 0, 0, 0] }>;
+    /// NestedMapping::delete_nested(
+    ///     &mut contract,
+    ///     owner_address,
+    ///     spender_address
+    /// )?;
+    /// ```
+    #[inline]
+    pub fn delete_nested<S: StorageOps>(storage: &mut S, key1: K1, key2: K2) -> Result<()>
+    where
+        K1: StorageKey,
+        K2: StorageKey,
+        V: Storable,
+    {
+        let slot = double_mapping_slot(
+            key1.as_storage_bytes(),
+            key2.as_storage_bytes(),
+            Self::slot(),
+        );
+        V::delete(storage, slot)
     }
 }
 

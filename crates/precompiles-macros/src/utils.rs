@@ -3,6 +3,9 @@
 use alloy::primitives::{U256, keccak256};
 use syn::{Attribute, Lit, Type};
 
+/// Return type for [`extract_attributes`]: (slot, base_slot, slot_count, map)
+type ExtractedAttributes = (Option<U256>, Option<U256>, Option<usize>, Option<String>);
+
 /// Parses a slot value from a literal.
 ///
 /// Supports:
@@ -58,35 +61,36 @@ pub(crate) fn normalize_to_snake_case(s: &str) -> String {
     result
 }
 
-/// Extracts `#[slot(N)]`, `#[base_slot(N)]`, and `#[map = "..."]` attributes from a field's attributes.
+/// Extracts `#[slot(N)]`, `#[base_slot(N)]`, `#[slot_count(N)]`, and `#[map = "..."]` attributes from a field's attributes.
 ///
-/// This function iterates through the attributes a single time to find both
-/// the slot and map values. It returns a tuple containing the slot number
-/// (if present), the base_slot number (if present), and the map string value
-/// (if present). The map value is normalized to snake_case.
+/// This function iterates through the attributes a single time to find all
+/// relevant values. It returns a tuple containing:
+/// - The slot number (if present)
+/// - The base_slot number (if present)
+/// - The slot_count (if present, for `Storable` types)
+/// - The map string value (if present, normalized to snake_case)
 ///
 /// # Errors
 ///
 /// Returns an error if:
 /// - Both `#[slot]` and `#[base_slot]` are present on the same field
 /// - Duplicate attributes of the same type are found
-pub(crate) fn extract_attributes(
-    attrs: &[Attribute],
-) -> syn::Result<(Option<U256>, Option<U256>, Option<String>)> {
+pub(crate) fn extract_attributes(attrs: &[Attribute]) -> syn::Result<ExtractedAttributes> {
     let mut slot_attr: Option<U256> = None;
     let mut base_slot_attr: Option<U256> = None;
+    let mut slot_count_attr: Option<usize> = None;
     let mut map_attr: Option<String> = None;
 
     for attr in attrs {
         // Extract `#[slot(N)]` attribute
         if attr.path().is_ident("slot") {
             if slot_attr.is_some() {
-                return Err(syn::Error::new_spanned(attr, "Duplicate 'slot' attribute"));
+                return Err(syn::Error::new_spanned(attr, "duplicate `slot` attribute"));
             }
             if base_slot_attr.is_some() {
                 return Err(syn::Error::new_spanned(
                     attr,
-                    "Cannot use both 'slot' and 'base_slot' attributes on the same field",
+                    "cannot use both `slot` and `base_slot` attributes on the same field",
                 ));
             }
 
@@ -98,23 +102,45 @@ pub(crate) fn extract_attributes(
             if base_slot_attr.is_some() {
                 return Err(syn::Error::new_spanned(
                     attr,
-                    "Duplicate 'base_slot' attribute",
+                    "duplicate `base_slot` attribute",
                 ));
             }
             if slot_attr.is_some() {
                 return Err(syn::Error::new_spanned(
                     attr,
-                    "Cannot use both 'slot' and 'base_slot' attributes on the same field",
+                    "cannot use both `slot` and `base_slot` attributes on the same field",
                 ));
             }
 
             let value: Lit = attr.parse_args()?;
             base_slot_attr = Some(parse_slot_value(&value)?);
         }
+        // Extract `#[slot_count(N)]` attribute
+        else if attr.path().is_ident("slot_count") {
+            if slot_count_attr.is_some() {
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    "duplicate `slot_count` attribute",
+                ));
+            }
+
+            let value: Lit = attr.parse_args()?;
+            if let Lit::Int(int) = value {
+                let count = int
+                    .base10_parse::<usize>()
+                    .map_err(|_| syn::Error::new_spanned(int, "invalid `slot_count`"))?;
+                slot_count_attr = Some(count);
+            } else {
+                return Err(syn::Error::new_spanned(
+                    value,
+                    "`slot_count` attribute must be an integer literal",
+                ));
+            }
+        }
         // Extract `#[map = "..."]` attribute
         else if attr.path().is_ident("map") {
             if map_attr.is_some() {
-                return Err(syn::Error::new_spanned(attr, "Duplicate 'map' attribute"));
+                return Err(syn::Error::new_spanned(attr, "duplicate `map` attribute"));
             }
 
             let meta: syn::Meta = attr.meta.clone();
@@ -138,7 +164,7 @@ pub(crate) fn extract_attributes(
         }
     }
 
-    Ok((slot_attr, base_slot_attr, map_attr))
+    Ok((slot_attr, base_slot_attr, slot_count_attr, map_attr))
 }
 
 /// Extracts the type parameters from Mapping<K, V>.
@@ -182,14 +208,39 @@ pub(crate) fn is_unit(ty: &Type) -> bool {
     matches!(ty, Type::Tuple(tuple) if tuple.elems.is_empty())
 }
 
+/// Guesses if a type is a custom struct by checking known storage types.
+///
+/// # Supported Types
+///
+/// - Rust: `bool`, `u<N>`, `i<N>`, String
+/// - Alloy: Address, `B<N>`, `U<N>`, `I<N>`, `Bytes`
+pub(crate) fn is_custom_struct(ty: &Type) -> bool {
+    let Type::Path(type_path) = ty else {
+        return false;
+    };
+
+    let Some(segment) = type_path.path.segments.last() else {
+        return false;
+    };
+
+    !matches!(
+        segment.ident.to_string().as_str(),
+        // Rust
+        "bool" | "String" |
+        "u8" | "u16" | "u32" | "u64" | "u128" |
+        "i8" | "i16" | "i32" | "i64" | "i128" |
+        // Alloy
+        "U8" | "U16" | "U32" | "U64" | "U128" | "U160" | "U256" |
+        "I8" | "I16" | "I32" | "I64" | "I128" | "I160" | "I256" |
+        "B8" | "B16" | "B32" | "B64" | "B128" | "B160" | "B256" |
+        "Address" | "Bytes"
+    )
+}
+
 /// Extracts the identifier (last segment) from a type path.
 ///
 /// For example, given `Foo::Bar::Baz`, this returns `Ok(Baz)`.
 /// Given a simple type like `MyType`, this returns `Ok(MyType)`.
-///
-/// # Errors
-///
-/// Returns an error if the type is not a path type or has no segments.
 pub(crate) fn try_extract_type_ident(ty: &Type) -> syn::Result<syn::Ident> {
     if let Type::Path(type_path) = ty
         && let Some(segment) = type_path.path.segments.last()
@@ -277,5 +328,27 @@ mod tests {
         // Non-path type should return error
         let ty: Type = parse_quote!(&str);
         assert!(try_extract_type_ident(&ty).is_err());
+    }
+
+    #[test]
+    fn test_is_custom_struct() {
+        // Rust primitives
+        assert!(!is_custom_struct(&parse_quote!(bool)));
+        assert!(!is_custom_struct(&parse_quote!(u8)));
+        assert!(!is_custom_struct(&parse_quote!(u64)));
+        assert!(!is_custom_struct(&parse_quote!(u128)));
+        assert!(!is_custom_struct(&parse_quote!(i32)));
+        assert!(!is_custom_struct(&parse_quote!(String)));
+
+        // Alloy types
+        assert!(!is_custom_struct(&parse_quote!(U256)));
+        assert!(!is_custom_struct(&parse_quote!(B256)));
+        assert!(!is_custom_struct(&parse_quote!(Address)));
+        assert!(!is_custom_struct(&parse_quote!(Bytes)));
+        assert!(!is_custom_struct(&parse_quote!(I256)));
+
+        // Custom types should return false
+        assert!(is_custom_struct(&parse_quote!(RewardStream)));
+        assert!(is_custom_struct(&parse_quote!(MyCustomStruct)));
     }
 }

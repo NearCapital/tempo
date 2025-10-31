@@ -1,13 +1,15 @@
-//! Procedural macro for generating type-safe EVM storage accessors.
+//! Procedural macros for generating type-safe EVM storage accessors.
 //!
-//! This crate provides the `#[contract]` macro that transforms a storage schema
-//! into a fully-functional contract with type-safe getter/setter methods.
+//! This crate provides:
+//! - `#[contract]` macro that transforms a storage schema into a fully-functional contract
+//! - `#[derive(Storable)]` macro for multi-slot storage structs
 
 mod dispatcher;
 mod errors;
 mod events;
 mod interface;
-mod storage;
+mod layout;
+mod storable;
 mod traits;
 mod utils;
 
@@ -80,7 +82,7 @@ impl syn::parse::Parse for ContractAttrs {
 ///
 /// - No duplicate slot assignments
 /// - Unique field names, excluding the reserved ones: `address`, `storage`, `msg_sender`.
-/// - All field types must implement `StorageType`, and mapping keys must implement `StorageKey`.
+/// - All field types must implement `Storable`, and mapping keys must implement `StorageKey`.
 #[proc_macro_attribute]
 pub fn contract(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
@@ -165,6 +167,7 @@ struct FieldInfo {
     ty: Type,
     slot: Option<U256>,
     base_slot: Option<U256>,
+    slot_count: Option<usize>,
     map: Option<String>,
     /// Lazily computed from `map` and `name`
     effective_name: OnceCell<String>,
@@ -183,7 +186,7 @@ impl FieldInfo {
 /// Classification of a field based on its type
 #[derive(Debug)]
 enum FieldKind<'a> {
-    /// Direct value field.
+    /// Direct value field (single-slot type).
     Direct,
     /// Single-level mapping (Mapping<K, V>)
     Mapping { key: &'a Type, value: &'a Type },
@@ -193,6 +196,8 @@ enum FieldKind<'a> {
         key2: &'a Type,
         value: &'a Type,
     },
+    /// Multi-slot storage block (custom struct implementing `trait Storable`)
+    StorageBlock(&'a Type),
 }
 
 fn parse_fields(input: DeriveInput) -> syn::Result<Vec<FieldInfo>> {
@@ -232,12 +237,13 @@ fn parse_fields(input: DeriveInput) -> syn::Result<Vec<FieldInfo>> {
                 ));
             }
 
-            let (slot, base_slot, map) = extract_attributes(&field.attrs)?;
+            let (slot, base_slot, slot_count, map) = extract_attributes(&field.attrs)?;
             Ok(FieldInfo {
                 name: name.to_owned(),
                 ty: field.ty,
                 slot,
                 base_slot,
+                slot_count,
                 map,
                 effective_name: OnceCell::new(),
             })
@@ -252,14 +258,14 @@ fn gen_contract_storage(
     fields: &[FieldInfo],
 ) -> syn::Result<proc_macro2::TokenStream> {
     // Generate the complete output
-    let allocated_fields = storage::allocate_slots(fields)?;
-    let slots_module = storage::gen_slots_module(&allocated_fields);
-    let transformed_struct = storage::gen_struct(ident, vis);
-    let storage_trait = storage::gen_contract_storage_impl(ident);
-    let constructor = storage::gen_constructor(ident);
+    let allocated_fields = layout::allocate_slots(fields)?;
+    let slots_module = layout::gen_slots_module(&allocated_fields);
+    let transformed_struct = layout::gen_struct(ident, vis);
+    let storage_trait = layout::gen_contract_storage_impl(ident);
+    let constructor = layout::gen_constructor(ident);
     let methods: Vec<_> = allocated_fields
         .iter()
-        .map(|allocated| storage::gen_getters_and_setters(ident, allocated))
+        .map(|allocated| layout::gen_getters_and_setters(ident, allocated))
         .collect();
 
     let output = quote! {
@@ -271,4 +277,47 @@ fn gen_contract_storage(
     };
 
     Ok(output)
+}
+
+/// Derives the `Storable` trait for structs with named fields.
+///
+/// This macro generates implementations for loading and storing multi-slot
+/// storage structures in EVM storage.
+///
+/// # Requirements
+///
+/// - The struct must have named fields (not tuple structs or unit structs)
+/// - All fields must implement the `Storable` trait
+///
+/// # Generated Code
+///
+/// For each struct field, the macro generates sequential slot offsets.
+/// It implements the `Storable` trait methods:
+/// - `load` - Loads the struct from storage
+/// - `store` - Stores the struct to storage
+/// - `delete` - Uses default implementation (sets all slots to zero)
+///
+/// # Example
+///
+/// ```ignore
+/// use precompiles::storage::Storable;
+/// use alloy_primitives::{Address, U256};
+///
+/// #[derive(Storable)]
+/// pub struct RewardStream {
+///     pub funder: Address,              // offset 0
+///     pub start_time: u64,              // offset 1
+///     pub end_time: u64,                // offset 2
+///     pub rate_per_second_scaled: U256, // offset 3
+///     pub amount_total: U256,           // offset 4
+/// }
+/// ```
+#[proc_macro_derive(Storable)]
+pub fn derive_storage_block(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    match storable::derive_impl(input) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
 }

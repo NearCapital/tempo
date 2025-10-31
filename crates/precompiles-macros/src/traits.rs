@@ -494,13 +494,15 @@ mod tests_match {
     use syn::{Attribute, Type, parse_quote};
 
     fn create_field(name: &str, ty: Type, attrs: Vec<Attribute>) -> FieldInfo {
-        let (slot, base_slot, map) = extract_attributes(&attrs).expect("invalid attribute");
+        let (slot, base_slot, slot_count, map) =
+            extract_attributes(&attrs).expect("invalid attribute");
         let field_name = syn::Ident::new(name, proc_macro2::Span::call_site());
         FieldInfo {
             name: field_name,
             ty,
             slot,
             base_slot,
+            slot_count,
             map,
             effective_name: std::cell::OnceCell::new(),
         }
@@ -764,6 +766,7 @@ mod tests_trait {
             ty: parse_quote!(String),
             slot: None,
             base_slot: None,
+            slot_count: None,
             map: None,
             effective_name: std::cell::OnceCell::new(),
         };

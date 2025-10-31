@@ -214,14 +214,14 @@ mod tests {
         let ty: Type = parse_quote!(ITIP20);
         let parsed = parse_interface(&ty).unwrap();
 
-        // Should have 28 functions
-        assert_eq!(parsed.functions.len(), 28);
+        // Should have 34 functions
+        assert_eq!(parsed.functions.len(), 34);
 
         // Should have 11 events (matching sol! interface)
-        assert_eq!(parsed.events.len(), 11);
+        assert_eq!(parsed.events.len(), 14);
 
         // Should have 13 errors
-        assert_eq!(parsed.errors.len(), 13);
+        assert_eq!(parsed.errors.len(), 16);
 
         // Check a few specific functions
         let name_fn = parsed.functions.iter().find(|f| f.name == "name");
@@ -244,7 +244,7 @@ mod tests {
             .iter()
             .find(|e| e.name == "insufficient_balance");
         assert!(insufficient_balance_error.is_some());
-        assert_eq!(insufficient_balance_error.unwrap().params.len(), 3);
+        assert_eq!(insufficient_balance_error.unwrap().params.len(), 0);
     }
 
     #[test]

@@ -5,7 +5,6 @@ pub mod roles;
 pub use tempo_contracts::precompiles::{
     IRolesAuth, ITIP20, RolesAuthError, RolesAuthEvent, TIP20Error, TIP20Event,
 };
-use tempo_precompiles_macros::contract;
 
 use crate::{
     LINKING_USD_ADDRESS, TIP_FEE_MANAGER_ADDRESS,
@@ -22,7 +21,6 @@ use crate::{
 use alloy::{
     hex,
     primitives::{Address, B256, Bytes, IntoLogData, U256, keccak256},
-    sol_types::SolCall,
 };
 use revm::{
     interpreter::instructions::utility::{IntoAddress, IntoU256},
