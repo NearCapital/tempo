@@ -7,7 +7,9 @@ use crate::{
 };
 use alloy::primitives::{Address, IntoLogData, U256, uint};
 use revm::interpreter::instructions::utility::{IntoAddress, IntoU256};
-use tempo_contracts::precompiles::{ITIP20, TIP20Error, TIP20Event};
+use tempo_contracts::precompiles::{
+    ITIP20, ITIP20Rewards, TIP20Error, TIP20Event, TIP20RewardsError, TIP20RewardsEvent,
+};
 
 pub const ACC_PRECISION: U256 = uint!(1000000000000000000_U256);
 
@@ -36,7 +38,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
     pub fn start_reward(
         &mut self,
         msg_sender: Address,
-        call: ITIP20::startRewardCall,
+        call: ITIP20Rewards::startRewardCall,
     ) -> Result<u64, TempoPrecompileError> {
         self.check_not_paused()?;
         let token_address = self.token_address;
@@ -51,7 +53,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
         if call.seconds == 0 {
             let opted_in_supply = self.get_opted_in_supply()?;
             if opted_in_supply.is_zero() {
-                return Err(TIP20Error::no_opted_in_supply().into());
+                return Err(TIP20RewardsError::no_opted_in_supply().into());
             }
 
             let delta_rpt = call
@@ -68,7 +70,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
             // Emit reward scheduled event for immediate payout
             self.storage.emit_event(
                 self.token_address,
-                TIP20Event::RewardScheduled(ITIP20::RewardScheduled {
+                TIP20RewardsEvent::RewardScheduled(ITIP20Rewards::RewardScheduled {
                     funder: msg_sender,
                     id: 0,
                     amount: call.amount,
@@ -124,7 +126,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
             // Emit reward scheduled event for streaming reward
             self.storage.emit_event(
                 self.token_address,
-                TIP20Event::RewardScheduled(ITIP20::RewardScheduled {
+                TIP20RewardsEvent::RewardScheduled(ITIP20Rewards::RewardScheduled {
                     funder: msg_sender,
                     id: stream_id,
                     amount: call.amount,
@@ -297,7 +299,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
     pub fn set_reward_recipient(
         &mut self,
         msg_sender: Address,
-        call: ITIP20::setRewardRecipientCall,
+        call: ITIP20Rewards::setRewardRecipientCall,
     ) -> Result<(), TempoPrecompileError> {
         self.check_not_paused()?;
         if call.recipient != Address::ZERO {
@@ -355,7 +357,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
         // Emit reward recipient set event
         self.storage.emit_event(
             self.token_address,
-            TIP20Event::RewardRecipientSet(ITIP20::RewardRecipientSet {
+            TIP20RewardsEvent::RewardRecipientSet(ITIP20Rewards::RewardRecipientSet {
                 holder: msg_sender,
                 recipient: call.recipient,
             })
@@ -372,22 +374,22 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
     pub fn cancel_reward(
         &mut self,
         msg_sender: Address,
-        call: ITIP20::cancelRewardCall,
+        call: ITIP20Rewards::cancelRewardCall,
     ) -> Result<U256, TempoPrecompileError> {
         let stream_id = call.id;
         let stream = RewardStream::from_storage(stream_id, self.storage, self.token_address)?;
 
         if stream.funder.is_zero() {
-            return Err(TIP20Error::stream_inactive().into());
+            return Err(TIP20RewardsError::stream_inactive().into());
         }
 
         if stream.funder != msg_sender {
-            return Err(TIP20Error::not_stream_funder().into());
+            return Err(TIP20RewardsError::not_stream_funder().into());
         }
 
         let current_time = self.storage.timestamp();
         if current_time >= stream.end_time {
-            return Err(TIP20Error::stream_inactive().into());
+            return Err(TIP20RewardsError::stream_inactive().into());
         }
 
         let timestamp = self.storage.timestamp();
@@ -461,7 +463,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
         // Emit reward canceled event
         self.storage.emit_event(
             self.token_address,
-            TIP20Event::RewardCanceled(ITIP20::RewardCanceled {
+            TIP20RewardsEvent::RewardCanceled(ITIP20Rewards::RewardCanceled {
                 funder: stream.funder,
                 id: stream_id,
                 refund,
@@ -876,7 +878,7 @@ impl RewardStream {
     }
 }
 
-impl From<RewardStream> for ITIP20::RewardStream {
+impl From<RewardStream> for ITIP20Rewards::RewardStream {
     fn from(value: RewardStream) -> Self {
         Self {
             funder: value.funder,
@@ -892,7 +894,9 @@ impl From<RewardStream> for ITIP20::RewardStream {
 mod tests {
     use super::*;
     use crate::{
-        LINKING_USD_ADDRESS, storage::hashmap::HashMapStorageProvider, tip20::ISSUER_ROLE,
+        LINKING_USD_ADDRESS,
+        storage::hashmap::HashMapStorageProvider,
+        tip20::{ISSUER_ROLE, ITIP20},
     };
     use alloy::primitives::{Address, U256};
 
@@ -920,7 +924,7 @@ mod tests {
         let reward_amount = U256::from(100e18);
         let stream_id = token.start_reward(
             admin,
-            ITIP20::startRewardCall {
+            ITIP20Rewards::startRewardCall {
                 amount: reward_amount,
                 seconds: 10,
             },
@@ -961,7 +965,10 @@ mod tests {
         let amount = U256::from(1000e18);
         token.mint(admin, ITIP20::mintCall { to: alice, amount })?;
 
-        token.set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
+        token.set_reward_recipient(
+            alice,
+            ITIP20Rewards::setRewardRecipientCall { recipient: alice },
+        )?;
 
         assert_eq!(token.get_reward_recipient_of(alice)?, alice);
         assert_eq!(token.get_delegated_balance(alice)?, amount);
@@ -970,7 +977,7 @@ mod tests {
 
         token.set_reward_recipient(
             alice,
-            ITIP20::setRewardRecipientCall {
+            ITIP20Rewards::setRewardRecipientCall {
                 recipient: Address::ZERO,
             },
         )?;
@@ -1006,13 +1013,14 @@ mod tests {
         let reward_amount = U256::from(100e18);
         let stream_id = token.start_reward(
             admin,
-            ITIP20::startRewardCall {
+            ITIP20Rewards::startRewardCall {
                 amount: reward_amount,
                 seconds: 10,
             },
         )?;
 
-        let remaining = token.cancel_reward(admin, ITIP20::cancelRewardCall { id: stream_id })?;
+        let remaining =
+            token.cancel_reward(admin, ITIP20Rewards::cancelRewardCall { id: stream_id })?;
 
         let total_after = token.get_total_reward_per_second()?;
         assert_eq!(total_after, U256::ZERO);
@@ -1054,7 +1062,10 @@ mod tests {
             },
         )?;
 
-        token.set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
+        token.set_reward_recipient(
+            alice,
+            ITIP20Rewards::setRewardRecipientCall { recipient: alice },
+        )?;
 
         let reward_amount = U256::from(100e18);
         token.mint(
@@ -1068,7 +1079,7 @@ mod tests {
         // Distribute the reward immediately
         token.start_reward(
             admin,
-            ITIP20::startRewardCall {
+            ITIP20Rewards::startRewardCall {
                 amount: reward_amount,
                 seconds: 0,
             },
@@ -1117,7 +1128,10 @@ mod tests {
             },
         )?;
 
-        token.set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
+        token.set_reward_recipient(
+            alice,
+            ITIP20Rewards::setRewardRecipientCall { recipient: alice },
+        )?;
 
         let reward_amount = U256::from(100e18);
         token.mint(
@@ -1130,7 +1144,7 @@ mod tests {
 
         token.start_reward(
             admin,
-            ITIP20::startRewardCall {
+            ITIP20Rewards::startRewardCall {
                 amount: reward_amount,
                 seconds: 100,
             },
@@ -1181,7 +1195,10 @@ mod tests {
             },
         )?;
 
-        token.set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
+        token.set_reward_recipient(
+            alice,
+            ITIP20Rewards::setRewardRecipientCall { recipient: alice },
+        )?;
 
         let reward_amount = U256::from(100e18);
         token.mint(
@@ -1195,7 +1212,7 @@ mod tests {
         let stream_duration = 10u128;
         token.start_reward(
             admin,
-            ITIP20::startRewardCall {
+            ITIP20Rewards::startRewardCall {
                 amount: reward_amount,
                 seconds: stream_duration,
             },
@@ -1257,7 +1274,10 @@ mod tests {
             },
         )?;
 
-        token.set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
+        token.set_reward_recipient(
+            alice,
+            ITIP20Rewards::setRewardRecipientCall { recipient: alice },
+        )?;
 
         // Mint reward tokens to admin
         let reward_amount = U256::from(100e18);
@@ -1274,7 +1294,7 @@ mod tests {
         // Start immediate reward
         let id = token.start_reward(
             admin,
-            ITIP20::startRewardCall {
+            ITIP20Rewards::startRewardCall {
                 amount: reward_amount,
                 seconds: 0,
             },
@@ -1329,7 +1349,10 @@ mod tests {
             },
         )?;
 
-        token.set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
+        token.set_reward_recipient(
+            alice,
+            ITIP20Rewards::setRewardRecipientCall { recipient: alice },
+        )?;
 
         // Mint reward tokens to admin
         let reward_amount = U256::from(100e18);
@@ -1346,7 +1369,7 @@ mod tests {
         // Start streaming reward for 20 seconds
         let stream_id = token.start_reward(
             admin,
-            ITIP20::startRewardCall {
+            ITIP20Rewards::startRewardCall {
                 amount: reward_amount,
                 seconds: 20,
             },

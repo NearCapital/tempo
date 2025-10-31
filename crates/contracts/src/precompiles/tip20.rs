@@ -1,5 +1,8 @@
 pub use IRolesAuth::{IRolesAuthErrors as RolesAuthError, IRolesAuthEvents as RolesAuthEvent};
 pub use ITIP20::{ITIP20Errors as TIP20Error, ITIP20Events as TIP20Event};
+pub use ITIP20Rewards::{
+    ITIP20RewardsErrors as TIP20RewardsError, ITIP20RewardsEvents as TIP20RewardsEvent,
+};
 use alloy::sol;
 
 sol! {
@@ -67,19 +70,39 @@ sol! {
         function updateQuoteToken(address newQuoteToken) external;
         function finalizeQuoteTokenUpdate() external;
 
-        // EIP-712 Permit
-        struct Permit {
-            address owner;
-            address spender;
-            uint256 value;
-            uint256 nonce;
-            uint256 deadline;
-        }
-        function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external;
-        function DOMAIN_SEPARATOR() external view returns (bytes32);
+        // Events
+        event Transfer(address indexed from, address indexed to, uint256 amount);
+        event Approval(address indexed owner, address indexed spender, uint256 amount);
+        event Mint(address indexed to, uint256 amount);
+        event Burn(address indexed from, uint256 amount);
+        event BurnBlocked(address indexed from, uint256 amount);
+        event TransferWithMemo(address indexed from, address indexed to, uint256 amount, bytes32 memo);
+        event TransferPolicyUpdate(address indexed updater, uint64 indexed newPolicyId);
+        event SupplyCapUpdate(address indexed updater, uint256 indexed newSupplyCap);
+        event PauseStateUpdate(address indexed updater, bool isPaused);
+        event UpdateQuoteToken(address indexed updater, address indexed newQuoteToken);
+        event QuoteTokenUpdateFinalized(address indexed updater, address indexed newQuoteToken);
 
+        // Errors
+        error InsufficientBalance();
+        error InsufficientAllowance();
+        error SupplyCapExceeded();
+        error InvalidPayload();
+        error StringTooLong();
+        error PolicyForbids();
+        error InvalidRecipient();
+        error ContractPaused();
+        error InvalidCurrency();
+        error InvalidQuoteToken();
+        error TransfersDisabled();
+        error InvalidAmount();
+        error Unauthorized();
+    }
 
-
+    #[derive(Debug, PartialEq, Eq)]
+    #[sol(rpc, abi)]
+    #[allow(clippy::too_many_arguments)]
+    interface ITIP20Rewards {
         struct RewardStream {
             address funder;
             uint64 startTime;
@@ -96,39 +119,15 @@ sol! {
         function getStream(uint64 id) external view returns (RewardStream);
         function totalRewardPerSecond() external view returns (uint256);
 
-        // Events
-        event Transfer(address indexed from, address indexed to, uint256 amount);
-        event Approval(address indexed owner, address indexed spender, uint256 amount);
-        event Mint(address indexed to, uint256 amount);
-        event Burn(address indexed from, uint256 amount);
-        event BurnBlocked(address indexed from, uint256 amount);
-        event TransferWithMemo(address indexed from, address indexed to, uint256 amount, bytes32 memo);
-        event TransferPolicyUpdate(address indexed updater, uint64 indexed newPolicyId);
-        event SupplyCapUpdate(address indexed updater, uint256 indexed newSupplyCap);
-        event PauseStateUpdate(address indexed updater, bool isPaused);
-        event UpdateQuoteToken(address indexed updater, address indexed newQuoteToken);
-        event QuoteTokenUpdateFinalized(address indexed updater, address indexed newQuoteToken);
+        // Reward Events
         event RewardScheduled(address indexed funder, uint64 indexed id, uint256 amount, uint32 durationSeconds);
         event RewardCanceled(address indexed funder, uint64 indexed id, uint256 refund);
         event RewardRecipientSet(address indexed holder, address indexed recipient);
 
         // Errors
-        error InsufficientBalance();
-        error InsufficientAllowance();
-        error SupplyCapExceeded();
-        error InvalidPayload();
-        error StringTooLong();
-        error PolicyForbids();
-        error InvalidRecipient();
-        error ContractPaused();
-        error InvalidCurrency();
-        error InvalidQuoteToken();
-        error TransfersDisabled();
-        error InvalidAmount();
         error NotStreamFunder();
         error StreamInactive();
         error NoOptedInSupply();
-        error Unauthorized();
     }
 }
 
@@ -204,19 +203,21 @@ impl TIP20Error {
     pub const fn invalid_amount() -> Self {
         Self::InvalidAmount(ITIP20::InvalidAmount {})
     }
+}
 
+impl TIP20RewardsError {
     /// Error for when stream does not exist
     pub const fn stream_inactive() -> Self {
-        Self::StreamInactive(ITIP20::StreamInactive {})
+        Self::StreamInactive(ITIP20Rewards::StreamInactive {})
     }
 
     /// Error for when msg.sedner is not stream funder
     pub const fn not_stream_funder() -> Self {
-        Self::NotStreamFunder(ITIP20::NotStreamFunder {})
+        Self::NotStreamFunder(ITIP20Rewards::NotStreamFunder {})
     }
 
     /// Error for when opted in supply is 0
     pub const fn no_opted_in_supply() -> Self {
-        Self::NoOptedInSupply(ITIP20::NoOptedInSupply {})
+        Self::NoOptedInSupply(ITIP20Rewards::NoOptedInSupply {})
     }
 }

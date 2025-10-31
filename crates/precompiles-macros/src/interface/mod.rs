@@ -1,6 +1,6 @@
 //! Interface parsing and function extraction for contract macro.
 //!
-//! This module handles parsing the `#[contract(InterfaceName)]` attribute and
+//! This module handles parsing the `#[contract(Interface1, Interface2)]` attribute and
 //! extracting interface function signatures for trait generation.
 
 use crate::utils::{self, try_extract_type_ident};
