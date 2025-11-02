@@ -1,6 +1,6 @@
 //! Event emission helper tests for the #[contract] macro.
 //!
-//! Tests that the macro generates _emit_* methods for events defined in interfaces.
+//! Tests that the macro generates emit_* methods for events defined in interfaces.
 
 // Re-export `tempo_precompiles::storage` as a local module so `crate::storage` works
 mod storage {
@@ -55,15 +55,15 @@ impl<S: storage::PrecompileStorageProvider> MiniTokenCall for MiniToken<'_, S> {
         to: Address,
         amount: U256,
     ) -> tempo_precompiles::error::Result<()> {
-        let balance = self._get_balances(to)?;
-        self._set_balances(to, balance + amount)?;
+        let balance = self.get_balances(to)?;
+        self.set_balances(to, balance + amount)?;
 
         // Emit Transfer event from zero address
         let zero = Address::ZERO;
-        self._emit_transfer(zero, to, amount)?;
+        self.emit_transfer(zero, to, amount)?;
 
         // Emit Mint event
-        self._emit_mint(to, amount)?;
+        self.emit_mint(to, amount)?;
         Ok(())
     }
 }
@@ -75,12 +75,12 @@ fn test_event_emission_helpers_exist() {
     let mut token = MiniToken::_new(addr, &mut storage);
     let recipient = test_address(2);
 
-    // Test that _emit_transfer method exists and can be called directly
-    let result = token._emit_transfer(Address::ZERO, recipient, U256::from(100));
+    // Test that emit_transfer method exists and can be called directly
+    let result = token.emit_transfer(Address::ZERO, recipient, U256::from(100));
     assert!(result.is_ok());
 
-    // Test that _emit_mint method exists and can be called directly
-    let result = token._emit_mint(recipient, U256::from(100));
+    // Test that emit_mint method exists and can be called directly
+    let result = token.emit_mint(recipient, U256::from(100));
     assert!(result.is_ok());
 }
 
@@ -91,7 +91,7 @@ fn test_event_emission_through_dispatcher() {
     let mut token = MiniToken::_new(addr, &mut storage);
     let recipient = test_address(2);
 
-    // Mint tokens through dispatcher (which internally calls _emit_transfer and _emit_mint)
+    // Mint tokens through dispatcher (which internally calls emit_transfer and emit_mint)
     let calldata = IMiniToken::mintCall {
         to: recipient,
         amount: U256::from(1000),
@@ -102,5 +102,5 @@ fn test_event_emission_through_dispatcher() {
     assert!(result.is_ok());
 
     // Verify balance was updated
-    assert_eq!(token._get_balances(recipient).unwrap(), U256::from(1000));
+    assert_eq!(token.get_balances(recipient).unwrap(), U256::from(1000));
 }

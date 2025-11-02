@@ -195,9 +195,9 @@ pub(crate) fn gen_getters_and_setters(
     let field_name = &allocated.info.name;
     let field_ty = &allocated.info.ty;
 
-    let getter_name = format_ident!("_get_{}", field_name);
-    let setter_name = format_ident!("_set_{}", field_name);
-    let cleaner_name = format_ident!("_clear_{}", field_name);
+    let getter_name = format_ident!("get_{}", field_name);
+    let setter_name = format_ident!("set_{}", field_name);
+    let cleaner_name = format_ident!("clear_{}", field_name);
 
     match &allocated.kind {
         FieldKind::Direct => {

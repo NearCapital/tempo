@@ -203,8 +203,13 @@ pub(crate) fn get_ierror_test_errors(interface_ident: &Ident) -> Vec<InterfaceEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interface::{InterfaceError, InterfaceEvent, InterfaceFunction, ParamName, FunctionKind, get_event_enum_path, parse_interface};
-    use crate::utils::try_extract_type_ident;
+    use crate::{
+        interface::{
+            FunctionKind, InterfaceError, InterfaceEvent, InterfaceFunction, ParamName,
+            get_event_enum_path, parse_interface,
+        },
+        utils::try_extract_type_ident,
+    };
     use quote::quote;
     use syn::{Ident, Type, parse_quote};
 

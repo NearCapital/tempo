@@ -76,13 +76,15 @@ pub struct TIP20Token {
     allowances: Mapping<Address, Mapping<Address, U256>>, // slot 11
     nonces: Mapping<Address, U256>, // slot 12
     paused: bool,       // slot 13
-    supply_cap: U256,   // slot 14
+    #[map = "supply_cap"]
+    max_supply_cap: U256, // slot 14
     salts: Mapping<B256, bool>, // slot 15
 
     // TIP20 Rewards
     last_update_time: u64, // slot 16
     opted_in_supply: U256, // slot 17
-    next_stream_id: u64,   // slot 18
+    #[map = "get_stream_id"]
+    next_stream: u64, // slot 18
     #[map = "get_stream"]
     streams: Mapping<u64, RewardStream>, // slot 19
     scheduled_rate_decrease: Mapping<u128, U256>, // slot 20
@@ -110,45 +112,33 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token_ITIP20 for TIP20Token<'a, S> {
     }
 
     // Admin functions
-    fn change_transfer_policy_id(
-        &mut self,
-        msg_sender: Address,
-        new_policy_id: u64,
-    ) -> crate::error::Result<()> {
+    fn change_transfer_policy_id(&mut self, msg_sender: Address, new_policy_id: u64) -> Result<()> {
         self.check_role(msg_sender, DEFAULT_ADMIN_ROLE)?;
-        self._set_transfer_policy_id(new_policy_id)?;
-        self._emit_transfer_policy_update(msg_sender, new_policy_id)
+        self.set_transfer_policy_id(new_policy_id)?;
+        self.emit_transfer_policy_update(msg_sender, new_policy_id)
     }
 
-    fn set_supply_cap(
-        &mut self,
-        msg_sender: Address,
-        new_supply_cap: U256,
-    ) -> crate::error::Result<()> {
+    fn set_supply_cap(&mut self, msg_sender: Address, new_supply_cap: U256) -> Result<()> {
         self.check_role(msg_sender, DEFAULT_ADMIN_ROLE)?;
         if new_supply_cap < self.total_supply()? {
             return Err(TIP20Error::supply_cap_exceeded().into());
         }
 
-        self._set_supply_cap(new_supply_cap)?;
-        self._emit_supply_cap_update(msg_sender, new_supply_cap)
+        self.set_max_supply_cap(new_supply_cap)?;
+        self.emit_supply_cap_update(msg_sender, new_supply_cap)
     }
 
-    fn pause(&mut self, msg_sender: Address) -> crate::error::Result<()> {
+    fn pause(&mut self, msg_sender: Address) -> Result<()> {
         self.check_role(msg_sender, *PAUSE_ROLE)?;
-        self._set_paused(true)?;
-        self._emit_pause_state_update(msg_sender, true)
+        self.set_paused(true)?;
+        self.emit_pause_state_update(msg_sender, true)
     }
-    fn unpause(&mut self, msg_sender: Address) -> crate::error::Result<()> {
+    fn unpause(&mut self, msg_sender: Address) -> Result<()> {
         self.check_role(msg_sender, *PAUSE_ROLE)?;
-        self._set_paused(false)?;
-        self._emit_pause_state_update(msg_sender, false)
+        self.set_paused(false)?;
+        self.emit_pause_state_update(msg_sender, false)
     }
-    fn update_quote_token(
-        &mut self,
-        msg_sender: Address,
-        new_quote_token: Address,
-    ) -> crate::error::Result<()> {
+    fn update_quote_token(&mut self, msg_sender: Address, new_quote_token: Address) -> Result<()> {
         self.check_role(msg_sender, DEFAULT_ADMIN_ROLE)?;
 
         // Verify the new quote token is a valid TIP20 token that has been deployed
@@ -166,11 +156,11 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token_ITIP20 for TIP20Token<'a, S> {
             return Err(TIP20Error::invalid_quote_token().into());
         }
 
-        self._set_next_quote_token(new_quote_token)?;
-        self._emit_update_quote_token(msg_sender, new_quote_token)
+        self.set_next_quote_token(new_quote_token)?;
+        self.emit_update_quote_token(msg_sender, new_quote_token)
     }
 
-    fn finalize_quote_token_update(&mut self, msg_sender: Address) -> crate::error::Result<()> {
+    fn finalize_quote_token_update(&mut self, msg_sender: Address) -> Result<()> {
         self.check_role(msg_sender, DEFAULT_ADMIN_ROLE)?;
 
         let next_quote_token = self.next_quote_token()?;
@@ -187,14 +177,39 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token_ITIP20 for TIP20Token<'a, S> {
         }
 
         // Update the quote token
-        self._set_quote_token(next_quote_token)?;
-        self._emit_quote_token_update_finalized(msg_sender, next_quote_token)
+        self.set_quote_token(next_quote_token)?;
+        self.emit_quote_token_update_finalized(msg_sender, next_quote_token)
     }
 
     // Token operations
     /// Mints new tokens to specified address
-    fn mint(&mut self, msg_sender: Address, to: Address, amount: U256) -> crate::error::Result<()> {
-        self._mint(msg_sender, to, amount)
+    fn mint(&mut self, msg_sender: Address, to: Address, amount: U256) -> Result<()> {
+        self.check_role(msg_sender, *ISSUER_ROLE)?;
+        let total_supply = self.total_supply()?;
+
+        let new_supply = total_supply
+            .checked_add(amount)
+            .ok_or(TempoPrecompileError::under_overflow())?;
+
+        let supply_cap = self.supply_cap()?;
+        if new_supply > supply_cap {
+            return Err(TIP20Error::supply_cap_exceeded().into());
+        }
+
+        let timestamp = self.storage.timestamp();
+        self.accrue(timestamp)?;
+
+        self.handle_rewards_on_mint(to, amount)?;
+
+        self.set_total_supply(new_supply)?;
+        let to_balance = self.get_balances(to)?;
+        let new_to_balance: U256 = to_balance
+            .checked_add(amount)
+            .ok_or(TempoPrecompileError::under_overflow())?;
+        self.set_balances(to, new_to_balance)?;
+
+        self.emit_transfer(Address::ZERO, to, amount)?;
+        self.emit_mint(to, amount)
     }
 
     /// Mints new tokens to specified address with memo attached
@@ -204,34 +219,34 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token_ITIP20 for TIP20Token<'a, S> {
         to: Address,
         amount: U256,
         memo: B256,
-    ) -> crate::error::Result<()> {
-        self._mint(msg_sender, to, amount)?;
-        self._emit_transfer_with_memo(msg_sender, to, amount, memo)
+    ) -> Result<()> {
+        self.mint(msg_sender, to, amount)?;
+        self.emit_transfer_with_memo(msg_sender, to, amount, memo)
     }
 
     /// Burns tokens from sender's balance and reduces total supply
-    fn burn(&mut self, msg_sender: Address, amount: U256) -> crate::error::Result<()> {
-        self._burn(msg_sender, amount)
+    fn burn(&mut self, msg_sender: Address, amount: U256) -> Result<()> {
+        self.check_role(msg_sender, *ISSUER_ROLE)?;
+
+        self._transfer(msg_sender, Address::ZERO, amount)?;
+
+        let total_supply = self.total_supply()?;
+        let new_supply = total_supply
+            .checked_sub(amount)
+            .ok_or(TIP20Error::insufficient_balance())?;
+        self.set_total_supply(new_supply)?;
+
+        self.emit_burn(msg_sender, amount)
     }
 
     /// Burns tokens from sender's balance with memo attached
-    fn burn_with_memo(
-        &mut self,
-        msg_sender: Address,
-        amount: U256,
-        memo: B256,
-    ) -> crate::error::Result<()> {
-        self._burn(msg_sender, amount)?;
-        self._emit_transfer_with_memo(msg_sender, Address::ZERO, amount, memo)
+    fn burn_with_memo(&mut self, msg_sender: Address, amount: U256, memo: B256) -> Result<()> {
+        self.burn(msg_sender, amount)?;
+        self.emit_transfer_with_memo(msg_sender, Address::ZERO, amount, memo)
     }
 
     /// Burns tokens from blocked addresses that cannot transfer
-    fn burn_blocked(
-        &mut self,
-        msg_sender: Address,
-        from: Address,
-        amount: U256,
-    ) -> crate::error::Result<()> {
+    fn burn_blocked(&mut self, msg_sender: Address, from: Address, amount: U256) -> Result<()> {
         self.check_role(msg_sender, *BURN_BLOCKED_ROLE)?;
 
         // Check if the address is blocked from transferring
@@ -252,29 +267,19 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token_ITIP20 for TIP20Token<'a, S> {
         let new_supply = total_supply
             .checked_sub(amount)
             .ok_or(TIP20Error::insufficient_balance())?;
-        self._set_total_supply(new_supply)?;
+        self.set_total_supply(new_supply)?;
 
-        self._emit_burn_blocked(from, amount)
+        self.emit_burn_blocked(from, amount)
     }
 
     // Standard token functions
-    fn approve(
-        &mut self,
-        msg_sender: Address,
-        spender: Address,
-        amount: U256,
-    ) -> crate::error::Result<bool> {
-        self._set_allowances(msg_sender, spender, amount)?;
-        self._emit_approval(msg_sender, spender, amount)?;
+    fn approve(&mut self, msg_sender: Address, spender: Address, amount: U256) -> Result<bool> {
+        self.set_allowances(msg_sender, spender, amount)?;
+        self.emit_approval(msg_sender, spender, amount)?;
         Ok(true)
     }
 
-    fn transfer(
-        &mut self,
-        msg_sender: Address,
-        to: Address,
-        amount: U256,
-    ) -> crate::error::Result<bool> {
+    fn transfer(&mut self, msg_sender: Address, to: Address, amount: U256) -> Result<bool> {
         trace!(%msg_sender, ?to, ?amount, "transferring TIP20");
         self.check_not_paused()?;
         self.check_not_token_address(to)?;
@@ -289,7 +294,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token_ITIP20 for TIP20Token<'a, S> {
         from: Address,
         to: Address,
         amount: U256,
-    ) -> crate::error::Result<bool> {
+    ) -> Result<bool> {
         self._transfer_from(msg_sender, from, to, amount)
     }
 
@@ -300,13 +305,13 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token_ITIP20 for TIP20Token<'a, S> {
         to: Address,
         amount: U256,
         memo: B256,
-    ) -> crate::error::Result<()> {
+    ) -> Result<()> {
         self.check_not_paused()?;
         self.check_not_token_address(to)?;
         self.ensure_transfer_authorized(msg_sender, to)?;
 
         self._transfer(msg_sender, to, amount)?;
-        self._emit_transfer_with_memo(msg_sender, to, amount, memo)
+        self.emit_transfer_with_memo(msg_sender, to, amount, memo)
     }
 
     /// Transfer from `from` to `to` address with memo attached
@@ -317,59 +322,14 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token_ITIP20 for TIP20Token<'a, S> {
         to: Address,
         amount: U256,
         memo: B256,
-    ) -> crate::error::Result<bool> {
+    ) -> Result<bool> {
         self._transfer_from(msg_sender, from, to, amount)?;
-        self._emit_transfer_with_memo(msg_sender, to, amount, memo)?;
+        self.emit_transfer_with_memo(msg_sender, to, amount, memo)?;
         Ok(true)
     }
 }
 
 impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
-    /// Internal helper to mint new tokens and update balances
-    fn _mint(&mut self, msg_sender: Address, to: Address, amount: U256) -> Result<()> {
-        self.check_role(msg_sender, *ISSUER_ROLE)?;
-        let total_supply = self.total_supply()?;
-
-        let new_supply = total_supply
-            .checked_add(amount)
-            .ok_or(TempoPrecompileError::under_overflow())?;
-
-        let supply_cap = self.supply_cap()?;
-        if new_supply > supply_cap {
-            return Err(TIP20Error::supply_cap_exceeded().into());
-        }
-
-        let timestamp = self.storage.timestamp();
-        self.accrue(timestamp)?;
-
-        self.handle_rewards_on_mint(to, amount)?;
-
-        self._set_total_supply(new_supply)?;
-        let to_balance = self._get_balances(to)?;
-        let new_to_balance: alloy::primitives::Uint<256, 4> = to_balance
-            .checked_add(amount)
-            .ok_or(TempoPrecompileError::under_overflow())?;
-        self._set_balances(to, new_to_balance)?;
-
-        self._emit_transfer(Address::ZERO, to, amount)?;
-        self._emit_mint(to, amount)
-    }
-
-    /// Internal helper to burn tokens and update balances
-    fn _burn(&mut self, msg_sender: Address, amount: U256) -> Result<()> {
-        self.check_role(msg_sender, *ISSUER_ROLE)?;
-
-        self._transfer(msg_sender, Address::ZERO, amount)?;
-
-        let total_supply = self.total_supply()?;
-        let new_supply = total_supply
-            .checked_sub(amount)
-            .ok_or(TIP20Error::insufficient_balance())?;
-        self._set_total_supply(new_supply)?;
-
-        self._emit_burn(msg_sender, amount)
-    }
-
     /// Transfer from `from` to `to` address without approval requirement
     /// This function is not exposed via the public interface and should only be invoked by precompiles
     pub fn system_transfer_from(
@@ -398,7 +358,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
         self.check_not_token_address(to)?;
         self.ensure_transfer_authorized(from, to)?;
 
-        let allowed = self._get_allowances(from, msg_sender)?;
+        let allowed = self.get_allowances(from, msg_sender)?;
         if amount > allowed {
             return Err(TIP20Error::insufficient_allowance().into());
         }
@@ -407,7 +367,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
             let new_allowance = allowed
                 .checked_sub(amount)
                 .ok_or(TIP20Error::insufficient_allowance())?;
-            self._set_allowances(from, msg_sender, new_allowance)?;
+            self.set_allowances(from, msg_sender, new_allowance)?;
         }
 
         self._transfer(from, to, amount)?;
@@ -446,12 +406,12 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
             Bytecode::new_legacy(Bytes::from_static(&[0xef])),
         )?;
 
-        self._set_name(name.to_string())?;
-        self._set_symbol(symbol.to_string())?;
-        self._set_currency(currency.to_string())?;
-        self._set_quote_token(quote_token)?;
+        self.set_name(name.to_string())?;
+        self.set_symbol(symbol.to_string())?;
+        self.set_currency(currency.to_string())?;
+        self.set_quote_token(quote_token)?;
         // Initialize nextQuoteToken to the same value as quoteToken
-        self._set_next_quote_token(quote_token)?;
+        self.set_next_quote_token(quote_token)?;
 
         // Validate currency via TIP4217 registry
         if self.decimals()? == 0 {
@@ -459,8 +419,8 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
         }
 
         // Set default values
-        self._set_supply_cap(U256::MAX)?;
-        self._set_transfer_policy_id(1)?;
+        self.set_max_supply_cap(U256::MAX)?;
+        self.set_transfer_policy_id(1)?;
 
         // Initialize roles system and grant admin role
         self.roles_initialize()?;
@@ -517,34 +477,34 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
         self.accrue(timestamp)?;
         self.handle_rewards_on_transfer(from, to, amount)?;
 
-        let from_balance = self._get_balances(from)?;
+        let from_balance = self.get_balances(from)?;
         if amount > from_balance {
             return Err(TIP20Error::insufficient_balance().into());
         }
 
         // Adjust balances
-        let from_balance = self._get_balances(from)?;
+        let from_balance = self.get_balances(from)?;
         let new_from_balance = from_balance
             .checked_sub(amount)
             .ok_or(TempoPrecompileError::under_overflow())?;
 
-        self._set_balances(from, new_from_balance)?;
+        self.set_balances(from, new_from_balance)?;
 
         if to != Address::ZERO {
-            let to_balance = self._get_balances(to)?;
+            let to_balance = self.get_balances(to)?;
             let new_to_balance = to_balance
                 .checked_add(amount)
                 .ok_or(TempoPrecompileError::under_overflow())?;
 
-            self._set_balances(to, new_to_balance)?;
+            self.set_balances(to, new_to_balance)?;
         }
 
-        self._emit_transfer(from, to, amount)
+        self.emit_transfer(from, to, amount)
     }
 
     /// Transfers fee tokens from user to fee manager before transaction execution
     pub fn transfer_fee_pre_tx(&mut self, from: Address, amount: U256) -> Result<()> {
-        let from_balance = self._get_balances(from)?;
+        let from_balance = self.get_balances(from)?;
         if amount > from_balance {
             return Err(TIP20Error::insufficient_balance().into());
         }
@@ -553,13 +513,13 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
             .checked_sub(amount)
             .ok_or(TIP20Error::insufficient_balance())?;
 
-        self._set_balances(from, new_from_balance)?;
+        self.set_balances(from, new_from_balance)?;
 
-        let to_balance = self._get_balances(TIP_FEE_MANAGER_ADDRESS)?;
+        let to_balance = self.get_balances(TIP_FEE_MANAGER_ADDRESS)?;
         let new_to_balance = to_balance
             .checked_add(amount)
             .ok_or(TIP20Error::supply_cap_exceeded())?;
-        self._set_balances(TIP_FEE_MANAGER_ADDRESS, new_to_balance)?;
+        self.set_balances(TIP_FEE_MANAGER_ADDRESS, new_to_balance)?;
 
         Ok(())
     }
@@ -571,7 +531,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
         refund: U256,
         actual_used: U256,
     ) -> Result<()> {
-        let from_balance = self._get_balances(TIP_FEE_MANAGER_ADDRESS)?;
+        let from_balance = self.get_balances(TIP_FEE_MANAGER_ADDRESS)?;
         if refund > from_balance {
             return Err(TIP20Error::insufficient_balance().into());
         }
@@ -580,15 +540,15 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
             .checked_sub(refund)
             .ok_or(TIP20Error::insufficient_balance())?;
 
-        self._set_balances(TIP_FEE_MANAGER_ADDRESS, new_from_balance)?;
+        self.set_balances(TIP_FEE_MANAGER_ADDRESS, new_from_balance)?;
 
-        let to_balance = self._get_balances(to)?;
+        let to_balance = self.get_balances(to)?;
         let new_to_balance = to_balance
             .checked_add(refund)
             .ok_or(TIP20Error::supply_cap_exceeded())?;
-        self._set_balances(to, new_to_balance)?;
+        self.set_balances(to, new_to_balance)?;
 
-        self._emit_transfer(to, TIP_FEE_MANAGER_ADDRESS, actual_used)
+        self.emit_transfer(to, TIP_FEE_MANAGER_ADDRESS, actual_used)
     }
 }
 
@@ -689,7 +649,7 @@ mod tests {
 
             token.mint(admin, addr, amount).unwrap();
 
-            assert_eq!(token._get_balances(addr)?, amount);
+            assert_eq!(token.get_balances(addr)?, amount);
             assert_eq!(token.total_supply()?, amount);
         }
         assert_eq!(storage.events[&token_id_to_address(token_id)].len(), 2);
@@ -728,8 +688,8 @@ mod tests {
             token.mint(admin, from, amount).unwrap();
             token.transfer(from, to, amount).unwrap();
 
-            assert_eq!(token._get_balances(from)?, U256::ZERO);
-            assert_eq!(token._get_balances(to)?, amount);
+            assert_eq!(token.get_balances(from)?, U256::ZERO);
+            assert_eq!(token.get_balances(to)?, amount);
             assert_eq!(token.total_supply()?, amount); // Supply unchanged
         }
         assert_eq!(storage.events[&token_id_to_address(token_id)].len(), 3);
@@ -952,8 +912,8 @@ mod tests {
             .transfer_fee_pre_tx(user, fee_amount)
             .expect("transfer failed");
 
-        assert_eq!(token._get_balances(user)?, U256::from(50));
-        assert_eq!(token._get_balances(TIP_FEE_MANAGER_ADDRESS)?, fee_amount);
+        assert_eq!(token.get_balances(user)?, U256::from(50));
+        assert_eq!(token.get_balances(TIP_FEE_MANAGER_ADDRESS)?, fee_amount);
 
         Ok(())
     }
@@ -991,7 +951,7 @@ mod tests {
             .unwrap();
 
         let initial_fee = U256::from(100);
-        token._set_balances(TIP_FEE_MANAGER_ADDRESS, initial_fee)?;
+        token.set_balances(TIP_FEE_MANAGER_ADDRESS, initial_fee)?;
 
         let refund_amount = U256::from(30);
         let gas_used = U256::from(10);
@@ -999,11 +959,8 @@ mod tests {
             .transfer_fee_post_tx(user, refund_amount, gas_used)
             .expect("transfer failed");
 
-        assert_eq!(token._get_balances(user)?, refund_amount);
-        assert_eq!(
-            token._get_balances(TIP_FEE_MANAGER_ADDRESS)?,
-            U256::from(70)
-        );
+        assert_eq!(token.get_balances(user)?, refund_amount);
+        assert_eq!(token.get_balances(TIP_FEE_MANAGER_ADDRESS)?, U256::from(70));
 
         let events = &storage.events[&token_id_to_address(token_id)];
         assert_eq!(

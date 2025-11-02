@@ -1,6 +1,6 @@
 //! Event emission helper generation for contract macro.
 //!
-//! This module generates private `_emit_*` methods for each event defined in the
+//! This module generates private `emit_*` methods for each event defined in the
 //! contract's interfaces.
 
 use crate::{
@@ -21,7 +21,7 @@ fn extract_event_variant_name(event_type_path: &TokenStream) -> Ident {
 
 /// Generates event emission helper methods for a contract.
 ///
-/// Creates private `_emit_<event_name>()` methods that take event parameters
+/// Creates private `emit_<event_name>()` methods that take event parameters
 /// and call `self.storage.emit_event()` with the properly constructed event.
 pub(crate) fn gen_event_helpers(
     contract_ident: &Ident,
@@ -52,7 +52,7 @@ pub(crate) fn gen_event_helpers(
 
 /// Generates a single event emission helper method.
 fn gen_emission_helper(event_enum_path: &TokenStream, event: &InterfaceEvent) -> TokenStream {
-    let method_name = format!("_emit_{}", event.name);
+    let method_name = format!("emit_{}", event.name);
     let method_ident: Ident = syn::parse_str(&method_name).expect("Valid identifier");
 
     // Extract the event variant name from the event_type_path

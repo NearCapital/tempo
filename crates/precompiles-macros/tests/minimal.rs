@@ -4,10 +4,7 @@ mod storage {
     pub(super) use tempo_precompiles::storage::*;
 }
 
-use alloy::{
-    primitives::U256,
-    sol,
-};
+use alloy::{primitives::U256, sol};
 use storage::{ContractStorage, hashmap::HashMapStorageProvider};
 use tempo_precompiles_macros::contract;
 
@@ -17,9 +14,7 @@ sol! {
     }
 }
 
-pub use tempo_precompiles::{
-    METADATA_GAS, Precompile, VIEW_FUNC_GAS, error, metadata, view,
-};
+pub use tempo_precompiles::{METADATA_GAS, Precompile, VIEW_FUNC_GAS, error, metadata, view};
 
 #[contract(ISimple)]
 pub struct SimpleContract {
@@ -36,6 +31,6 @@ fn test_minimal() {
     let addr = alloy::primitives::Address::ZERO;
     let mut contract = SimpleContract::_new(addr, &mut storage);
 
-    contract._set_value(U256::from(42)).unwrap();
-    assert_eq!(contract._get_value().unwrap(), U256::from(42));
+    contract.set_value(U256::from(42)).unwrap();
+    assert_eq!(contract.get_value().unwrap(), U256::from(42));
 }

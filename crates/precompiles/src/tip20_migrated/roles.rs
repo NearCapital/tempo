@@ -12,20 +12,20 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token_IRolesAuth for TIP20Token<'a, 
         let admin_role = self.get_role_admin_internal(role)?;
         self.check_role_internal(msg_sender, admin_role)?;
         self.grant_role_internal(account, role)?;
-        self._emit_role_membership_updated(role, account, msg_sender, true)
+        self.emit_role_membership_updated(role, account, msg_sender, true)
     }
 
     fn revoke_role(&mut self, msg_sender: Address, role: B256, account: Address) -> Result<()> {
         let admin_role = self.get_role_admin_internal(role)?;
         self.check_role_internal(msg_sender, admin_role)?;
         self.revoke_role_internal(account, role)?;
-        self._emit_role_membership_updated(role, account, msg_sender, false)
+        self.emit_role_membership_updated(role, account, msg_sender, false)
     }
 
     fn renounce_role(&mut self, msg_sender: Address, role: B256) -> Result<()> {
         self.check_role_internal(msg_sender, role)?;
         self.revoke_role_internal(msg_sender, role)?;
-        self._emit_role_membership_updated(role, msg_sender, msg_sender, false)
+        self.emit_role_membership_updated(role, msg_sender, msg_sender, false)
     }
 
     fn set_role_admin(&mut self, msg_sender: Address, role: B256, admin_role: B256) -> Result<()> {
@@ -33,7 +33,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token_IRolesAuth for TIP20Token<'a, 
         self.check_role_internal(msg_sender, current_admin_role)?;
 
         self.set_role_admin_internal(role, admin_role)?;
-        self._emit_role_admin_updated(role, admin_role, msg_sender)
+        self.emit_role_admin_updated(role, admin_role, msg_sender)
     }
 }
 
@@ -54,24 +54,24 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
     }
 
     pub fn grant_role_internal(&mut self, account: Address, role: B256) -> Result<()> {
-        self._set_roles(account, role, true)
+        self.set_roles(account, role, true)
     }
 
     fn revoke_role_internal(&mut self, account: Address, role: B256) -> Result<()> {
-        self._set_roles(account, role, false)
+        self.set_roles(account, role, false)
     }
 
     fn get_role_admin_internal(&mut self, role: B256) -> Result<B256> {
-        let admin = self._get_role_admins(role)?;
+        let admin = self.get_role_admins(role)?;
         Ok(B256::from(admin)) // If sloads 0, will be equal to DEFAULT_ADMIN_ROLE
     }
 
     fn set_role_admin_internal(&mut self, role: B256, admin_role: B256) -> Result<()> {
-        self._set_role_admins(role, admin_role)
+        self.set_role_admins(role, admin_role)
     }
 
     fn check_role_internal(&mut self, account: Address, role: B256) -> Result<()> {
-        if !self._get_roles(account, role)? {
+        if !self.get_roles(account, role)? {
             return Err(RolesAuthError::unauthorized().into());
         }
         Ok(())
@@ -104,14 +104,14 @@ mod tests {
             token.initialize("Test", "TST", "USD", LINKING_USD_ADDRESS, admin)?;
 
             // Test admin has DEFAULT_ADMIN_ROLE
-            let has_admin = token._get_roles(admin, DEFAULT_ADMIN_ROLE)?;
+            let has_admin = token.get_roles(admin, DEFAULT_ADMIN_ROLE)?;
             assert!(has_admin);
 
             // Grant custom role to user
             token.grant_role(admin, custom_role, user)?;
 
             // Check custom role was granted
-            let has_custom = token._get_roles(user, custom_role)?;
+            let has_custom = token.get_roles(user, custom_role)?;
             assert!(has_custom);
         }
 
@@ -162,13 +162,13 @@ mod tests {
             token.grant_role_internal(user, custom_role)?;
 
             // Verify role was granted
-            assert!(token._get_roles(user, custom_role)?);
+            assert!(token.get_roles(user, custom_role)?);
 
             // Renounce role
             token.renounce_role(user, custom_role)?;
 
             // Check role is removed
-            assert!(!token._get_roles(user, custom_role)?);
+            assert!(!token.get_roles(user, custom_role)?);
         }
 
         Ok(())
