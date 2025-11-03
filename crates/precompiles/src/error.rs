@@ -7,6 +7,7 @@ use revm::precompile::{PrecompileError, PrecompileOutput, PrecompileResult};
 use tempo_contracts::precompiles::{
     FeeManagerError, NonceError, RolesAuthError, StablecoinExchangeError, TIP20RewardsError,
     TIP20RewardsRegistryError, TIP403RegistryError, TIPAccountRegistrarError, TIPFeeAMMError,
+    ValidatorConfigError,
 };
 
 // TODO: add error type for overflow/underflow
@@ -55,6 +56,10 @@ pub enum TempoPrecompileError {
 
     #[error("Panic({0:?})")]
     Panic(PanicKind),
+
+    /// Error from validator config
+    #[error("Validator config error: {0:?}")]
+    ValidatorConfigError(ValidatorConfigError),
 
     #[error("Fatal precompile error: {0:?}")]
     #[from(skip)]
@@ -108,6 +113,7 @@ impl<T> IntoPrecompileResult<T> for Result<T> {
 
                         panic.abi_encode().into()
                     }
+                    TPErr::ValidatorConfigError(e) => e.abi_encode().into(),
                     TPErr::Fatal(msg) => {
                         return Err(PrecompileError::Fatal(msg));
                     }
