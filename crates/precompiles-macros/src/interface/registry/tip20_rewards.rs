@@ -20,6 +20,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(u64),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::startRewardCall),
         },
         InterfaceFunction {
@@ -27,6 +28,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("recipient", parse_quote!(Address))]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::setRewardRecipientCall),
         },
         InterfaceFunction {
@@ -34,6 +36,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("id", parse_quote!(u64))]),
             return_type: parse_quote!(U256),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::cancelRewardCall),
         },
         InterfaceFunction {
@@ -41,6 +44,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("id", parse_quote!(u64))]),
             return_type: parse_quote!(ITIP20Rewards::RewardStream),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::getStreamCall),
         },
         InterfaceFunction {
@@ -48,6 +52,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![]),
             return_type: parse_quote!(U256),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::totalRewardPerSecondCall),
         },
     ]

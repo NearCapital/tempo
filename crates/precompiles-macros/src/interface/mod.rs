@@ -44,6 +44,8 @@ pub(crate) struct InterfaceFunction {
     pub return_type: Type,
     /// Whether this is a view function
     pub is_view: bool,
+    /// Optional (custom) gas cost for this function
+    pub gas: Option<u64>,
     /// Path to the Call struct for this function
     pub call_type_path: TokenStream,
 }

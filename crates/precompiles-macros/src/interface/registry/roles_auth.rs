@@ -20,6 +20,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(bool),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::hasRoleCall),
         },
         InterfaceFunction {
@@ -27,6 +28,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("role", parse_quote!(B256))]),
             return_type: parse_quote!(B256),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::getRoleAdminCall),
         },
         // Mutating functions (void)
@@ -38,6 +40,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::grantRoleCall),
         },
         InterfaceFunction {
@@ -48,6 +51,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::revokeRoleCall),
         },
         InterfaceFunction {
@@ -55,6 +59,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("role", parse_quote!(B256))]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::renounceRoleCall),
         },
         InterfaceFunction {
@@ -65,6 +70,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::setRoleAdminCall),
         },
     ]

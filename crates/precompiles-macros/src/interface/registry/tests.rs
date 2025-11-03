@@ -18,6 +18,7 @@ pub(crate) fn get_itest_token_functions(interface_ident: &Ident) -> Vec<Interfac
             params: params(vec![]),
             return_type: parse_quote!(String),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::nameCall),
         },
         InterfaceFunction {
@@ -25,6 +26,7 @@ pub(crate) fn get_itest_token_functions(interface_ident: &Ident) -> Vec<Interfac
             params: params(vec![]),
             return_type: parse_quote!(String),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::symbolCall),
         },
         InterfaceFunction {
@@ -32,6 +34,7 @@ pub(crate) fn get_itest_token_functions(interface_ident: &Ident) -> Vec<Interfac
             params: params(vec![]),
             return_type: parse_quote!(u8),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::decimalsCall),
         },
         // View functions (with parameters)
@@ -40,6 +43,7 @@ pub(crate) fn get_itest_token_functions(interface_ident: &Ident) -> Vec<Interfac
             params: params(vec![("account", parse_quote!(Address))]),
             return_type: parse_quote!(U256),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::balanceOfCall),
         },
         InterfaceFunction {
@@ -50,6 +54,7 @@ pub(crate) fn get_itest_token_functions(interface_ident: &Ident) -> Vec<Interfac
             ]),
             return_type: parse_quote!(U256),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::allowanceCall),
         },
         // Mutating functions (non-void)
@@ -61,6 +66,7 @@ pub(crate) fn get_itest_token_functions(interface_ident: &Ident) -> Vec<Interfac
             ]),
             return_type: parse_quote!(bool),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::transferCall),
         },
         InterfaceFunction {
@@ -71,6 +77,7 @@ pub(crate) fn get_itest_token_functions(interface_ident: &Ident) -> Vec<Interfac
             ]),
             return_type: parse_quote!(bool),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::approveCall),
         },
         // Mutating functions (void)
@@ -82,6 +89,7 @@ pub(crate) fn get_itest_token_functions(interface_ident: &Ident) -> Vec<Interfac
             ]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::mintCall),
         },
         InterfaceFunction {
@@ -89,6 +97,7 @@ pub(crate) fn get_itest_token_functions(interface_ident: &Ident) -> Vec<Interfac
             params: params(vec![("amount", parse_quote!(U256))]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::burnCall),
         },
     ]
@@ -109,6 +118,7 @@ pub(crate) fn get_imetadata_functions(interface_ident: &Ident) -> Vec<InterfaceF
             params: params(vec![]),
             return_type: parse_quote!(U256),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::versionCall),
         },
         InterfaceFunction {
@@ -116,6 +126,7 @@ pub(crate) fn get_imetadata_functions(interface_ident: &Ident) -> Vec<InterfaceF
             params: params(vec![]),
             return_type: parse_quote!(Address),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::ownerCall),
         },
     ]
@@ -138,6 +149,7 @@ pub(crate) fn get_imini_token_functions(interface_ident: &Ident) -> Vec<Interfac
         ]),
         return_type: parse_quote!(()),
         is_view: false,
+        gas: None,
         call_type_path: quote!(#interface_ident::mintCall),
     }]
 }
@@ -178,6 +190,7 @@ pub(crate) fn get_ierror_test_functions(interface_ident: &Ident) -> Vec<Interfac
         params: params(vec![]),
         return_type: parse_quote!(()),
         is_view: false,
+        gas: None,
         call_type_path: quote!(#interface_ident::dummyCall),
     }]
 }
@@ -311,6 +324,7 @@ mod tests {
                     .collect(),
                 return_type,
                 is_view,
+                gas: None,
                 call_type_path: quote::quote!(ITIP20::testCall),
             }
         };

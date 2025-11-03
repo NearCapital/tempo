@@ -15,6 +15,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
         params: params(vec![("currency", parse_quote!(String))]),
         return_type: parse_quote!(u8),
         is_view: true,
+        gas: None,
         call_type_path: quote!(#interface_ident::getCurrencyDecimalsCall),
     }]
 }

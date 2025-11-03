@@ -22,6 +22,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(U256),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::createTokenCall),
         },
         InterfaceFunction {
@@ -29,6 +30,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![]),
             return_type: parse_quote!(U256),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::tokenIdCounterCall),
         },
     ]

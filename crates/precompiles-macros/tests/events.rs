@@ -7,6 +7,9 @@ mod storage {
     pub(super) use tempo_precompiles::storage::*;
 }
 
+// Re-export `IntoPrecompileResult` so `crate::IntoPrecompileResult` works in generated code
+pub(crate) use tempo_precompiles::IntoPrecompileResult;
+
 use alloy::{
     primitives::{Address, U256},
     sol,

@@ -17,6 +17,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![]),
             return_type: parse_quote!(u64),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::policyIdCounterCall),
         },
         InterfaceFunction {
@@ -24,6 +25,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("policy_id", parse_quote!(u64))]),
             return_type: parse_quote!((#interface_ident::PolicyType, Address)),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::policyDataCall),
         },
         InterfaceFunction {
@@ -34,6 +36,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(bool),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::isAuthorizedCall),
         },
         // State-changing functions (non-void returns)
@@ -45,6 +48,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(u64),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::createPolicyCall),
         },
         InterfaceFunction {
@@ -56,6 +60,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(u64),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::createPolicyWithAccountsCall),
         },
         // State-changing functions (void)
@@ -67,6 +72,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::setPolicyAdminCall),
         },
         InterfaceFunction {
@@ -78,6 +84,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::modifyPolicyWhitelistCall),
         },
         InterfaceFunction {
@@ -89,6 +96,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::modifyPolicyBlacklistCall),
         },
     ]

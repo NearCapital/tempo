@@ -19,6 +19,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(u64),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::getNonceCall),
         },
         InterfaceFunction {
@@ -26,6 +27,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("account", parse_quote!(Address))]),
             return_type: parse_quote!(U256),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::getActiveNonceKeyCountCall),
         },
     ]

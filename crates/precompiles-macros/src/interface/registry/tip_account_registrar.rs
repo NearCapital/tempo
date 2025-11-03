@@ -19,6 +19,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(Address),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::delegateToDefaultCall),
         },
         InterfaceFunction {
@@ -26,6 +27,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![]),
             return_type: parse_quote!(String),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::getDelegationMessageCall),
         },
     ]

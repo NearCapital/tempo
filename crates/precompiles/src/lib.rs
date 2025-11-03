@@ -5,7 +5,7 @@
 
 pub mod error;
 pub mod utils;
-pub use error::Result;
+pub use error::{IntoPrecompileResult, Result};
 pub mod linking_usd;
 pub mod nonce;
 pub mod provider;
@@ -21,7 +21,6 @@ pub mod tip_account_registrar;
 pub mod tip_fee_manager;
 
 use crate::{
-    error::IntoPrecompileResult,
     linking_usd::LinkingUSD,
     nonce::NonceManager,
     stablecoin_exchange::StablecoinExchange,

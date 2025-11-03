@@ -68,6 +68,30 @@ pub(crate) fn gen_dispatcher(
     }
 }
 
+/// Generates calldata decode logic with gas-charged error handling.
+fn gen_decode_or_revert(call_type: &TokenStream, gas_value: &TokenStream) -> TokenStream {
+    quote! {
+        let call = match <#call_type as ::alloy::sol_types::SolCall>::abi_decode(calldata) {
+            Ok(call) => call,
+            Err(_) => {
+                return Ok(::revm::precompile::PrecompileOutput::new_reverted(
+                    #gas_value,
+                    ::alloy::primitives::Bytes::new()
+                ));
+            }
+        };
+    }
+}
+
+/// Generates the encoder function for return values.
+fn gen_encoder(call_type: &TokenStream, is_void: bool) -> TokenStream {
+    if is_void {
+        quote! { |()| ::alloy::primitives::Bytes::new() }
+    } else {
+        quote! { |ret| <#call_type as ::alloy::sol_types::SolCall>::abi_encode_returns(&ret).into() }
+    }
+}
+
 /// Generates an individual match arm for a function.
 fn gen_match_arm(
     struct_name: &Ident,
@@ -100,15 +124,29 @@ fn gen_match_arm(
         quote! { call.#field_name }
     });
 
+    let gas_value = match &func.gas {
+        Some(gas) => quote! { #gas },
+        None => match func.kind() {
+            FunctionKind::Metadata => quote! { crate::METADATA_GAS },
+            FunctionKind::View => quote! { crate::VIEW_FUNC_GAS },
+            FunctionKind::Mutate | FunctionKind::MutateVoid => quote! { crate::MUTATE_FUNC_GAS },
+        },
+    };
+
     match func.kind() {
         FunctionKind::Metadata => {
+            let encoder = gen_encoder(call_type, false);
             quote! {
                 #call_type::SELECTOR => {
-                    crate::metadata::<#call_type>(|| #trait_name::#method_name(self))
+                    use crate::IntoPrecompileResult as _;
+                    (|| #trait_name::#method_name(self))()
+                        .into_precompile_result(#gas_value, #encoder)
                 }
             }
         }
         FunctionKind::View => {
+            let decode_logic = gen_decode_or_revert(call_type, &gas_value);
+            let encoder = gen_encoder(call_type, false);
             let call_expr = if func.params.is_empty() {
                 quote! { #trait_name::#method_name(self) }
             } else {
@@ -116,41 +154,41 @@ fn gen_match_arm(
             };
             quote! {
                 #call_type::SELECTOR => {
-                    crate::view::<#call_type>(calldata, |call| {
-                        #call_expr
-                    })
+                    use crate::IntoPrecompileResult as _;
+                    #decode_logic
+                    #call_expr.into_precompile_result(#gas_value, #encoder)
                 }
             }
         }
         FunctionKind::Mutate => {
+            let decode_logic = gen_decode_or_revert(call_type, &gas_value);
+            let encoder = gen_encoder(call_type, false);
             let call_expr = if func.params.is_empty() {
-                quote! { #trait_name::#method_name(self, s) }
+                quote! { #trait_name::#method_name(self, msg_sender) }
             } else {
-                quote! { #trait_name::#method_name(self, s, #(#param_fields),*) }
+                quote! { #trait_name::#method_name(self, msg_sender, #(#param_fields),*) }
             };
             quote! {
                 #call_type::SELECTOR => {
-                    crate::mutate::<#call_type>(
-                        calldata,
-                        msg_sender,
-                        |s, call| #call_expr
-                    )
+                    use crate::IntoPrecompileResult as _;
+                    #decode_logic
+                    #call_expr.into_precompile_result(#gas_value, #encoder)
                 }
             }
         }
         FunctionKind::MutateVoid => {
+            let decode_logic = gen_decode_or_revert(call_type, &gas_value);
+            let encoder = gen_encoder(call_type, true);
             let call_expr = if func.params.is_empty() {
-                quote! { #trait_name::#method_name(self, s) }
+                quote! { #trait_name::#method_name(self, msg_sender) }
             } else {
-                quote! { #trait_name::#method_name(self, s, #(#param_fields),*) }
+                quote! { #trait_name::#method_name(self, msg_sender, #(#param_fields),*) }
             };
             quote! {
                 #call_type::SELECTOR => {
-                    crate::mutate_void::<#call_type>(
-                        calldata,
-                        msg_sender,
-                        |s, call| #call_expr
-                    )
+                    use crate::IntoPrecompileResult as _;
+                    #decode_logic
+                    #call_expr.into_precompile_result(#gas_value, #encoder)
                 }
             }
         }

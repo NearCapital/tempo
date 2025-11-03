@@ -17,6 +17,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: vec![],
             return_type: parse_quote!(U256),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::BASIS_POINTSCall),
         },
         InterfaceFunction {
@@ -24,6 +25,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: vec![],
             return_type: parse_quote!(U256),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::FEE_BPSCall),
         },
         // User preference view functions
@@ -32,6 +34,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("user", parse_quote!(Address))]),
             return_type: parse_quote!(Address),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::userTokensCall),
         },
         InterfaceFunction {
@@ -39,6 +42,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("validator", parse_quote!(Address))]),
             return_type: parse_quote!(Address),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::validatorTokensCall),
         },
         // Fee view function
@@ -50,6 +54,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!((Address, U256)),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::getFeeTokenBalanceCall),
         },
         // Mutating functions (void)
@@ -58,6 +63,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("token", parse_quote!(Address))]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::setUserTokenCall),
         },
         InterfaceFunction {
@@ -65,6 +71,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("token", parse_quote!(Address))]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::setValidatorTokenCall),
         },
         InterfaceFunction {
@@ -72,6 +79,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: vec![],
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::executeBlockCall),
         },
     ]

@@ -15,6 +15,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
         params: params(vec![]),
         return_type: parse_quote!(()),
         is_view: false,
+        gas: None,
         call_type_path: quote!(#interface_ident::finalizeStreamsCall),
     }]
 }

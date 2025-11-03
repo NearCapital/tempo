@@ -17,6 +17,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("base", parse_quote!(Address))]),
             return_type: parse_quote!(B256),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::createPairCall),
         },
         InterfaceFunction {
@@ -29,6 +30,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(u128),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::placeCall),
         },
         InterfaceFunction {
@@ -42,6 +44,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(u128),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::placeFlipCall),
         },
         // Swap functions (non-void returns)
@@ -55,6 +58,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(u128),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::swapExactAmountInCall),
         },
         InterfaceFunction {
@@ -67,6 +71,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(u128),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::swapExactAmountOutCall),
         },
         // View swap quote functions
@@ -79,6 +84,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(u128),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::quoteSwapExactAmountInCall),
         },
         InterfaceFunction {
@@ -90,6 +96,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(u128),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::quoteSwapExactAmountOutCall),
         },
         // Balance management view functions
@@ -101,6 +108,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(u128),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::balanceOfCall),
         },
         // View functions returning structs
@@ -109,6 +117,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("order_id", parse_quote!(u128))]),
             return_type: parse_quote!(#interface_ident::Order),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::getOrderCall),
         },
         InterfaceFunction {
@@ -120,6 +129,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(#interface_ident::PriceLevel),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::getPriceLevelCall),
         },
         InterfaceFunction {
@@ -127,6 +137,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("pair_key", parse_quote!(B256))]),
             return_type: parse_quote!(#interface_ident::Orderbook),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::booksCall),
         },
         // Simple view functions
@@ -138,6 +149,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(B256),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::pairKeyCall),
         },
         InterfaceFunction {
@@ -145,6 +157,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![]),
             return_type: parse_quote!(u128),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::activeOrderIdCall),
         },
         InterfaceFunction {
@@ -152,6 +165,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![]),
             return_type: parse_quote!(u128),
             is_view: true,
+            gas: None,
             call_type_path: quote!(#interface_ident::pendingOrderIdCall),
         },
         // Mutating functions (void)
@@ -160,6 +174,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![("order_id", parse_quote!(u128))]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::cancelCall),
         },
         InterfaceFunction {
@@ -167,6 +182,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             params: params(vec![]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::executeBlockCall),
         },
         InterfaceFunction {
@@ -177,6 +193,7 @@ pub(crate) fn get_functions(interface_ident: &Ident) -> Vec<InterfaceFunction> {
             ]),
             return_type: parse_quote!(()),
             is_view: false,
+            gas: None,
             call_type_path: quote!(#interface_ident::withdrawCall),
         },
     ]
