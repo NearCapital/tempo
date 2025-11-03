@@ -21,7 +21,7 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 use tempo_chainspec::spec::TEMPO_BASE_FEE;
 use tempo_contracts::{
     ARACHNID_CREATE2_FACTORY_ADDRESS, CREATEX_ADDRESS, DEFAULT_7702_DELEGATE_ADDRESS,
-    MULTICALL_ADDRESS, PERMIT2_ADDRESS, SAFE_DEPLOYER_ADDRESS,
+    MULTICALL3_ADDRESS, PERMIT2_ADDRESS, SAFE_DEPLOYER_ADDRESS,
     contracts::ARACHNID_CREATE2_FACTORY_BYTECODE,
 };
 use tempo_evm::evm::{TempoEvm, TempoEvmFactory};
@@ -216,7 +216,7 @@ impl GenesisArgs {
             .collect();
 
         genesis_alloc.insert(
-            MULTICALL_ADDRESS,
+            MULTICALL3_ADDRESS,
             GenesisAccount {
                 code: Some(tempo_contracts::Multicall::DEPLOYED_BYTECODE.clone()),
                 nonce: Some(1),

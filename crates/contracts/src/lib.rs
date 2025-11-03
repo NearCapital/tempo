@@ -5,7 +5,7 @@
 
 use alloy::primitives::{Address, address};
 
-pub const MULTICALL_ADDRESS: Address = alloy::providers::MULTICALL3_ADDRESS;
+pub const MULTICALL3_ADDRESS: Address = alloy::providers::MULTICALL3_ADDRESS;
 pub const CREATEX_ADDRESS: Address = address!("0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed");
 pub const SAFE_DEPLOYER_ADDRESS: Address = address!("0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7");
 pub const PERMIT2_ADDRESS: Address = address!("0x000000000022d473030f116ddee9f6b43ac78ba3");
