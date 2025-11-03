@@ -418,7 +418,7 @@ where
                 };
 
                 // 4. Add `authority` to `accessed_addresses` (warm the account)
-                let mut authority_acc = journal.load_account_code(authority)?;
+                let mut authority_acc = journal.load_account_with_code(authority)?;
 
                 // 5. Verify the code of `authority` is either empty or already delegated.
                 if let Some(bytecode) = &authority_acc.info.code {
@@ -479,7 +479,7 @@ where
         let account_balance = get_token_balance(journal, self.fee_token, self.fee_payer)?;
 
         // Load caller's account
-        let caller_account = journal.load_account_code(tx.caller())?.data;
+        let caller_account = journal.load_account_with_code_mut(tx.caller())?.data;
 
         let account_info = &mut caller_account.info;
         if account_info.has_no_code_and_nonce() {
@@ -1097,7 +1097,7 @@ mod tests {
 
         // Set up initial balance
         let balance_slot = mapping_slot(account, tip20::slots::BALANCES);
-        journal.warm_account(token)?;
+        journal.load_account(token)?;
         journal
             .sstore(token, balance_slot, expected_balance)
             .unwrap();
@@ -1117,7 +1117,7 @@ mod tests {
         let initial_balance = U256::random();
 
         let sender_slot = mapping_slot(sender, tip20::slots::BALANCES);
-        journal.warm_account(token)?;
+        journal.load_account(token)?;
         journal.sstore(token, sender_slot, initial_balance).unwrap();
         let sender_balance = get_token_balance(&mut journal, token, sender).unwrap();
         assert_eq!(sender_balance, initial_balance);
@@ -1149,7 +1149,7 @@ mod tests {
 
         // Set validator token
         let validator_slot = mapping_slot(validator, tip_fee_manager::slots::VALIDATOR_TOKENS);
-        ctx.journaled_state.warm_account(TIP_FEE_MANAGER_ADDRESS)?;
+        ctx.journaled_state.load_account(TIP_FEE_MANAGER_ADDRESS)?;
         ctx.journaled_state
             .sstore(
                 TIP_FEE_MANAGER_ADDRESS,
