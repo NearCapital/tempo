@@ -1,5 +1,5 @@
 use crate::rpc::pagination::FilterRange;
-use alloy_primitives::Address;
+use alloy_primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -61,8 +61,7 @@ pub struct Token {
     /// Token symbol
     pub symbol: String,
     /// Unique token ID from factory
-    #[serde(with = "alloy_serde::quantity")]
-    pub token_id: u64,
+    pub token_id: U256,
     /// Current total supply
     #[serde(with = "alloy_serde::quantity")]
     pub total_supply: u128,

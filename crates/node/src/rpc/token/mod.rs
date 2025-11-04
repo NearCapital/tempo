@@ -14,6 +14,8 @@ pub mod role_history;
 pub mod tokens;
 pub mod tokens_by_address;
 
+mod logs;
+
 #[rpc(server, namespace = "token")]
 pub trait TempoTokenApi {
     /// Gets paginated role change history for TIP-20 tokens on Tempo.
