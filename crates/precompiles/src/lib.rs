@@ -19,7 +19,6 @@ pub mod tip_fee_manager;
 pub mod validator_config;
 
 use crate::{
-    error::IntoPrecompileResult,
     linking_usd::LinkingUSD,
     nonce::NonceManager,
     stablecoin_exchange::StablecoinExchange,
@@ -33,6 +32,7 @@ use crate::{
     tip4217_registry::TIP4217Registry,
     validator_config::ValidatorConfig,
 };
+pub use error::IntoPrecompileResult;
 
 #[cfg(test)]
 use alloy::sol_types::SolInterface;
