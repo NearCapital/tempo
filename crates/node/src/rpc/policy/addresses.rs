@@ -36,3 +36,21 @@ pub struct PolicyAddress {
     /// Whether address is authorized (depends on policy type)
     pub authorized: bool,
 }
+
+impl PolicyAddress {
+    /// Indicates that `address` is an authorized account according to the transfer policy.
+    pub const fn allowed(address: Address) -> Self {
+        Self {
+            address,
+            authorized: true,
+        }
+    }
+
+    /// Indicates that `address` is an unauthorized account according to the transfer policy.
+    pub const fn blocked(address: Address) -> Self {
+        Self {
+            address,
+            authorized: false,
+        }
+    }
+}

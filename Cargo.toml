@@ -11,7 +11,7 @@ members = [
     "bin/tempo-bench",
     "bin/tempo-sidecar",
     "crates/alloy",
-  "crates/chainspec",
+    "crates/chainspec",
     "crates/commonware-node",
     "crates/commonware-node-config",
     "crates/consensus",
