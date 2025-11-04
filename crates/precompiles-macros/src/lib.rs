@@ -7,15 +7,10 @@
 //! - `storable_alloy_bytes!` macro for generating alloy FixedBytes storage implementations
 //! - `storable_rust_ints!` macro for generating standard Rust integer storage implementations
 
-mod dispatcher;
-mod errors;
-mod events;
-mod interface;
 mod layout;
 mod storable;
 mod storable_primitives;
 mod storable_tests;
-mod traits;
 mod utils;
 
 use alloy::primitives::U256;
@@ -108,66 +103,10 @@ fn gen_contract_output(
     let fields = parse_fields(input)?;
 
     let storage_output = gen_contract_storage(&ident, &vis, &fields)?;
-    let impl_output = if !attrs.interface_idents.is_empty() {
-        gen_contract_impl(&ident, &attrs.interface_idents, &fields)?
-    } else {
-        quote! {}
-    };
 
     // Combine outputs
     Ok(quote! {
         #storage_output
-        #impl_output
-    })
-}
-
-/// Generates the contract call trait and its dispatcher based on the contract struct and interfaces.
-fn gen_contract_impl(
-    ident: &Ident,
-    interfaces: &[Ident],
-    fields: &[FieldInfo],
-) -> syn::Result<proc_macro2::TokenStream> {
-    // Parse each interface and collect per-interface data
-    let interface_data: Vec<_> = interfaces
-        .iter()
-        .map(|interface_ident| {
-            let parsed = interface::parse_interface(interface_ident)?;
-            Ok::<_, syn::Error>((interface_ident.clone(), parsed))
-        })
-        .collect::<syn::Result<_>>()?;
-
-    // Aggregate functions, errors, and events for dispatcher and error generation
-    let (all_funcs, all_errors, events) = interface_data.iter().fold(
-        (Vec::new(), Vec::new(), Vec::new()),
-        |(mut funcs, mut errs, mut events), (interface_ident, parsed)| {
-            funcs.extend(parsed.functions.clone());
-
-            if !parsed.errors.is_empty() {
-                errs.push((interface_ident.clone(), parsed.errors.clone()));
-            }
-
-            events.push(events::gen_event_helpers(
-                ident,
-                interface_ident,
-                &parsed.events,
-            ));
-            (funcs, errs, events)
-        },
-    );
-
-    // TODO(rusowsky): Check for selector collisions across all interfaces
-
-    let trait_output = traits::gen_traits_and_impls(ident, &interface_data, fields);
-    let dispatcher_output = dispatcher::gen_dispatcher(ident, interfaces, &all_funcs, fields);
-    // NOTE: Error helpers are commented out to avoid orphan rule violations when using
-    // external interfaces. Error constructors should be defined where the interfaces are defined.
-    // let errors = errors::gen_error_helpers(&all_errors);
-
-    Ok(quote! {
-        #trait_output
-        #dispatcher_output
-        #(#events)*
-        // #errors
     })
 }
 
