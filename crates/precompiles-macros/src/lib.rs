@@ -14,6 +14,7 @@ mod interface;
 mod layout;
 mod storable;
 mod storable_primitives;
+mod storable_tests;
 mod traits;
 mod utils;
 
@@ -332,7 +333,7 @@ pub fn derive_storage_block(input: TokenStream) -> TokenStream {
     }
 }
 
-// -- INTEGER STORAGE IMPLEMENTATIONS --------------------------------------------------------------
+// -- STORAGE IMPLEMENTATIONS --------------------------------------------------------------
 
 /// Generate `StorableType` and `Storable<1>` implementations for all standard integer types.
 ///
@@ -392,4 +393,15 @@ pub fn storable_alloy_ints(_input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn storable_alloy_bytes(_input: TokenStream) -> TokenStream {
     storable_primitives::gen_storable_alloy_bytes().into()
+}
+
+/// Generate comprehensive property tests for all storage types.
+///
+/// This macro generates:
+/// - Arbitrary function generators for all Rust and Alloy integer types
+/// - Arbitrary function generators for all FixedBytes<N> sizes (1..=32)
+/// - Property test invocations using the existing test body macros
+#[proc_macro]
+pub fn gen_storable_tests(_input: TokenStream) -> TokenStream {
+    storable_tests::gen_storable_tests().into()
 }

@@ -1,6 +1,6 @@
 use alloy::primitives::{Address, Bytes, U256, keccak256};
 use revm::interpreter::instructions::utility::{IntoAddress, IntoU256};
-use tempo_precompiles_macros::{storable_alloy_bytes, storable_alloy_ints, storable_rust_ints};
+use tempo_precompiles_macros;
 
 use crate::{
     error::{Result, TempoPrecompileError},
@@ -131,9 +131,13 @@ impl StorageKey for Address {
 
 // -- STORAGE TYPE IMPLEMENTATIONS ---------------------------------------------
 
-storable_rust_ints!();
-storable_alloy_ints!();
-storable_alloy_bytes!();
+// Generate implementations for all storage types:
+// - rust integers: (u)int8, (u)int16, (u)int32, (u)int64, (u)int128
+// - alloy integers: U8, I8, U16, I16, U32, I32, U64, I64, U128, I128, U256, I256
+// - alloy fixed bytes: FixedBytes<1>, FixedBytes<2>, ..., FixedBytes<32>
+tempo_precompiles_macros::storable_rust_ints!();
+tempo_precompiles_macros::storable_alloy_ints!();
+tempo_precompiles_macros::storable_alloy_bytes!();
 
 impl StorableType for bool {
     const BYTE_COUNT: usize = 1;
@@ -279,11 +283,11 @@ where
 {
     let base_value = storage.sload(base_slot)?;
     let is_long = is_long_string(base_value);
-    let length = extract_string_length(base_value, is_long);
+    let length = calc_string_length(base_value, is_long);
 
     if is_long {
         // Long string: read data from keccak256(base_slot) + i
-        let slot_start = compute_string_data_slot(base_slot);
+        let slot_start = calc_data_slot(base_slot);
         let chunks = calc_chunks(length);
         let mut data = Vec::with_capacity(length);
 
@@ -328,7 +332,7 @@ fn store_bytes_like<S: StorageOps>(bytes: &[u8], storage: &mut S, base_slot: U25
         storage.sstore(base_slot, encode_long_string_length(length))?;
 
         // Store data in chunks at keccak256(base_slot) + i
-        let slot_start = compute_string_data_slot(base_slot);
+        let slot_start = calc_data_slot(base_slot);
         let chunks = calc_chunks(length);
 
         for i in 0..chunks {
@@ -358,8 +362,8 @@ fn delete_bytes_like<S: StorageOps>(storage: &mut S, base_slot: U256) -> Result<
 
     if is_long {
         // Long string: need to clear data slots as well
-        let length = extract_string_length(base_value, true);
-        let slot_start = compute_string_data_slot(base_slot);
+        let length = calc_string_length(base_value, true);
+        let slot_start = calc_data_slot(base_slot);
         let chunks = calc_chunks(length);
 
         // Clear all data slots
@@ -403,7 +407,7 @@ where
         ))
     } else {
         // Short string: data is inline in the word
-        let length = extract_string_length(slot_value, false);
+        let length = calc_string_length(slot_value, false);
         let bytes = slot_value.to_be_bytes::<32>();
         into(bytes[..length].to_vec())
     }
@@ -413,7 +417,7 @@ where
 ///
 /// For long strings (≥32 bytes), data is stored starting at `keccak256(base_slot)`.
 #[inline]
-fn compute_string_data_slot(base_slot: U256) -> U256 {
+fn calc_data_slot(base_slot: U256) -> U256 {
     U256::from_be_bytes(keccak256(base_slot.to_be_bytes::<32>()).0)
 }
 
@@ -436,7 +440,7 @@ fn is_long_string(slot_value: U256) -> bool {
 /// # Returns
 /// The length of the string in bytes
 #[inline]
-fn extract_string_length(slot_value: U256, is_long: bool) -> usize {
+fn calc_string_length(slot_value: U256, is_long: bool) -> usize {
     if is_long {
         // Long string: slot stores (length * 2 + 1)
         // Extract length: (value - 1) / 2
@@ -483,6 +487,8 @@ mod tests {
     use crate::storage::{PrecompileStorageProvider, hashmap::HashMapStorageProvider};
     use proptest::prelude::*;
 
+    // -- TEST HELPERS -------------------------------------------------------------
+
     // Test helper that owns storage and implements StorageOps
     struct TestContract {
         address: Address,
@@ -507,43 +513,17 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_address_round_trip() {
-        let mut contract = setup_test_contract();
-        let addr = Address::random();
-        let slot = U256::from(1);
-
-        addr.store(&mut contract, slot).unwrap();
-        let loaded = Address::load(&mut contract, slot).unwrap();
-        assert_eq!(addr, loaded);
-    }
-
-    #[test]
-    fn test_bool_conversions() {
-        let mut contract = setup_test_contract();
-        let slot = U256::from(3);
-
-        // Test true
-        true.store(&mut contract, slot).unwrap();
-        assert!(bool::load(&mut contract, slot).unwrap());
-
-        // Test false
-        false.store(&mut contract, slot).unwrap();
-        assert!(!bool::load(&mut contract, slot).unwrap());
-
-        // Test that any non-zero value is true
-        contract.sstore(slot, U256::from(42)).unwrap();
-        assert!(bool::load(&mut contract, slot).unwrap());
-    }
-
-    // -- STRING + BYTES TESTS -------------------------------------------------
-
     // Strategy for generating random U256 slot values that won't overflow
     fn arb_safe_slot() -> impl Strategy<Value = U256> {
         any::<[u64; 4]>().prop_map(|limbs| {
             // Ensure we don't overflow by limiting to a reasonable range
             U256::from_limbs(limbs) % (U256::MAX - U256::from(10000))
         })
+    }
+
+    // Strategy for generating arbitrary addresses
+    fn arb_address() -> impl Strategy<Value = Address> {
+        any::<[u8; 20]>().prop_map(Address::from)
     }
 
     // Strategy for short strings (0-31 bytes) - uses inline storage
@@ -588,8 +568,58 @@ mod tests {
         prop::collection::vec(any::<u8>(), 33..=100).prop_map(|v| Bytes::from(v))
     }
 
+    // -- STORAGE TESTS --------------------------------------------------------
+
+    // Generate property tests for all storage types:
+    // - rust integers: (u)int8, (u)int16, (u)int32, (u)int64, (u)int128
+    // - alloy integers: U8, I8, U16, I16, U32, I32, U64, I64, U128, I128, U256, I256
+    // - alloy fixed bytes: FixedBytes<1>, FixedBytes<2>, ..., FixedBytes<32>
+    tempo_precompiles_macros::gen_storable_tests!();
+
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(500))]
+
+        #[test]
+        fn test_address(addr in arb_address(), base_slot in arb_safe_slot()) {
+            let mut contract = setup_test_contract();
+
+            // Verify store → load roundtrip
+            addr.store(&mut contract, base_slot)?;
+            let loaded = Address::load(&mut contract, base_slot)?;
+            assert_eq!(addr, loaded, "Address roundtrip failed");
+
+            // Verify delete works
+            Address::delete(&mut contract, base_slot)?;
+            let after_delete = Address::load(&mut contract, base_slot)?;
+            assert_eq!(after_delete, Address::ZERO, "Address not zero after delete");
+
+            // EVM words roundtrip
+            let words = addr.to_evm_words()?;
+            let recovered = Address::from_evm_words(words)?;
+            assert_eq!(addr, recovered, "Address EVM words roundtrip failed");
+        }
+
+        #[test]
+        fn test_bool_values(b in any::<bool>(), base_slot in arb_safe_slot()) {
+            let mut contract = setup_test_contract();
+
+            // Verify store → load roundtrip
+            b.store(&mut contract, base_slot)?;
+            let loaded = bool::load(&mut contract, base_slot)?;
+            assert_eq!(b, loaded, "Bool roundtrip failed for value: {}", b);
+
+            // Verify delete works
+            bool::delete(&mut contract, base_slot)?;
+            let after_delete = bool::load(&mut contract, base_slot)?;
+            assert!(!after_delete, "Bool not false after delete");
+
+            // EVM words roundtrip
+            let words = b.to_evm_words()?;
+            let recovered = bool::from_evm_words(words)?;
+            assert_eq!(b, recovered, "Bool EVM words roundtrip failed");
+        }
+
+        // -- STRING + BYTES TESTS -------------------------------------------------
 
         #[test]
         fn test_short_strings(s in arb_short_string(), base_slot in arb_safe_slot()) {
@@ -599,6 +629,16 @@ mod tests {
             s.store(&mut contract, base_slot)?;
             let loaded = String::load(&mut contract, base_slot)?;
             assert_eq!(s, loaded, "Short string roundtrip failed for: {:?}", s);
+
+            // Verify delete works
+            String::delete(&mut contract, base_slot)?;
+            let after_delete = String::load(&mut contract, base_slot)?;
+            assert_eq!(after_delete, String::new(), "Short string not empty after delete");
+
+            // EVM words roundtrip (only works for short strings ≤31 bytes)
+            let words = s.to_evm_words()?;
+            let recovered = String::from_evm_words(words)?;
+            assert_eq!(s, recovered, "Short string EVM words roundtrip failed");
         }
 
         #[test]
@@ -612,6 +652,17 @@ mod tests {
             s.store(&mut contract, base_slot)?;
             let loaded = String::load(&mut contract, base_slot)?;
             assert_eq!(s, loaded, "32-byte string roundtrip failed");
+
+            // Verify delete works
+            String::delete(&mut contract, base_slot)?;
+            let after_delete = String::load(&mut contract, base_slot)?;
+            assert_eq!(after_delete, String::new(), "32-byte string not empty after delete");
+
+            // Note: 32-byte strings use long storage format and cannot be
+            // reconstructed from a single word without storage access
+            let words = s.to_evm_words()?;
+            let result = String::from_evm_words(words);
+            assert!(result.is_err(), "32-byte string should not be reconstructable from single word");
         }
 
         #[test]
@@ -622,6 +673,35 @@ mod tests {
             s.store(&mut contract, base_slot)?;
             let loaded = String::load(&mut contract, base_slot)?;
             assert_eq!(s, loaded, "Long string roundtrip failed for length: {}", s.len());
+
+            // Calculate how many data slots were used
+            let chunks = calc_chunks(s.len());
+
+            // Verify delete works (clears both main slot and keccak256-addressed data)
+            String::delete(&mut contract, base_slot)?;
+            let after_delete = String::load(&mut contract, base_slot)?;
+            assert_eq!(after_delete, String::new(), "Long string not empty after delete");
+
+            // Verify all keccak256-addressed data slots are actually zero
+            let data_slot_start = calc_data_slot(base_slot);
+            for i in 0..chunks {
+                let slot = data_slot_start + U256::from(i);
+                let value = contract.sload(slot)?;
+                assert_eq!(value, U256::ZERO, "Data slot {} not cleared after delete", i);
+            }
+
+            // Verify that strings >= 32 bytes cannot be reconstructed from single word
+            // Note: arb_long_string() may occasionally generate strings < 32 bytes due to Unicode
+            if s.len() >= 32 {
+                let words = s.to_evm_words()?;
+                let result = String::from_evm_words(words);
+                assert!(result.is_err(), "Long string (>= 32 bytes) should not be reconstructable from single word");
+            } else {
+                // For strings < 32 bytes, verify roundtrip works
+                let words = s.to_evm_words()?;
+                let recovered = String::from_evm_words(words)?;
+                assert_eq!(s, recovered, "String < 32 bytes EVM words roundtrip failed");
+            }
         }
 
         #[test]
@@ -632,6 +712,16 @@ mod tests {
             b.store(&mut contract, base_slot)?;
             let loaded = Bytes::load(&mut contract, base_slot)?;
             assert_eq!(b, loaded, "Short bytes roundtrip failed for length: {}", b.len());
+
+            // Verify delete works
+            Bytes::delete(&mut contract, base_slot)?;
+            let after_delete = Bytes::load(&mut contract, base_slot)?;
+            assert_eq!(after_delete, Bytes::new(), "Short bytes not empty after delete");
+
+            // EVM words roundtrip (only works for short bytes ≤31 bytes)
+            let words = b.to_evm_words()?;
+            let recovered = Bytes::from_evm_words(words)?;
+            assert_eq!(b, recovered, "Short bytes EVM words roundtrip failed");
         }
 
         #[test]
@@ -645,6 +735,17 @@ mod tests {
             b.store(&mut contract, base_slot)?;
             let loaded = Bytes::load(&mut contract, base_slot)?;
             assert_eq!(b, loaded, "32-byte bytes roundtrip failed");
+
+            // Verify delete works
+            Bytes::delete(&mut contract, base_slot)?;
+            let after_delete = Bytes::load(&mut contract, base_slot)?;
+            assert_eq!(after_delete, Bytes::new(), "32-byte bytes not empty after delete");
+
+            // Note: 32-byte Bytes use long storage format and cannot be
+            // reconstructed from a single word without storage access
+            let words = b.to_evm_words()?;
+            let result = Bytes::from_evm_words(words);
+            assert!(result.is_err(), "32-byte Bytes should not be reconstructable from single word");
         }
 
         #[test]
@@ -655,6 +756,34 @@ mod tests {
             b.store(&mut contract, base_slot)?;
             let loaded = Bytes::load(&mut contract, base_slot)?;
             assert_eq!(b, loaded, "Long bytes roundtrip failed for length: {}", b.len());
+
+            // Calculate how many data slots were used
+            let chunks = calc_chunks(b.len());
+
+            // Verify delete works (clears both main slot and keccak256-addressed data)
+            Bytes::delete(&mut contract, base_slot)?;
+            let after_delete = Bytes::load(&mut contract, base_slot)?;
+            assert_eq!(after_delete, Bytes::new(), "Long bytes not empty after delete");
+
+            // Verify all keccak256-addressed data slots are actually zero
+            let data_slot_start = calc_data_slot(base_slot);
+            for i in 0..chunks {
+                let slot = data_slot_start + U256::from(i);
+                let value = contract.sload(slot)?;
+                assert_eq!(value, U256::ZERO, "Data slot {} not cleared after delete", i);
+            }
+
+            // Verify that bytes >= 32 bytes cannot be reconstructed from single word
+            if b.len() >= 32 {
+                let words = b.to_evm_words()?;
+                let result = Bytes::from_evm_words(words);
+                assert!(result.is_err(), "Long bytes (>= 32 bytes) should not be reconstructable from single word");
+            } else {
+                // For bytes < 32 bytes, verify roundtrip works
+                let words = b.to_evm_words()?;
+                let recovered = Bytes::from_evm_words(words)?;
+                assert_eq!(b, recovered, "Bytes < 32 bytes EVM words roundtrip failed");
+            }
         }
     }
 }
