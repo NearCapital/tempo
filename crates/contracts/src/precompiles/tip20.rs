@@ -112,9 +112,6 @@ sol! {
         event PauseStateUpdate(address indexed updater, bool isPaused);
         event UpdateQuoteToken(address indexed updater, address indexed newQuoteToken);
         event QuoteTokenUpdateFinalized(address indexed updater, address indexed newQuoteToken);
-        event RewardScheduled(address indexed funder, uint64 indexed id, uint256 amount, uint32 durationSeconds);
-        event RewardCanceled(address indexed funder, uint64 indexed id, uint256 refund);
-        event RewardRecipientSet(address indexed holder, address indexed recipient);
 
         // Errors
         error InsufficientBalance(uint256 available, uint256 required, address token);
@@ -129,10 +126,37 @@ sol! {
         error InvalidQuoteToken();
         error TransfersDisabled();
         error InvalidAmount();
+        error Unauthorized();
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    #[sol(rpc, abi)]
+    #[allow(clippy::too_many_arguments)]
+    interface ITIP20Rewards {
+        struct RewardStream {
+            address funder;
+            uint64 startTime;
+            uint64 endTime;
+            uint256 ratePerSecondScaled;
+            uint256 amountTotal;
+        }
+
+        // Reward Functions
+        function startReward(uint256 amount, uint128 seconds) external returns (uint64);
+        function setRewardRecipient(address recipient) external;
+        function cancelReward(uint64 id) external returns (uint256);
+        function getStream(uint64 id) external view returns (RewardStream);
+        function totalRewardPerSecond() external view returns (uint256);
+
+        // Reward Events
+        event RewardScheduled(address indexed funder, uint64 indexed id, uint256 amount, uint32 durationSeconds);
+        event RewardCanceled(address indexed funder, uint64 indexed id, uint256 refund);
+        event RewardRecipientSet(address indexed holder, address indexed recipient);
+
+        // Errors
         error NotStreamFunder();
         error StreamInactive();
         error NoOptedInSupply();
-        error Unauthorized();
     }
 }
 
@@ -212,19 +236,21 @@ impl TIP20Error {
     pub const fn invalid_amount() -> Self {
         Self::InvalidAmount(ITIP20::InvalidAmount {})
     }
+}
 
+impl TIP20RewardsError {
     /// Error for when stream does not exist
     pub const fn stream_inactive() -> Self {
-        Self::StreamInactive(ITIP20::StreamInactive {})
+        Self::StreamInactive(ITIP20Rewards::StreamInactive {})
     }
 
     /// Error for when msg.sedner is not stream funder
     pub const fn not_stream_funder() -> Self {
-        Self::NotStreamFunder(ITIP20::NotStreamFunder {})
+        Self::NotStreamFunder(ITIP20Rewards::NotStreamFunder {})
     }
 
     /// Error for when opted in supply is 0
     pub const fn no_opted_in_supply() -> Self {
-        Self::NoOptedInSupply(ITIP20::NoOptedInSupply {})
+        Self::NoOptedInSupply(ITIP20Rewards::NoOptedInSupply {})
     }
 }
