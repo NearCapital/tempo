@@ -117,6 +117,7 @@ struct FieldInfo {
     ty: Type,
     slot: Option<U256>,
     base_slot: Option<U256>,
+    // TODO(rusowsky): delete
     slot_count: Option<usize>,
     map: Option<String>,
     /// Lazily computed from `map` and `name`
@@ -209,8 +210,6 @@ fn gen_contract_storage(
 ) -> syn::Result<proc_macro2::TokenStream> {
     // Generate the complete output
     let allocated_fields = layout::allocate_slots(fields)?;
-    let slot_id_types = layout::gen_slot_id_types(&allocated_fields);
-    let slots_module = layout::gen_slots_module(&allocated_fields);
     let transformed_struct = layout::gen_struct(ident, vis);
     let storage_trait = layout::gen_contract_storage_impl(ident);
     let constructor = layout::gen_constructor(ident);
@@ -219,13 +218,16 @@ fn gen_contract_storage(
         .map(|allocated| layout::gen_getters_and_setters(ident, allocated))
         .collect();
 
+    let (slot_types_for_reexport, slots_module_with_types) =
+        layout::gen_slots_module_with_types(&allocated_fields);
+
     let output = quote! {
-        #slot_id_types
+        #slots_module_with_types
+        #slot_types_for_reexport
         #transformed_struct
         #constructor
         #storage_trait
         #(#methods)*
-        #slots_module
     };
 
     Ok(output)

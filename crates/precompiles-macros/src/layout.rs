@@ -11,110 +11,91 @@ use syn::{Ident, Type, Visibility};
 pub(crate) struct AllocatedField<'a> {
     /// Reference to the original field information
     info: &'a FieldInfo,
-    /// The assigned storage slot for this field
-    assigned_slot: U256,
+    /// The assigned storage slot for this field (or base for const-eval chain)
+    assigned_slot: SlotAssignment,
     /// Classification based on the field's type
     kind: FieldKind<'a>,
+    /// The computed SlotId type name (e.g., "Slot0", "Slot100")
+    slot_id_name: String,
+}
+
+/// Represents how a slot is assigned
+#[derive(Debug, Clone)]
+pub(crate) enum SlotAssignment {
+    /// Manual slot value: `#[slot(N)]` or `#[base_slot(N)]`
+    Manual(U256),
+    /// Auto-assigned: stores after the latest auto-assigned field
+    Auto(U256),
+}
+
+/// Get the `SlotId` name for a given field
+fn get_field_slot_id_name(
+    assigned_slot: &SlotAssignment,
+    _current_kind: &FieldKind<'_>,
+    allocated_fields: &[AllocatedField<'_>],
+) -> String {
+    match assigned_slot {
+        SlotAssignment::Manual(slot) => format!("Slot{}", slot),
+        SlotAssignment::Auto(slot) => {
+            // Check if follows a `StorageBlock` field by finding the last auto-assigned field
+            let prev_auto_field = allocated_fields
+                .iter()
+                .rev()
+                .find(|f| matches!(f.assigned_slot, SlotAssignment::Auto(_)));
+
+            if let Some(prev) = prev_auto_field {
+                if matches!(prev.kind, FieldKind::StorageBlock(_)) {
+                    // the multi-slot block size is not yet known at macro expansion
+                    return format!("SlotAfter{}", prev.slot_id_name);
+                }
+            }
+
+            // Otherwise, we can use the exact slot number
+            format!("Slot{}", slot)
+        }
+    }
 }
 
 /// Allocate slots to fields (explicit + auto-assignment)
 pub(crate) fn allocate_slots(fields: &[FieldInfo]) -> syn::Result<Vec<AllocatedField<'_>>> {
-    let (mut used, mut next) = (std::collections::HashSet::new(), U256::ZERO);
+    let mut allocated_fields = Vec::new();
+    let mut last_auto_slot = U256::ZERO;
+    let classified_fields: Vec<FieldKind<'_>> = fields
+        .iter()
+        .map(|field| classify_field(&field.ty))
+        .collect::<syn::Result<_>>()?;
 
-    // First pass: classify fields, collect custom slots, and validate no duplicates
-    let mut classified_fields: Vec<(FieldKind<'_>, usize)> = Vec::new();
-    for field in fields.iter() {
-        let kind = classify_field(&field.ty)?;
-
-        // Determine how many slots this field occupies
-        let slot_count = match &kind {
-            FieldKind::StorageBlock(_) => {
-                field.slot_count.ok_or_else(|| {
-                    syn::Error::new_spanned(
-                        &field.name,
-                        "custom structs fields that derive `Storable` require `#[slot_count(N)]` attribute to specify how many slots they need",
-                    )
-                })?
-            }
-            _ => 1, // `Direct`, `Mapping`, and `NestedMapping` all use 1 slot for the base (no slot collision)
+    for (field, kind) in fields.iter().zip(classified_fields.into_iter()) {
+        let assigned_slot = if let Some(explicit) = field.slot {
+            // Explicit fixed slot, doesn't affect auto-assignment chain
+            SlotAssignment::Manual(explicit)
+        } else if let Some(base) = field.base_slot {
+            // Explicit base slot, resets auto-assignment chain
+            let slot = SlotAssignment::Manual(base);
+            last_auto_slot = base + U256::from(1);
+            slot
+        } else {
+            // Auto-assignment: this field gets last_auto_slot
+            let slot = SlotAssignment::Auto(last_auto_slot);
+            last_auto_slot = last_auto_slot + U256::from(1);
+            slot
         };
 
-        classified_fields.push((kind, slot_count));
-
-        // Validate explicit slot assignments and reserve all slots
-        if let Some(slot) = field.slot {
-            for i in 0..slot_count {
-                let slot_i = slot.saturating_add(U256::from(i));
-                if !used.insert(slot_i) {
-                    return Err(syn::Error::new_spanned(
-                        &field.name,
-                        format!("duplicate slot assignment: slot `{slot_i}` is already used"),
-                    ));
-                }
-            }
-        }
-        if let Some(base_slot) = field.base_slot {
-            for i in 0..slot_count {
-                let slot_i = base_slot.saturating_add(U256::from(i));
-                if !used.insert(slot_i) {
-                    return Err(syn::Error::new_spanned(
-                        &field.name,
-                        format!("duplicate slot assignment: slot `{slot_i}` is already used"),
-                    ));
-                }
-            }
-        }
+        let slot_id_name = get_field_slot_id_name(&assigned_slot, &kind, &allocated_fields);
+        allocated_fields.push(AllocatedField {
+            info: field,
+            assigned_slot,
+            kind,
+            slot_id_name,
+        });
     }
 
-    // Second pass: allocate slots for auto-assigned fields
-    fields
-        .iter()
-        .zip(classified_fields)
-        .map(|(field, (kind, slot_count))| {
-            let assigned_slot = if let Some(explicit) = field.slot {
-                // #[slot(N)] assigns to slot N without changing next counter
-                explicit
-            } else if let Some(base) = field.base_slot {
-                // #[base_slot(N)] assigns to slot N and resets next counter to N+slot_count
-                next = base.saturating_add(U256::from(slot_count));
-                base
-            } else {
-                // Auto-assign from current next counter, ensuring slot_count consecutive slots are available
-                loop {
-                    let mut all_available = true;
-                    for i in 0..slot_count {
-                        if used.contains(&next.saturating_add(U256::from(i))) {
-                            all_available = false;
-                            break;
-                        }
-                    }
-                    if all_available {
-                        break;
-                    }
-                    next = next.saturating_add(U256::from(1));
-                }
-
-                let slot = next;
-                // Mark all slots as used
-                for i in 0..slot_count {
-                    used.insert(slot.saturating_add(U256::from(i)));
-                }
-                next = next.saturating_add(U256::from(slot_count));
-                slot
-            };
-
-            Ok(AllocatedField {
-                info: field,
-                assigned_slot,
-                kind,
-            })
-        })
-        .collect()
+    Ok(allocated_fields)
 }
 
 /// Classify a field based on its type
 fn classify_field(ty: &Type) -> syn::Result<FieldKind<'_>> {
-    // First check if it's a Mapping type
+    // Check if it's a mapping
     if let Some((key_ty, value_ty)) = extract_mapping_types(ty) {
         if let Some((key2_ty, value2_ty)) = extract_mapping_types(value_ty) {
             return Ok(FieldKind::NestedMapping {
@@ -130,7 +111,7 @@ fn classify_field(ty: &Type) -> syn::Result<FieldKind<'_>> {
         }
     }
 
-    // If not a mapping, check if it's a multi-slot `Storable` type (user-defined struct).
+    // If not a mapping, check if it's a multi-slot `Storable` type
     if is_custom_struct(ty) {
         Ok(FieldKind::StorageBlock(ty))
     } else {
@@ -198,11 +179,10 @@ pub(crate) fn gen_getters_and_setters(
     let getter_name = format_ident!("sload_{}", field_name);
     let setter_name = format_ident!("sstore_{}", field_name);
     let cleaner_name = format_ident!("clear_{}", field_name);
+    let slot_id = format_ident!("{}", allocated.slot_id_name);
 
     match &allocated.kind {
         FieldKind::Direct => {
-            let slot_id = slot_to_marker_type(allocated.assigned_slot);
-
             quote! {
                 impl<'a, S: crate::storage::PrecompileStorageProvider> #struct_name<'a, S> {
                     #[inline]
@@ -226,8 +206,6 @@ pub(crate) fn gen_getters_and_setters(
             key: key_ty,
             value: value_ty,
         } => {
-            let slot_id = slot_to_marker_type(allocated.assigned_slot);
-
             quote! {
                 impl<'a, S: crate::storage::PrecompileStorageProvider> #struct_name<'a, S> {
                     #[inline]
@@ -262,7 +240,6 @@ pub(crate) fn gen_getters_and_setters(
             key2: key2_ty,
             value: value_ty,
         } => {
-            let slot_id = slot_to_marker_type(allocated.assigned_slot);
             // For nested mappings, we need to use the full Mapping type with dummy inner slot
             let dummy_slot = quote! { SlotDummy };
 
@@ -312,45 +289,10 @@ pub(crate) fn gen_getters_and_setters(
             }
         }
         FieldKind::StorageBlock(ty) => {
-            let slot_id = slot_to_marker_type(allocated.assigned_slot);
-            // Get the slot_count from the attribute (guaranteed to exist by allocate_slots)
-            let expected_slot_count = allocated
-                .info
-                .slot_count
-                .expect("custom structs fields must impl `trait Storable`");
-
-            // Generate a unique const name for the validation
-            let validation_const = format_ident!(
-                "_VALIDATE_SLOT_COUNT_{}",
-                field_name.to_string().to_uppercase()
-            );
-
             quote! {
                 impl<'a, S: crate::storage::PrecompileStorageProvider> #struct_name<'a, S> {
-                    // Compile-time validation: ensure slot_count attribute matches Storable::SLOT_COUNT
-                    const #validation_const: () = {
-                        const EXPECTED: usize = #expected_slot_count;
-                        const ACTUAL: usize = <#ty>::SLOT_COUNT;
-
-                        // This will fail at compile time if they don't match
-                        if EXPECTED != ACTUAL {
-                            panic!(
-                                concat!(
-                                    "`slot_count` mismatch for field `",
-                                    stringify!(#field_name),
-                                    "`: attribute specifies `",
-                                    stringify!(#expected_slot_count),
-                                    "` but type implements a different `SLOT_COUNT`"
-                                )
-                            );
-                        }
-                    };
-
                     #[inline]
                     fn #getter_name(&mut self) -> crate::error::Result<#ty> {
-                        // Reference the validation const to ensure it's evaluated
-                        let _ = Self::#validation_const;
-
                         <#ty as crate::storage::Storable<{ <#ty>::SLOT_COUNT }>>::load(
                             self,
                             <#slot_id as crate::storage::SlotId>::SLOT,
@@ -359,9 +301,6 @@ pub(crate) fn gen_getters_and_setters(
 
                     #[inline]
                     fn #cleaner_name(&mut self) -> crate::error::Result<()> {
-                        // Reference the validation const to ensure it's evaluated
-                        let _ = Self::#validation_const;
-
                         <#ty as crate::storage::Storable<{ <#ty>::SLOT_COUNT }>>::delete(
                             self,
                             <#slot_id as crate::storage::SlotId>::SLOT,
@@ -370,9 +309,6 @@ pub(crate) fn gen_getters_and_setters(
 
                     #[inline]
                     fn #setter_name(&mut self, value: #ty) -> crate::error::Result<()> {
-                        // Reference the validation const to ensure it's evaluated
-                        let _ = Self::#validation_const;
-
                         value.store(
                             self,
                             <#slot_id as crate::storage::SlotId>::SLOT,
@@ -384,82 +320,130 @@ pub(crate) fn gen_getters_and_setters(
     }
 }
 
-/// Convert a slot number to a marker type identifier
-fn slot_to_marker_type(slot: U256) -> Ident {
-    format_ident!("Slot{}", slot.to_string())
-}
-
 /// Convert a field name (snake_case) to a constant name (SCREAMING_SNAKE_CASE)
 fn field_name_to_const_name(name: &Ident) -> String {
     name.to_string().to_uppercase()
 }
 
-/// Generate the `slots` module with constants for each field's storage slot
-pub(crate) fn gen_slots_module(
+/// Generate the `slots` module with SlotId types inside it, plus constants and re-exports
+///
+/// Returns: (re-exports for outer scope, slots module with types inside)
+pub(crate) fn gen_slots_module_with_types(
     allocated_fields: &[AllocatedField<'_>],
-) -> proc_macro2::TokenStream {
-    let slot_constants: Vec<proc_macro2::TokenStream> = allocated_fields
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let slot_id_types = gen_slot_id_types(allocated_fields);
+
+    let slot_constants: Vec<_> = allocated_fields
         .iter()
         .map(|allocated| {
-            let slot = allocated.assigned_slot;
-
-            // Generate constant name in SCREAMING_SNAKE_CASE
             let const_name = format_ident!("{}", field_name_to_const_name(&allocated.info.name));
-
-            // Create a literal token for the slot value with _U256 suffix
-            let slot_literal = syn::LitInt::new(
-                &format!("{slot}_U256"),
-                proc_macro2::Span::call_site(),
-            );
+            let slot_id = format_ident!("{}", allocated.slot_id_name);
 
             quote! {
-                pub const #const_name: ::alloy::primitives::U256 = ::alloy::primitives::uint!(#slot_literal);
+                pub const #const_name: ::alloy::primitives::U256 = <#slot_id as tempo_precompiles::storage::SlotId>::SLOT;
             }
         })
         .collect();
 
-    quote! {
+    let slot_reexports: Vec<_> = allocated_fields
+        .iter()
+        .map(|allocated| {
+            let slot_id = format_ident!("{}", allocated.slot_id_name);
+            quote! {
+                pub use slots::#slot_id;
+            }
+        })
+        .collect();
+
+    let slots_module = quote! {
         pub mod slots {
+            use super::*;
+            #slot_id_types
             #(#slot_constants)*
         }
-    }
+    };
+
+    let reexports = quote! {
+        #(#slot_reexports)*
+        pub use slots::SlotDummy;
+    };
+
+    (reexports, slots_module)
 }
 
-/// Generate `SlotId` marker types for each unique storage slot
+/// Generate `SlotId` marker types for each field with const-eval chaining
 pub(crate) fn gen_slot_id_types(
     allocated_fields: &[AllocatedField<'_>],
 ) -> proc_macro2::TokenStream {
     let mut generated = proc_macro2::TokenStream::new();
-    let mut seen_slots = std::collections::HashSet::new();
 
-    // Generate a `SlotN` type for each unique slot number
-    for allocated in allocated_fields {
-        let slot_number = allocated.assigned_slot;
+    // Generate all `SlotId` types
+    for (idx, allocated) in allocated_fields.iter().enumerate() {
+        let slot_id_name = format_ident!("{}", allocated.slot_id_name);
+        let field_name = &allocated.info.name;
 
-        // Only generate once per unique slot number (multiple fields may share a slot)
-        if seen_slots.insert(slot_number) {
-            let slot_id_name = slot_to_marker_type(slot_number);
-            let field_name = &allocated.info.name;
-            let slot_number_str = slot_number.to_string();
-
-            // Create a literal token for the slot value with _U256 suffix
-            let slot_literal = syn::LitInt::new(
-                &format!("{slot_number}_U256"),
-                proc_macro2::Span::call_site(),
-            );
-
-            generated.extend(quote! {
-                #[doc = concat!(
-                    "Storage slot ", #slot_number_str,
-                    " (used by `", stringify!(#field_name), "` field)"
-                )]
-                pub struct #slot_id_name;
-
-                impl crate::storage::SlotId for #slot_id_name {
-                    const SLOT: ::alloy::primitives::U256 = ::alloy::primitives::uint!(#slot_literal);
+        let slot_expr = match &allocated.assigned_slot {
+            SlotAssignment::Manual(slot_value) => {
+                // Fixed slots are always known exactly
+                let slot_literal = syn::LitInt::new(
+                    &format!("{}_U256", slot_value),
+                    proc_macro2::Span::call_site(),
+                );
+                quote! {
+                    ::alloy::primitives::uint!(#slot_literal)
                 }
-            });
-        }
+            }
+            SlotAssignment::Auto(slot_value) => {
+                // For auto slots, check if previous auto field is a StorageBlock
+                let prev_auto_field = allocated_fields[..idx]
+                    .iter()
+                    .rev()
+                    .find(|f| matches!(f.assigned_slot, SlotAssignment::Auto(_)));
+
+                let prev_is_storage_block = prev_auto_field
+                    .map(|f| matches!(f.kind, FieldKind::StorageBlock(_)))
+                    .unwrap_or(false);
+
+                if prev_is_storage_block {
+                    // Previous auto field is StorageBlock, defer to const-eval
+                    let prev = prev_auto_field.unwrap();
+                    let prev_slot_id = format_ident!("{}", prev.slot_id_name);
+                    let prev_field_ty = &prev.info.ty;
+                    quote! {
+                        {
+                            const PREV_SLOT: ::alloy::primitives::U256 = <#prev_slot_id as crate::storage::SlotId>::SLOT;
+                            const PREV_COUNT: usize = <#prev_field_ty>::SLOT_COUNT;
+                            const OFFSET: ::alloy::primitives::U256 = ::alloy::primitives::U256::from_limbs([PREV_COUNT as u64, 0, 0, 0]);
+                            PREV_SLOT.saturating_add(OFFSET)
+                        }
+                    }
+                } else {
+                    // Use exact slot value (known at macro time)
+                    let slot_literal = syn::LitInt::new(
+                        &format!("{}_U256", slot_value),
+                        proc_macro2::Span::call_site(),
+                    );
+                    quote! {
+                        ::alloy::primitives::uint!(#slot_literal)
+                    }
+                }
+            }
+        };
+
+        generated.extend(quote! {
+            #[doc = concat!("Storage slot for `", stringify!(#field_name), "` field")]
+            pub struct #slot_id_name;
+
+            impl crate::storage::SlotId for #slot_id_name {
+                const SLOT: ::alloy::primitives::U256 = #slot_expr;
+            }
+        });
+    }
+
+    // Generate collision detection checks after all `SlotId` types are defined
+    for (idx, allocated) in allocated_fields.iter().enumerate() {
+        let collision_checks = generate_collision_checks(idx, allocated, allocated_fields);
+        generated.extend(collision_checks);
     }
 
     // Always generate `SlotDummy` for nested mappings
@@ -473,4 +457,87 @@ pub(crate) fn gen_slot_id_types(
     });
 
     generated
+}
+
+/// Generate collision detection debug assertions for a field
+fn generate_collision_checks(
+    current_idx: usize,
+    current_field: &AllocatedField<'_>,
+    all_fields: &[AllocatedField<'_>],
+) -> proc_macro2::TokenStream {
+    let mut checks = proc_macro2::TokenStream::new();
+
+    // Only check explicit slot assignments against other fields
+    if let SlotAssignment::Manual(_) = current_field.assigned_slot {
+        let current_slot_id = format_ident!("{}", current_field.slot_id_name);
+        let current_field_name = &current_field.info.name;
+
+        // Check against all other fields
+        for (other_idx, other_field) in all_fields.iter().enumerate() {
+            if other_idx == current_idx {
+                continue;
+            }
+
+            let other_slot_id = format_ident!("{}", other_field.slot_id_name);
+            let other_field_name = &other_field.info.name;
+
+            // Generate slot count expressions
+            let (current_count_expr, other_count_expr) = match (
+                &current_field.kind,
+                &other_field.kind,
+            ) {
+                (FieldKind::StorageBlock(_), FieldKind::StorageBlock(_)) => {
+                    let current_ty = &current_field.info.ty;
+                    let other_ty = &other_field.info.ty;
+                    (
+                        quote! { ::alloy::primitives::U256::from_limbs([<#current_ty>::SLOT_COUNT as u64, 0, 0, 0]) },
+                        quote! { ::alloy::primitives::U256::from_limbs([<#other_ty>::SLOT_COUNT as u64, 0, 0, 0]) },
+                    )
+                }
+                (FieldKind::StorageBlock(_), _) => {
+                    let current_ty = &current_field.info.ty;
+                    (
+                        quote! { ::alloy::primitives::U256::from_limbs([<#current_ty>::SLOT_COUNT as u64, 0, 0, 0]) },
+                        quote! { ::alloy::primitives::U256::from_limbs([1, 0, 0, 0]) },
+                    )
+                }
+                (_, FieldKind::StorageBlock(_)) => {
+                    let other_ty = &other_field.info.ty;
+                    (
+                        quote! { ::alloy::primitives::U256::from_limbs([1, 0, 0, 0]) },
+                        quote! { ::alloy::primitives::U256::from_limbs([<#other_ty>::SLOT_COUNT as u64, 0, 0, 0]) },
+                    )
+                }
+                _ => (
+                    quote! { ::alloy::primitives::U256::from_limbs([1, 0, 0, 0]) },
+                    quote! { ::alloy::primitives::U256::from_limbs([1, 0, 0, 0]) },
+                ),
+            };
+
+            // Generate a debug assertion that checks for overlap
+            checks.extend(quote! {
+                #[allow(clippy::eq_op)]
+                const _: () = {
+                    let _ = || {
+                        let current_slot = <#current_slot_id as crate::storage::SlotId>::SLOT;
+                        let current_end = current_slot.saturating_add(#current_count_expr);
+                        let other_slot = <#other_slot_id as crate::storage::SlotId>::SLOT;
+                        let other_end = other_slot.saturating_add(#other_count_expr);
+
+                        let no_overlap = current_end.le(&other_slot) || other_end.le(&current_slot);
+                        debug_assert!(
+                            no_overlap,
+                            "Storage slot collision: field `{}` (slot {:?}) overlaps with field `{}` (slot {:?})",
+                            stringify!(#current_field_name),
+                            current_slot,
+                            stringify!(#other_field_name),
+                            other_slot
+                        );
+                    };
+                };
+            });
+        }
+    }
+
+    checks
 }

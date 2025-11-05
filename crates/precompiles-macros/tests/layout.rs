@@ -5,9 +5,6 @@ mod storage {
     pub(super) use tempo_precompiles::storage::*;
 }
 
-// Re-export `IntoPrecompileResult` so `crate::IntoPrecompileResult` works in generated code
-pub(crate) use tempo_precompiles::IntoPrecompileResult;
-
 use storage::Storable;
 
 use alloy::primitives::{Address, U256, keccak256};
@@ -237,7 +234,7 @@ fn test_string_literal_slots() {
 
 // SLOT_COUNT = 3
 #[derive(Debug, Clone, PartialEq, Eq, Storable)]
-struct TestBlock {
+pub(crate) struct TestBlock {
     pub field1: U256,
     pub field2: U256,
     pub field3: u64,
@@ -249,7 +246,6 @@ fn test_struct_storage() {
     pub struct Layout {
         pub field_a: U256, // Auto: slot 0
         #[slot(10)]
-        #[slot_count(3)]
         pub block: TestBlock, // Explicit: slots 10-12
         pub field_b: U256, // Auto: slot 1 (skips 10-12)
         pub address_mapping: storage::Mapping<Address, U256>, // Auto: slot 2
@@ -360,42 +356,20 @@ fn test_struct_storage() {
 
 // NOTE: Collision detection tests
 //
-// The following scenarios are prevented at compile-time by the macro:
-//
-// 1. Overlapping explicit slots with StorageBlock:
+// The overlapping layouts are prevented at compile/debug-time by the macro:
 //    ```rust
 //    #[contract]
 //    pub struct Layout {
 //        #[slot(10)]
-//        #[slot_count(2)]
-//        pub block: TestBlock,  // Occupies slots 10-12
+//        pub block: TestBlock,  // Occupies slots 10-12 (SLOT_COUNT = 3)
 //        #[slot(11)]
-//        pub field: U256,       // ERROR: slot 11 already used!
+//        pub field: U256,       // DEBUG ASSERTION: slot 11 overlaps with block!
 //    }
 //    ```
-//
-// 2. StorageBlock without slot_count:
-//    ```rust
-//    #[contract]
-//    pub struct Layout {
-//        pub block: TestBlock,  // ERROR: StorageBlock requires #[slot_count(N)]
-//    }
-//    ```
-//
-// 3. Mismatched slot_count:
-//    ```rust
-//    #[contract]
-//    pub struct Layout {
-//        #[slot_count(5)]       // Wrong! TestBlock::SLOT_COUNT = 3
-//        pub block: TestBlock,  // ERROR: compile-time validation fails
-//    }
-//    ```
-//
-// These compile failures ensure storage layout safety at compile time.
 
 // SLOT_COUNT = 3
 #[derive(Debug, Clone, PartialEq, Eq, Storable)]
-struct UserProfile {
+pub(crate) struct UserProfile {
     pub owner: Address,
     pub active: bool,
     pub balance: U256,
@@ -407,7 +381,6 @@ fn test_delete_struct_field_in_contract() {
     pub struct Layout {
         pub field_a: U256, // Auto: slot 0
         #[slot(10)]
-        #[slot_count(3)]
         pub block: TestBlock, // Explicit: slots 10-12
         pub field_b: U256, // Auto: slot 1
     }
@@ -476,7 +449,6 @@ fn test_user_profile_struct_in_contract() {
     pub struct Layout {
         pub counter: U256, // Auto: slot 0
         #[slot(20)]
-        #[slot_count(2)]
         pub profile: UserProfile, // Explicit: slots 20-21
         pub flag: bool,    // Auto: slot 1
     }
@@ -652,10 +624,8 @@ fn test_round_trip_operations_in_contract() {
     #[contract]
     pub struct Layout {
         #[slot(100)]
-        #[slot_count(3)]
         pub block: TestBlock,
         #[slot(200)]
-        #[slot_count(2)]
         pub profile: UserProfile,
     }
 
@@ -736,4 +706,38 @@ fn test_round_trip_operations_in_contract() {
         assert_eq!(layout.sload_block().unwrap(), new_block);
         assert_eq!(layout.sload_profile().unwrap(), new_profile);
     }
+}
+
+#[test]
+fn test_slot_id_naming_matches_actual_slots() {
+    // Test that SlotId type names reflect actual slot numbers, not field indices
+    #[contract]
+    pub struct Layout {
+        pub field_a: U256, // auto → slot 0
+        #[slot(100)]
+        pub field_b: U256, // explicit → slot 100
+        pub field_c: U256, // auto → slot 1
+        #[base_slot(200)]
+        pub field_d: U256, // base → slot 200
+        pub field_e: U256, // auto → slot 201
+        #[slot(0x10)]
+        pub field_f: U256, // hex → slot 16
+    }
+
+    // Verify slot assignments via the slots module constants
+    assert_eq!(slots::FIELD_A, U256::from(0));
+    assert_eq!(slots::FIELD_B, U256::from(100));
+    assert_eq!(slots::FIELD_C, U256::from(1));
+    assert_eq!(slots::FIELD_D, U256::from(200));
+    assert_eq!(slots::FIELD_E, U256::from(201));
+    assert_eq!(slots::FIELD_F, U256::from(16));
+
+    // Verify the types exist and have correct SLOT values
+    use tempo_precompiles::storage::SlotId;
+    assert_eq!(<Slot0 as SlotId>::SLOT, U256::from(0));
+    assert_eq!(<Slot100 as SlotId>::SLOT, U256::from(100));
+    assert_eq!(<Slot1 as SlotId>::SLOT, U256::from(1));
+    assert_eq!(<Slot200 as SlotId>::SLOT, U256::from(200));
+    assert_eq!(<Slot201 as SlotId>::SLOT, U256::from(201));
+    assert_eq!(<Slot16 as SlotId>::SLOT, U256::from(16));
 }
