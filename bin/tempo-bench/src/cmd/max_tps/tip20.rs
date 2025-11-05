@@ -3,7 +3,7 @@ use super::*;
 const GAS_LIMIT: u64 = 300_000;
 
 pub(super) fn transfer(
-    signer: PrivateKeySigner,
+    signer: &PrivateKeySigner,
     nonce: u64,
     chain_id: ChainId,
     token_address: Address,

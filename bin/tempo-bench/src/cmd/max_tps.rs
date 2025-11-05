@@ -361,8 +361,9 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
         "txs per sender is 0, increase tps or decrease senders"
     );
 
-    let (exchange, quote, base1, base2) = dex::setup(
+    let (exchange, quote, user_tokens) = dex::setup(
         rpc_url.clone(),
+        chain_id,
         mnemonic,
         signers.clone(),
         max_concurrent_requests,
@@ -391,8 +392,7 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
         }
     }
 
-    let user_tokens = [base1, base2];
-    let user_tokens_count = 2;
+    let user_tokens_count = user_tokens.len();
 
     println!(
         "Pregenerating {} transactions",
@@ -406,7 +406,7 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
             let tx_factory: [Box<dyn Fn(PrivateKeySigner, u64) -> _>; 3] = [
                 Box::new(|signer: PrivateKeySigner, nonce: u64| {
                     tip20::transfer(
-                        signer.clone(),
+                        &signer,
                         nonce,
                         chain_id,
                         user_tokens[random::<u16>() as usize % user_tokens_count],
@@ -415,7 +415,7 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
                 Box::new(|signer: PrivateKeySigner, nonce: u64| {
                     dex::swap_in(
                         &exchange,
-                        signer.clone(),
+                        &signer,
                         nonce,
                         chain_id,
                         user_tokens[random::<u16>() as usize % user_tokens_count],
@@ -425,7 +425,7 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
                 Box::new(|signer: PrivateKeySigner, nonce: u64| {
                     dex::place(
                         &exchange,
-                        signer.clone(),
+                        &signer,
                         nonce,
                         chain_id,
                         user_tokens[random::<u16>() as usize % user_tokens_count],
@@ -636,19 +636,44 @@ fn monitor_tps(tx_counter: Arc<AtomicU64>, target_count: u64) -> thread::JoinHan
     })
 }
 
-async fn join_all(
-    futures: impl IntoIterator<
-        Item: Future<Output = alloy::contract::Result<PendingTransactionBuilder<Ethereum>>>,
-    >,
+async fn join_all<
+    T: Future<Output = alloy::contract::Result<PendingTransactionBuilder<Ethereum>>>,
+>(
+    futures: impl IntoIterator<Item = T>,
     tx_count: &ProgressBar,
     max_concurrent_requests: usize,
 ) -> eyre::Result<()> {
-    let mut iter = stream::iter(futures)
-        .map(|receipt| async { eyre::Ok(receipt.await?.get_receipt().await?) })
+    /// A number of transaction to send before waiting for receipt that should be likely safe.
+    /// Large amount of transactions in a block will result in system transaction OutOfGas error.
+    const TX_LIMIT: usize = 10_000;
+
+    let mut buf: Vec<Vec<T>> = Vec::new();
+
+    for future in futures {
+        match buf.last_mut() {
+            Some(buf) if buf.len() < TX_LIMIT => buf.push(future),
+            _ => buf.push(vec![future]),
+        }
+    }
+
+    for buf in buf {
+        let mut receipts = Vec::new();
+        let mut iter = stream::iter(buf)
+            .map(|receipt| async { eyre::Ok(receipt.await?) })
+            .buffer_unordered(max_concurrent_requests);
+        while let Some(receipt) = iter.next().await {
+            tx_count.inc(1);
+            receipts.push(receipt);
+        }
+        let mut iter = stream::iter(
+            receipts
+                .into_iter()
+                .map(|receipt| async { eyre::Ok(receipt?.get_receipt().await?) }),
+        )
         .buffer_unordered(max_concurrent_requests);
-    while let Some(receipt) = iter.next().await {
-        tx_count.inc(1);
-        assert!(receipt?.status());
+        while let Some(receipt) = iter.next().await {
+            assert!(receipt?.status());
+        }
     }
 
     Ok(())
@@ -656,7 +681,7 @@ async fn join_all(
 
 fn into_signed_encoded(
     mut tx: impl SignableTransaction<Signature> + RlpEcdsaEncodableTx,
-    signer: PrivateKeySigner,
+    signer: &PrivateKeySigner,
 ) -> eyre::Result<Vec<u8>> {
     let signature = signer
         .sign_transaction_sync(&mut tx)
