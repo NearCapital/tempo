@@ -1,0 +1,22 @@
+[package]
+name = "send-aa-tx"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Alloy dependencies
+alloy = { workspace = true, features = ["rpc-client", "providers", "signers"] }
+alloy-eips = { workspace = true }
+alloy-primitives = { workspace = true }
+
+# Tempo dependencies
+tempo-primitives = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+
+# Error handling
+eyre = { workspace = true }
+
+# Utils
+hex = { workspace = true }

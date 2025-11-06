@@ -10,6 +10,7 @@ members = [
   "bin/tempo",
   "bin/tempo-bench",
   "bin/tempo-sidecar",
+  "bin/send-aa-tx",
   "crates/alloy",
   "crates/chainspec",
   "crates/commonware-node",
