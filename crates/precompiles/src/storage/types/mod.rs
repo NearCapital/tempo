@@ -1,9 +1,10 @@
 mod slot;
 pub use slot::*;
 
-mod mapping;
+pub mod mapping;
 pub use mapping::*;
 
+mod bytes_like;
 mod primitives;
 mod vec;
 

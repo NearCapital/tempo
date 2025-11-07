@@ -204,9 +204,10 @@ pub(crate) fn gen_getters_and_setters(
 
     match &allocated.kind {
         FieldKind::Direct => {
-            // Manual slots are never packed (always at offset 0)
-            if matches!(allocated.assigned_slot, SlotAssignment::Manual(_)) {
-                // Generate normal full-slot accessors for manual slots
+            // Manual slots and dynamic types are never packed (always at offset 0)
+            if matches!(allocated.assigned_slot, SlotAssignment::Manual(_))
+                || is_dynamic_type(field_ty)
+            {
                 quote! {
                     impl<'a, S: crate::storage::PrecompileStorageProvider> #struct_name<'a, S> {
                         #[inline]
@@ -225,8 +226,9 @@ pub(crate) fn gen_getters_and_setters(
                         }
                     }
                 }
-            } else {
-                // Auto-assigned: generate code that uses packing helpers
+            }
+            // Otherwise (auto-assigned + static), generate code that uses packing helpers
+            else {
                 let field_name_upper = field_name.to_string().to_uppercase();
                 let offset_const_name = format_ident!("{}_OFFSET", field_name_upper);
                 let bytes_const_name = format_ident!("{}_BYTES", field_name_upper);

@@ -1,11 +1,13 @@
 pub mod evm;
 pub mod hashmap;
-pub mod slots;
 
 mod types;
 pub use types::*;
 
 pub mod packing;
+
+// TODO(rusowsky): remove once precompiles don't rely it (directly) anymore
+pub use types::mapping as slots;
 
 use alloy::primitives::{Address, LogData, U256};
 use revm::state::{AccountInfo, Bytecode};

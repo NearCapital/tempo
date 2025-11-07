@@ -17,7 +17,9 @@ use alloy::primitives::U256;
 use proc_macro::TokenStream;
 use quote::quote;
 use std::cell::OnceCell;
-use syn::{Data, DeriveInput, Fields, Ident, Type, Visibility, parse_macro_input};
+use syn::parse::{ParseStream, Parser};
+use syn::punctuated::Punctuated;
+use syn::{Data, DeriveInput, Expr, Fields, Ident, Token, Type, Visibility, parse_macro_input};
 
 use crate::utils::extract_attributes;
 
@@ -386,4 +388,82 @@ pub fn storable_arrays(_input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn storable_nested_arrays(_input: TokenStream) -> TokenStream {
     storable_primitives::gen_nested_arrays().into()
+}
+
+/// Test helper macro for validating slots
+#[proc_macro]
+pub fn gen_test_fields_layout(input: TokenStream) -> TokenStream {
+    let input = proc_macro2::TokenStream::from(input);
+
+    // Parse comma-separated identifiers
+    let parser = syn::punctuated::Punctuated::<Ident, syn::Token![,]>::parse_terminated;
+    let idents = match parser.parse2(input) {
+        Ok(idents) => idents,
+        Err(err) => return err.to_compile_error().into(),
+    };
+
+    // Generate new() calls for each identifier
+    let field_calls: Vec<_> = idents
+        .into_iter()
+        .map(|ident| {
+            let field_name = ident.to_string();
+            let uppercase_name = field_name.to_uppercase();
+            let slot_ident = Ident::new(&uppercase_name, ident.span());
+            let offset_ident = Ident::new(&format!("{uppercase_name}_OFFSET"), ident.span());
+            let bytes_ident = Ident::new(&format!("{uppercase_name}_BYTES"), ident.span());
+
+            quote! {
+                RustStorageField::new(#field_name, slots::#slot_ident, slots::#offset_ident, slots::#bytes_ident)
+            }
+        })
+        .collect();
+
+    // Generate the final vec!
+    let output = quote! {
+        vec![#(#field_calls),*]
+    };
+
+    output.into()
+}
+
+/// Test helper macro for validating slots
+#[proc_macro]
+pub fn gen_test_fields_struct(input: TokenStream) -> TokenStream {
+    let input = proc_macro2::TokenStream::from(input);
+
+    // Parse: base_slot_expr, field1, field2, ...
+    let parser = |input: ParseStream<'_>| {
+        let base_slot: Expr = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let fields = Punctuated::<Ident, Token![,]>::parse_terminated(input)?;
+        Ok((base_slot, fields))
+    };
+
+    let (base_slot, idents) = match Parser::parse2(parser, input) {
+        Ok(result) => result,
+        Err(err) => return err.to_compile_error().into(),
+    };
+
+    // Generate field() calls for each identifier with numeric constant names
+    let field_calls: Vec<_> = idents
+        .into_iter()
+        .enumerate()
+        .map(|(i, ident)| {
+            let field_name = ident.to_string();
+            let slot_ident = Ident::new(&format!("FIELD_{}_SLOT", i), ident.span());
+            let offset_ident = Ident::new(&format!("FIELD_{}_OFFSET", i), ident.span());
+            let bytes_ident = Ident::new(&format!("FIELD_{}_BYTES", i), ident.span());
+
+            quote! {
+                RustStorageField::new(#field_name, #base_slot + alloy_primitives::U256::from(#slot_ident), #offset_ident, #bytes_ident)
+            }
+        })
+        .collect();
+
+    // Generate the final vec!
+    let output = quote! {
+        vec![#(#field_calls),*]
+    };
+
+    output.into()
 }

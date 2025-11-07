@@ -11800,6 +11800,8 @@ dependencies = [
  "rand 0.8.5",
  "reth-storage-api",
  "revm",
+ "serde",
+ "serde_json",
  "tempo-contracts",
  "tempo-precompiles-macros",
  "thiserror 2.0.17",

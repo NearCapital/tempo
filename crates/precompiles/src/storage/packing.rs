@@ -111,27 +111,6 @@ pub const fn calc_packed_slot_count(n: usize, elem_bytes: usize) -> usize {
     (n * elem_bytes + 31) / 32
 }
 
-/// Verify that a packed field in a storage slot matches an expected value.
-///
-/// This is a testing utility that extracts a value from a slot at the given offset
-/// and compares it with the expected value, providing a clear error message on mismatch.
-pub fn verify_packed_field<T: Storable<1> + PartialEq + std::fmt::Debug>(
-    slot_value: U256,
-    expected: &T,
-    offset: usize,
-    bytes: usize,
-    field_name: &str,
-) -> Result<()> {
-    let actual: T = extract_packed_value(slot_value, offset, bytes)?;
-    if actual != *expected {
-        return Err(crate::error::TempoPrecompileError::Fatal(format!(
-            "Field '{}' at offset {} ({}bytes) mismatch:\n  Expected: {:?}\n  Actual: {:?}\n  Slot: {}",
-            field_name, offset, bytes, expected, actual, slot_value
-        )));
-    }
-    Ok(())
-}
-
 /// Extract a field value from a storage slot for testing purposes.
 ///
 /// This is a convenience wrapper around `extract_packed_value` that's more
@@ -140,21 +119,20 @@ pub fn extract_field<T: Storable<1>>(slot_value: U256, offset: usize, bytes: usi
     extract_packed_value(slot_value, offset, bytes)
 }
 
-/// Helper function for constructing U256 slot values from hex string literals.
+/// Test helper function for constructing U256 slot values from hex string literals.
 ///
 /// Takes an array of hex strings (with or without "0x" prefix), concatenates
 /// them left-to-right, left-pads with zeros to 32 bytes, and returns a U256.
 ///
 /// # Example
-/// ```
-/// let slot = pack_slot_from_hex(&[
+/// ```ignore
+/// let slot = gen_slot_from(&[
 ///     "0x2a",                                        // 1 byte
 ///     "0x1111111111111111111111111111111111111111",  // 20 bytes
 ///     "0x01",                                        // 1 byte
 /// ]);
 /// // Produces: [10 zeros] [0x2a] [20 bytes of 0x11] [0x01]
 /// ```
-#[cfg(test)]
 pub fn gen_slot_from(values: &[&str]) -> U256 {
     let mut bytes = Vec::new();
 
@@ -253,39 +231,6 @@ mod tests {
         assert_eq!(calc_packed_slot_count(1, 20), 1); // [Address; 1] = 20 bytes
         assert_eq!(calc_packed_slot_count(2, 20), 2); // [Address; 2] = 40 bytes
         assert_eq!(calc_packed_slot_count(3, 20), 2); // [Address; 3] = 60 bytes
-    }
-
-    #[test]
-    fn test_verify_packed_field_success() {
-        // Pack multiple values
-        let u8_val: u8 = 42;
-        let u16_val: u16 = 1000;
-        let u32_val: u32 = 100000;
-
-        let mut slot = U256::ZERO;
-        slot = insert_packed_value(slot, &u8_val, 0, 1).unwrap();
-        slot = insert_packed_value(slot, &u16_val, 1, 2).unwrap();
-        slot = insert_packed_value(slot, &u32_val, 3, 4).unwrap();
-
-        // Verify each field
-        verify_packed_field(slot, &u8_val, 0, 1, "u8_field").unwrap();
-        verify_packed_field(slot, &u16_val, 1, 2, "u16_field").unwrap();
-        verify_packed_field(slot, &u32_val, 3, 4, "u32_field").unwrap();
-    }
-
-    #[test]
-    fn test_verify_packed_field_failure() {
-        let u8_val: u8 = 42;
-        let mut slot = U256::ZERO;
-        slot = insert_packed_value(slot, &u8_val, 0, 1).unwrap();
-
-        // Verify with wrong expected value should fail
-        let wrong_val: u8 = 99;
-        let result = verify_packed_field(slot, &wrong_val, 0, 1, "u8_field");
-        assert!(
-            result.is_err(),
-            "Expected verification to fail for mismatched value"
-        );
     }
 
     #[test]

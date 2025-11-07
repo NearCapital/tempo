@@ -6,12 +6,6 @@
 //! - **Base slot**: Stores the array length (number of elements)
 //! - **Data slots**: Start at `keccak256(base_slot)`, elements packed efficiently
 //!
-//! ## Solidity Compatibility
-//!
-//! This implementation matches Solidity's value packing convention:
-//! - Values are right-aligned within their byte range
-//! - Types smaller than 32 bytes can pack multiple per slot when dimensions align
-//!
 //! ## Limitations
 //!
 //! - Only supports `Storable<1>` element types (single-slot types)
@@ -1007,7 +1001,9 @@ mod tests {
     }
 
     prop_compose! {
-        fn arb_test_struct_vec(max_len: usize) (vec in prop::collection::vec(arb_test_struct(), 0..=max_len)) -> Vec<TestStruct> {
+        fn arb_test_struct_vec(max_len: usize)
+                              (vec in prop::collection::vec(arb_test_struct(), 0..=max_len))
+                              -> Vec<TestStruct> {
             vec
         }
     }

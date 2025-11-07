@@ -1,118 +1,13 @@
-//! Unit tests for the #[derive(Storable)] macro in isolation.
-//! These tests verify that user-defined structs properly implement store, load, and delete operations.
+//! Tests for slot packing rules and field packing correctness.
+//!
+//! This module tests the Storable derive macro's implementation of storage packing,
+//! verifying that fields are correctly packed into slots according to Solidity's rules.
 
-// Re-export `tempo_precompiles::storage` as a local module so `crate::storage` works
-mod storage {
-    pub(super) use tempo_precompiles::storage::*;
-}
+use tempo_precompiles::storage::packing::gen_slot_from;
 
-use alloy::primitives::{Address, U256};
-use proptest::prelude::*;
-use storage::{
-    ContractStorage, PrecompileStorageProvider, Storable, StorableType,
-    hashmap::HashMapStorageProvider,
-    packing::{extract_field, verify_packed_field},
-};
-use tempo_precompiles::error;
-use tempo_precompiles_macros::Storable;
+use super::*;
 
-// Test wrapper that combines address + storage provider to implement ContractStorage
-struct TestStorage<S> {
-    address: Address,
-    storage: S,
-}
-
-impl<S: PrecompileStorageProvider> ContractStorage for TestStorage<S> {
-    type Storage = S;
-    fn address(&self) -> Address {
-        self.address
-    }
-    fn storage(&mut self) -> &mut Self::Storage {
-        &mut self.storage
-    }
-}
-
-// Helper to create a test storage instance
-fn create_storage() -> TestStorage<HashMapStorageProvider> {
-    TestStorage {
-        address: Address::ZERO,
-        storage: HashMapStorageProvider::new(1),
-    }
-}
-
-// Helper to test store + load roundtrip
-fn test_store_load<T, S, const N: usize>(
-    storage: &mut S,
-    base_slot: U256,
-    original: &T,
-) -> error::Result<()>
-where
-    T: Storable<N> + PartialEq + std::fmt::Debug,
-    S: ContractStorage,
-{
-    original.store(storage, base_slot)?;
-    let loaded = T::load(storage, base_slot)?;
-    assert_eq!(&loaded, original, "Store/load roundtrip failed");
-    Ok(())
-}
-
-// Helper to test update operation
-fn test_update<T, S, const N: usize>(
-    storage: &mut S,
-    base_slot: U256,
-    initial: &T,
-    updated: &T,
-) -> error::Result<()>
-where
-    T: Storable<N> + PartialEq + std::fmt::Debug,
-    S: ContractStorage,
-{
-    initial.store(storage, base_slot)?;
-    let loaded1 = T::load(storage, base_slot)?;
-    assert_eq!(&loaded1, initial, "Initial store/load failed");
-
-    updated.store(storage, base_slot)?;
-    let loaded2 = T::load(storage, base_slot)?;
-    assert_eq!(&loaded2, updated, "Update failed");
-    Ok(())
-}
-
-// Helper to test delete operation
-fn test_delete<T, S, const N: usize>(
-    storage: &mut S,
-    base_slot: U256,
-    data: &T,
-) -> error::Result<()>
-where
-    T: Storable<N> + PartialEq + std::fmt::Debug + Default,
-    S: ContractStorage,
-{
-    data.store(storage, base_slot)?;
-    let loaded = T::load(storage, base_slot)?;
-    assert_eq!(&loaded, data, "Initial store/load failed");
-
-    T::delete(storage, base_slot)?;
-    let after_delete = T::load(storage, base_slot)?;
-    let expected_zero = T::default();
-    assert_eq!(&after_delete, &expected_zero, "Delete did not zero values");
-    Ok(())
-}
-
-// -- PROPTEST STRATEGIES ------------------------------------------------------
-
-// Strategy for generating random Address values
-fn arb_address() -> impl Strategy<Value = Address> {
-    any::<[u8; 20]>().prop_map(Address::from)
-}
-
-// Strategy for generating random U256 values
-fn arb_u256() -> impl Strategy<Value = U256> {
-    any::<[u64; 4]>().prop_map(U256::from_limbs)
-}
-
-// -- TEST STRUCTS -------------------------------------------------------------
-
-// Golden Rule 1: Structs Always Start New Slots
+// Rule 1: Structs Always Start New Slots
 #[derive(Default, Debug, Clone, PartialEq, Eq, Storable)]
 struct Rule1Test {
     pub a: u8,             // 1 byte    (slot 0, offset 0)
@@ -123,7 +18,7 @@ fn arb_rule1_test() -> impl Strategy<Value = Rule1Test> {
     (any::<u8>(), arb_packed_two()).prop_map(|(a, nested)| Rule1Test { a, nested })
 }
 
-//  Rule 2: Value Types Pack Sequentially
+// Rule 2: Value Types Pack Sequentially
 #[derive(Default, Debug, Clone, PartialEq, Eq, Storable)]
 struct Rule2Test {
     pub a: u8,  // 1 byte  (slot 0, offset 0)
@@ -141,7 +36,7 @@ fn arb_rule2_test() -> impl Strategy<Value = Rule2Test> {
     })
 }
 
-//  Rule 3: Overflow moves to next slot
+// Rule 3: Overflow moves to next slot (full slot case)
 #[derive(Default, Debug, Clone, PartialEq, Eq, Storable)]
 struct Rule3TestFull {
     pub a: U256, // 32 bytes (slot 0)
@@ -152,7 +47,7 @@ fn arb_rule3_test_full() -> impl Strategy<Value = Rule3TestFull> {
     (arb_u256(), any::<u8>()).prop_map(|(a, b)| Rule3TestFull { a, b })
 }
 
-//  Rule 3: Overflow moves to next slot
+// Rule 3: Overflow moves to next slot (partial slot case)
 #[derive(Default, Debug, Clone, PartialEq, Eq, Storable)]
 struct Rule3TestPartial {
     pub a: u128, // 16 bytes (slot 0, offset 0)
@@ -164,7 +59,7 @@ fn arb_rule3_test_partial() -> impl Strategy<Value = Rule3TestPartial> {
     (any::<u128>(), any::<u128>(), any::<u8>()).prop_map(|(a, b, c)| Rule3TestPartial { a, b, c })
 }
 
-//  Rule 4: Fields after structs start new slots
+// Rule 4: Fields after structs start new slots
 #[derive(Default, Debug, Clone, PartialEq, Eq, Storable)]
 struct Rule4Test {
     pub before: u8,        // 1 byte    (slot 0, offset 0)
@@ -257,11 +152,16 @@ fn arb_deep_nested() -> impl Strategy<Value = DeepNested> {
     })
 }
 
-// -- SLOT COUNT VERIFICATION --------------------------------------------------
+// Struct to test slot boundary at exactly 32 bytes
+#[derive(Storable, Debug, PartialEq)]
+struct ExactFit {
+    pub data: U256,
+    pub flag: bool,
+}
 
 #[test]
 fn test_slot_and_byte_counts() {
-    //  Rule verification
+    // Rule verification
     assert_eq!(Rule1Test::SLOT_COUNT, 2);
     assert_eq!(Rule1Test::BYTE_COUNT, 64);
 
@@ -294,19 +194,7 @@ fn test_slot_and_byte_counts() {
     // Multi-level nesting
     assert_eq!(DeepNested::SLOT_COUNT, 6);
     assert_eq!(DeepNested::BYTE_COUNT, 192);
-
-    // String types - force slot boundaries
-    assert_eq!(WithString::SLOT_COUNT, 3);
-    assert_eq!(WithString::BYTE_COUNT, 96);
-
-    assert_eq!(MultipleStrings::SLOT_COUNT, 2);
-    assert_eq!(MultipleStrings::BYTE_COUNT, 64);
-
-    assert_eq!(NestedWithString::SLOT_COUNT, 5);
-    assert_eq!(NestedWithString::BYTE_COUNT, 160);
 }
-
-// -- TEST SLOT PACKING --------------------------------------------------------
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
@@ -320,7 +208,7 @@ proptest! {
             v % (U256::MAX - U256::from(2000 + 2))
         })
     ) {
-        let mut storage = create_storage();
+        let mut storage = setup_storage();
 
         test_store_load::<Rule1Test, _, 2>(&mut storage, base_slot, &value1)?;
         test_update::<Rule1Test, _, 2>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
@@ -336,7 +224,7 @@ proptest! {
             v % (U256::MAX - U256::from(2000 + 1))
         })
     ) {
-        let mut storage = create_storage();
+        let mut storage = setup_storage();
 
         test_store_load::<Rule2Test, _, 1>(&mut storage, base_slot, &value1)?;
         test_update::<Rule2Test, _, 1>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
@@ -352,7 +240,7 @@ proptest! {
             v % (U256::MAX - U256::from(2000 + 2))
         })
     ) {
-        let mut storage = create_storage();
+        let mut storage = setup_storage();
 
         test_store_load::<Rule3TestFull, _, 2>(&mut storage, base_slot, &value1)?;
         test_update::<Rule3TestFull, _, 2>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
@@ -368,7 +256,7 @@ proptest! {
             v % (U256::MAX - U256::from(2000 + 2))
         })
     ) {
-        let mut storage = create_storage();
+        let mut storage = setup_storage();
 
         test_store_load::<Rule3TestPartial, _, 2>(&mut storage, base_slot, &value1)?;
         test_update::<Rule3TestPartial, _, 2>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
@@ -384,7 +272,7 @@ proptest! {
             v % (U256::MAX - U256::from(2000 + 3))
         })
     ) {
-        let mut storage = create_storage();
+        let mut storage = setup_storage();
 
         test_store_load::<Rule4Test, _, 3>(&mut storage, base_slot, &value1)?;
         test_update::<Rule4Test, _, 3>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
@@ -404,7 +292,7 @@ proptest! {
             v % (U256::MAX - U256::from(2000 + 1))
         })
     ) {
-        let mut storage = create_storage();
+        let mut storage = setup_storage();
 
         test_store_load::<PackedTwo, _, 1>(&mut storage, base_slot, &value1)?;
         test_update::<PackedTwo, _, 1>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
@@ -420,7 +308,7 @@ proptest! {
             v % (U256::MAX - U256::from(2000 + 1))
         })
     ) {
-        let mut storage = create_storage();
+        let mut storage = setup_storage();
 
         test_store_load::<PackedThree, _, 1>(&mut storage, base_slot, &value1)?;
         test_update::<PackedThree, _, 1>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
@@ -436,7 +324,7 @@ proptest! {
             v % (U256::MAX - U256::from(2000 + 3))
         })
     ) {
-        let mut storage = create_storage();
+        let mut storage = setup_storage();
 
         test_store_load::<PartiallyPacked, _, 3>(&mut storage, base_slot, &value1)?;
         test_update::<PartiallyPacked, _, 3>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
@@ -456,7 +344,7 @@ proptest! {
             v % (U256::MAX - U256::from(2000 + 4))
         })
     ) {
-        let mut storage = create_storage();
+        let mut storage = setup_storage();
 
         test_store_load::<WithNestedStruct, _, 4>(&mut storage, base_slot, &value1)?;
         test_update::<WithNestedStruct, _, 4>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
@@ -472,7 +360,7 @@ proptest! {
             v % (U256::MAX - U256::from(2000 + 6))
         })
     ) {
-        let mut storage = create_storage();
+        let mut storage = setup_storage();
 
         test_store_load::<DeepNested, _, 6>(&mut storage, base_slot, &value1)?;
         test_update::<DeepNested, _, 6>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
@@ -480,122 +368,9 @@ proptest! {
     }
 }
 
-// -- STRING TESTS -------------------------------------------------------------
-
-// Rule 5: Strings force slot boundaries (like structs)
-#[derive(Default, Debug, Clone, PartialEq, Eq, Storable)]
-struct WithString {
-    pub a: u8,        // 1 byte    (slot 0, offset 0)
-    pub text: String, // dynamic   (slot 1, offset 0)
-    pub b: u8,        // 1 byte    (slot 2, offset 0)
-}
-
-fn arb_with_string() -> impl Strategy<Value = WithString> {
-    (any::<u8>(), arb_string(), any::<u8>()).prop_map(|(a, text, b)| WithString { a, text, b })
-}
-
-// String with multiple strings
-#[derive(Default, Debug, Clone, PartialEq, Eq, Storable)]
-struct MultipleStrings {
-    pub name: String, // dynamic (slot 0)
-    pub desc: String, // dynamic (slot 1)
-}
-
-fn arb_multiple_strings() -> impl Strategy<Value = MultipleStrings> {
-    (arb_string(), arb_string()).prop_map(|(name, desc)| MultipleStrings { name, desc })
-}
-
-// Nested struct containing a string
-#[derive(Default, Debug, Clone, PartialEq, Eq, Storable)]
-struct NestedWithString {
-    pub id: u64,          // 8 bytes (slot 0, offset 0)
-    pub data: WithString, // 3 slots (slots 1-3)
-    pub flag: bool,       // 1 byte  (slot 4, offset 0)
-}
-
-fn arb_nested_with_string() -> impl Strategy<Value = NestedWithString> {
-    (any::<u64>(), arb_with_string(), any::<bool>()).prop_map(|(id, data, flag)| NestedWithString {
-        id,
-        data,
-        flag,
-    })
-}
-
-// Strategy for generating random strings of various sizes
-fn arb_string() -> impl Strategy<Value = String> {
-    prop_oneof![
-        // Empty string
-        Just(String::new()),
-        // Short strings (1-31 bytes) - inline storage
-        "[a-zA-Z0-9]{1,31}",
-        // Boundary: exactly 31 bytes (last short string)
-        "[a-zA-Z0-9]{31}",
-        // Boundary: exactly 32 bytes (first long string)
-        "[a-zA-Z0-9]{32}",
-        // Long strings (33-100 bytes)
-        "[a-zA-Z0-9]{33,100}",
-        // Unicode strings
-        "[\u{0041}-\u{005A}\u{4E00}-\u{9FFF}]{1,20}",
-    ]
-}
-
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(100))]
-
-    #[test]
-    fn test_string_forces_slot_boundaries(
-        value1 in arb_with_string(),
-        value2 in arb_with_string(),
-        base_slot in arb_u256().prop_map(|v| {
-            // WithString uses 3 slots, max offset is 2000, prevent overflow
-            v % (U256::MAX - U256::from(2000 + 3))
-        })
-    ) {
-        let mut storage = create_storage();
-
-        test_store_load::<WithString, _, 3>(&mut storage, base_slot, &value1)?;
-        test_update::<WithString, _, 3>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
-        test_delete::<WithString, _, 3>(&mut storage, base_slot + U256::from(2000), &value1)?;
-    }
-
-    #[test]
-    fn test_multiple_strings(
-        value1 in arb_multiple_strings(),
-        value2 in arb_multiple_strings(),
-        base_slot in arb_u256().prop_map(|v| {
-            // MultipleStrings uses 2 slots, max offset is 2000, prevent overflow
-            v % (U256::MAX - U256::from(2000 + 2))
-        })
-    ) {
-        let mut storage = create_storage();
-
-        test_store_load::<MultipleStrings, _, 2>(&mut storage, base_slot, &value1)?;
-        test_update::<MultipleStrings, _, 2>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
-        test_delete::<MultipleStrings, _, 2>(&mut storage, base_slot + U256::from(2000), &value1)?;
-    }
-
-    #[test]
-    fn test_nested_struct_with_string(
-        value1 in arb_nested_with_string(),
-        value2 in arb_nested_with_string(),
-        base_slot in arb_u256().prop_map(|v| {
-            // NestedWithString uses 5 slots, max offset is 2000, prevent overflow
-            v % (U256::MAX - U256::from(2000 + 5))
-        })
-    ) {
-        let mut storage = create_storage();
-
-        test_store_load::<NestedWithString, _, 5>(&mut storage, base_slot, &value1)?;
-        test_update::<NestedWithString, _, 5>(&mut storage, base_slot + U256::from(1000), &value1, &value2)?;
-        test_delete::<NestedWithString, _, 5>(&mut storage, base_slot + U256::from(2000), &value1)?;
-    }
-}
-
-// -- SLOT CONTENT VALIDATION TESTS --------------------------------------------
-
 #[test]
 fn test_packed_two_slot_contents() {
-    let mut storage = create_storage();
+    let mut storage = setup_storage();
     let base_slot = U256::from(100);
 
     let value = PackedTwo {
@@ -605,20 +380,21 @@ fn test_packed_two_slot_contents() {
 
     value.store(&mut storage, base_slot).unwrap();
 
-    // PackedTwo should occupy exactly 1 slot with addr (20 bytes) + count (8 bytes)
+    // PackedTwo should occupy 1 slot with addr (20 bytes) + count (8 bytes)
     let addr = storage.address();
     let slot0 = storage.storage().sload(addr, base_slot).unwrap();
 
     // Verify each field at its correct position
-    // addr: offset 0, 20 bytes
-    // count: offset 20, 8 bytes
-    verify_packed_field(slot0, &value.addr, 0, 20, "addr").unwrap();
-    verify_packed_field(slot0, &value.count, 20, 8, "count").unwrap();
+    let expected = gen_slot_from(&[
+        "0x1234567890ABCDEF",                         // offset 20 (8 bytes)
+        "0x1212121212121212121212121212121212121212", // offset 0 (20 bytes)
+    ]);
+    assert_eq!(slot0, expected);
 }
 
 #[test]
 fn test_packed_three_slot_contents() {
-    let mut storage = create_storage();
+    let mut storage = setup_storage();
     let base_slot = U256::from(200);
 
     let value = PackedThree {
@@ -637,14 +413,17 @@ fn test_packed_three_slot_contents() {
     // a: offset 0, 8 bytes
     // b: offset 8, 8 bytes
     // c: offset 16, 8 bytes
-    verify_packed_field(slot0, &value.a, 0, 8, "a").unwrap();
-    verify_packed_field(slot0, &value.b, 8, 8, "b").unwrap();
-    verify_packed_field(slot0, &value.c, 16, 8, "c").unwrap();
+    let expected = gen_slot_from(&[
+        "0x3333333333333333", // offset 16 (8 bytes)
+        "0x2222222222222222", // offset 8 (8 bytes)
+        "0x1111111111111111", // offset 0 (8 bytes)
+    ]);
+    assert_eq!(slot0, expected);
 }
 
 #[test]
 fn test_rule2_slot_contents() {
-    let mut storage = create_storage();
+    let mut storage = setup_storage();
     let base_slot = U256::from(300);
 
     let value = Rule2Test {
@@ -665,15 +444,18 @@ fn test_rule2_slot_contents() {
     // b: offset 1, 2 bytes
     // c: offset 3, 4 bytes
     // d: offset 7, 8 bytes
-    verify_packed_field(slot0, &value.a, 0, 1, "a").unwrap();
-    verify_packed_field(slot0, &value.b, 1, 2, "b").unwrap();
-    verify_packed_field(slot0, &value.c, 3, 4, "c").unwrap();
-    verify_packed_field(slot0, &value.d, 7, 8, "d").unwrap();
+    let expected = gen_slot_from(&[
+        "0x123456789ABCDEF0", // offset 7 (8 bytes)
+        "0xABCDEF01",         // offset 3 (4 bytes)
+        "0x1234",             // offset 1 (2 bytes)
+        "0x42",               // offset 0 (1 byte)
+    ]);
+    assert_eq!(slot0, expected);
 }
 
 #[test]
 fn test_partially_packed_slot_contents() {
-    let mut storage = create_storage();
+    let mut storage = setup_storage();
     let base_slot = U256::from(400);
 
     let value = PartiallyPacked {
@@ -702,8 +484,11 @@ fn test_partially_packed_slot_contents() {
         .unwrap();
 
     // Verify slot 0 fields
-    verify_packed_field(slot0, &value.addr1, 0, 20, "addr1").unwrap();
-    verify_packed_field(slot0, &value.flag, 20, 1, "flag").unwrap();
+    let expected = gen_slot_from(&[
+        "0x01",                                       // offset 20 (1 byte)
+        "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", // offset 0 (20 bytes)
+    ]);
+    assert_eq!(slot0, expected);
 
     // Verify slot 1: value should be directly stored (not packed)
     assert_eq!(slot1, value.value, "value field mismatch in slot 1");
@@ -718,7 +503,7 @@ fn test_partially_packed_slot_contents() {
 
 #[test]
 fn test_partial_update_preserves_adjacent_fields() {
-    let mut storage = create_storage();
+    let mut storage = setup_storage();
     let base_slot = U256::from(500);
 
     // Store initial value with all fields set
@@ -752,7 +537,7 @@ fn test_partial_update_preserves_adjacent_fields() {
 
 #[test]
 fn test_delete_zeros_all_slots() {
-    let mut storage = create_storage();
+    let mut storage = setup_storage();
     let base_slot = U256::from(600);
 
     let value = PartiallyPacked {
@@ -812,15 +597,9 @@ fn test_delete_zeros_all_slots() {
     assert_eq!(slot2_after, U256::ZERO, "slot 2 not zeroed after delete");
 }
 
-#[derive(Storable, Debug, PartialEq)]
-struct ExactFit {
-    pub data: U256,
-    pub flag: bool,
-}
-
 #[test]
 fn test_slot_boundary_at_32_bytes() {
-    let mut storage = create_storage();
+    let mut storage = setup_storage();
     let base_slot = U256::from(800);
 
     let value = ExactFit {
