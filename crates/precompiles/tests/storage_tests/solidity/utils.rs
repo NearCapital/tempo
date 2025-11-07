@@ -67,48 +67,40 @@ pub(super) struct TypeDefinition {
 /// Loads a storage layout from a Solidity source file by running solc.
 ///
 /// **NOTE:** assumes 1 contract per file.
-pub(super) fn load_solc_layout(sol_file: &Path, save_json: bool) -> Result<StorageLayout, String> {
+pub(super) fn load_solc_layout(sol_file: &Path) -> StorageLayout {
     if sol_file.extension().and_then(|s| s.to_str()) != Some("sol") {
-        return Err(format!("Expected .sol file, got: {}", sol_file.display()));
+        panic!("expected .sol file, got: {}", sol_file.display());
     }
 
-    // Run solc with storage-layout output
-    let output = Command::new("solc")
-        .arg("--combined-json")
-        .arg("storage-layout")
-        .arg(sol_file)
-        .output()
-        .map_err(|e| format!("Failed to run solc: {e}"))?;
+    let json_path = sol_file.with_extension("layout.json");
+    let content = std::fs::read_to_string(&json_path).unwrap_or_else(|_| {
+        // Run solc with storage-layout output
+        let output = Command::new("solc")
+            .arg("--combined-json")
+            .arg("storage-layout")
+            .arg(sol_file)
+            .output()
+            .expect("failed to run solc");
 
-    if !output.status.success() {
-        return Err(format!(
-            "solc failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
+        if !output.status.success() {
+            panic!("solc failed: {}", String::from_utf8_lossy(&output.stderr));
+        }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+        let content = String::from_utf8_lossy(&output.stdout).to_string();
+        std::fs::write(&json_path, &content).expect("failed to write JSON file");
+        content
+    });
+
     let solc_output: SolcOutput =
-        serde_json::from_str(&stdout).map_err(|e| format!("Failed to parse solc output: {e}"))?;
-
-    // Optionally save the JSON output (for debugging)
-    if save_json {
-        let json_path = sol_file.with_extension("layout.json");
-        let json_content = serde_json::to_string_pretty(&solc_output)
-            .map_err(|e| format!("Failed to serialize layout: {e}"))?;
-        std::fs::write(&json_path, json_content)
-            .map_err(|e| format!("Failed to write JSON file: {e}"))?;
-    }
+        serde_json::from_str(&content).expect("failed to parse solc output");
 
     // Extract the first contract's storage layout
-    let layout = solc_output
+    solc_output
         .contracts
         .values()
         .next()
         .map(|contract| contract.storage_layout.clone())
-        .ok_or_else(|| "No contracts found in solc output".to_string())?;
-
-    Ok(layout)
+        .expect("no contracts found in solc output")
 }
 
 /// Represents a Rust storage field extracted from generated constants.
