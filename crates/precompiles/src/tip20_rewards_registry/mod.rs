@@ -135,7 +135,7 @@ mod tests {
     use crate::{
         LINKING_USD_ADDRESS,
         error::TempoPrecompileError,
-        storage::hashmap::HashMapStorageProvider,
+        storage::{ContractStorage, hashmap::HashMapStorageProvider},
         tip20::{ISSUER_ROLE, TIP20Token, tests::initialize_linking_usd},
         tip20_rewards_registry::TIP20RewardsRegistry,
     };
