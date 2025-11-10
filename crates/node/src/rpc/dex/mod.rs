@@ -15,8 +15,8 @@ use reth_rpc_eth_types::{EthApiError, error::FromEthApiError};
 use tempo_evm::TempoEvmConfig;
 use tempo_precompiles::{
     stablecoin_exchange::{
-        Order as PrecompileOrder, Orderbook as PrecompileOrderbook, PriceLevel, StablecoinExchange,
-        TickBitmap, orderbook::compute_book_key,
+        Order as PrecompileOrder, Orderbook as PrecompileOrderbook, StablecoinExchange, TickBitmap,
+        TickLevel, orderbook::compute_book_key,
     },
     storage::evm::EvmPrecompileStorageProvider,
 };
@@ -85,8 +85,7 @@ impl<
 
             // Iterate through books collecting orders until we reach the limit
             for book_key in book_keys {
-                let orderbook =
-                    PrecompileOrderbook::from_storage(book_key, storage, exchange_address)?;
+                let orderbook = exchange.books(book_key)?;
 
                 // Check if this book matches the base/quote filter
                 if !orderbook.matches_tokens(base_token, quote_token) {
@@ -128,6 +127,8 @@ impl<
                 if all_orders.len() > limit {
                     break;
                 }
+
+                exchange = StablecoinExchange::new(storage);
             }
 
             // Truncate to limit
@@ -474,20 +475,18 @@ impl<'a, 'b> BookIterator<'a, 'b> {
 
     /// Get a PrecompileOrder from an order ID
     pub fn get_order(&mut self, order_id: u128) -> Result<PrecompileOrder, DexApiError> {
-        PrecompileOrder::from_storage(order_id, self.storage, self.exchange_address)
+        let mut exchange = StablecoinExchange::new(self.storage);
+        exchange
+            .get_order(order_id)
             .map_err(DexApiError::Precompile)
     }
 
-    /// Get a PriceLevel from a tick
-    pub fn get_price_level(&mut self, tick: i16) -> Result<PriceLevel, DexApiError> {
-        PriceLevel::from_storage(
-            self.storage,
-            self.exchange_address,
-            self.book_key,
-            tick,
-            self.bids,
-        )
-        .map_err(DexApiError::Precompile)
+    /// Get a TickLevel from a tick
+    pub fn get_price_level(&mut self, tick: i16) -> Result<TickLevel, DexApiError> {
+        let mut exchange = StablecoinExchange::new(self.storage);
+        exchange
+            .get_price_level(self.orderbook.base, tick, self.bids)
+            .map_err(DexApiError::Precompile)
     }
 
     /// Get the next initialized tick after the given tick
