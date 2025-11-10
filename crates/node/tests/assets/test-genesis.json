@@ -28,7 +28,11 @@
   "gasLimit": "0xf761ef61000",
   "difficulty": "0x0",
   "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+<<<<<<< HEAD
   "coinbase": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+=======
+  "coinbase": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+>>>>>>> a7b95b6 (fix: remove --fund-test-accounts flag from generate-genesis (#813))
   "alloc": {
     "0x000000000022d473030f116ddee9f6b43ac78ba3": {
       "nonce": "0x1",
@@ -1336,7 +1340,11 @@
         "0x0000000000000000000000000000000000000000000000000000000000000000": "0x0000000000000000000000000000000000000000000000000000000000000004"
       }
     },
+<<<<<<< HEAD
     "0x2100000000000000000000000000000000000000": {
+=======
+    "0x3000000000000000000000000000000000000000": {
+>>>>>>> a7b95b6 (fix: remove --fund-test-accounts flag from generate-genesis (#813))
       "nonce": "0x0",
       "balance": "0x0",
       "code": "0xef"

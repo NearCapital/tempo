@@ -77,6 +77,13 @@ pub(crate) struct GenesisArgs {
     #[arg(long, default_value = "0xD3C21BCECCEDA1000000")]
     pub balance: U256,
 
+<<<<<<< HEAD
+=======
+    /// Coinbase address
+    #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
+    pub coinbase: Address,
+
+>>>>>>> a7b95b6 (fix: remove --fund-test-accounts flag from generate-genesis (#813))
     /// Chain ID
     #[arg(long, short, default_value = "1337")]
     pub chain_id: u64,
@@ -303,7 +310,7 @@ impl GenesisArgs {
             .with_base_fee(Some(self.base_fee_per_gas))
             .with_nonce(0x42)
             .with_extra_data(Bytes::from_static(b"tempo-genesis"))
-            .with_coinbase(Address::ZERO);
+            .with_coinbase(self.coinbase);
 
         genesis.alloc = genesis_alloc;
         genesis.config = chain_config;
