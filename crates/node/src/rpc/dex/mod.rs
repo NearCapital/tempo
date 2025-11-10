@@ -83,13 +83,10 @@ impl<
             let mut all_orders: Vec<Order> = Vec::new();
             let mut next_cursor = None;
 
-            // TODO: Fix borrowing conflict between exchange and BookIterator both using storage mutably
-            // Need to restructure so that storage isn't borrowed twice
-
             // Iterate through books collecting orders until we reach the limit
             for book_key in book_keys {
-                // let orderbook = exchange.books(book_key)?;
-                let orderbook: PrecompileOrderbook = todo!("Fix borrowing conflict with storage");
+                // Get orderbook using exchange, then drop the exchange to free up storage borrow
+                let orderbook = exchange.books(book_key)?;
 
                 // Check if this book matches the base/quote filter
                 if !orderbook.matches_tokens(base_token, quote_token) {
@@ -102,15 +99,15 @@ impl<
                     None
                 };
 
-                // let book_iterator = BookIterator::new(
-                //     storage,
-                //     &orderbook,
-                //     exchange_address,
-                //     is_bid,
-                //     starting_order,
-                //     params.filters.clone(),
-                // );
-                let book_iterator: BookIterator = todo!("Fix borrowing conflict with storage");
+                // Now create BookIterator with storage
+                let book_iterator = BookIterator::new(
+                    storage,
+                    &orderbook,
+                    exchange_address,
+                    is_bid,
+                    starting_order,
+                    params.filters.clone(),
+                );
 
                 // Collect orders from this book, up to limit + 1
                 for order_result in book_iterator {
@@ -132,6 +129,9 @@ impl<
                 if all_orders.len() > limit {
                     break;
                 }
+
+                // Recreate exchange for next iteration
+                exchange = StablecoinExchange::new(storage);
             }
 
             // Truncate to limit
