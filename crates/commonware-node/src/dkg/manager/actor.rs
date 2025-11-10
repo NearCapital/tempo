@@ -205,7 +205,7 @@ where
             p2p_metadata,
             epoch_state,
             metrics,
-            p2p_states: P2pStates::new(),
+            p2p_states,
         })
     }
 
