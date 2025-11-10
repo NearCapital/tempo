@@ -93,8 +93,10 @@ pub struct Orderbook {
 
 // Helper type to easily access storage for orderbook tokens (base, quote)
 type Tokens = Slot<Address, DummySlot>;
-// Helper type to easily access storage for orderbook orders (best bid, best ask)
-type Orders = Slot<i16, DummySlot>;
+// Helper type to easile access storage for orders (bids, asks)
+type Orders = Mapping<i16, TickLevel, DummySlot>;
+// Helper type to easily access storage for best orderbook orders (best bid, best ask)
+type BestOrders = Slot<i16, DummySlot>;
 
 impl Orderbook {
     /// Creates a new orderbook for a token pair
@@ -143,7 +145,7 @@ impl Orderbook {
         new_best_bid: i16,
     ) -> Result<(), TempoPrecompileError> {
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::Field0Slot::SLOT);
-        Orders::write_at_offset_packed(
+        BestOrders::write_at_offset_packed(
             contract,
             orderbook_base_slot,
             __packing_orderbook::FIELD_4_SLOT,
@@ -161,7 +163,7 @@ impl Orderbook {
         new_best_ask: i16,
     ) -> Result<(), TempoPrecompileError> {
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::Field0Slot::SLOT);
-        Orders::write_at_offset_packed(
+        BestOrders::write_at_offset_packed(
             contract,
             orderbook_base_slot,
             __packing_orderbook::FIELD_5_SLOT,
@@ -194,7 +196,7 @@ impl Orderbook {
         tick: i16,
     ) -> Result<TickLevel, TempoPrecompileError> {
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::Field0Slot::SLOT);
-        Mapping::<i16, TickLevel, DummySlot>::read_at_offset(
+        Orders::read_at_offset(
             storage,
             orderbook_base_slot,
             __packing_orderbook::FIELD_2_SLOT,
@@ -210,7 +212,7 @@ impl Orderbook {
         tick_level: TickLevel,
     ) -> Result<(), TempoPrecompileError> {
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::Field0Slot::SLOT);
-        Mapping::<i16, TickLevel, DummySlot>::write_at_offset(
+        Orders::write_at_offset(
             storage,
             orderbook_base_slot,
             __packing_orderbook::FIELD_2_SLOT,
@@ -226,7 +228,7 @@ impl Orderbook {
         tick: i16,
     ) -> Result<(), TempoPrecompileError> {
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::Field0Slot::SLOT);
-        Mapping::<i16, TickLevel, DummySlot>::delete_at_offset(
+        Orders::delete_at_offset(
             storage,
             orderbook_base_slot,
             __packing_orderbook::FIELD_2_SLOT,
@@ -241,7 +243,7 @@ impl Orderbook {
         tick: i16,
     ) -> Result<TickLevel, TempoPrecompileError> {
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::Field0Slot::SLOT);
-        Mapping::<i16, TickLevel, DummySlot>::read_at_offset(
+        Orders::read_at_offset(
             storage,
             orderbook_base_slot,
             __packing_orderbook::FIELD_3_SLOT,
@@ -257,7 +259,7 @@ impl Orderbook {
         tick_level: TickLevel,
     ) -> Result<(), TempoPrecompileError> {
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::Field0Slot::SLOT);
-        Mapping::<i16, TickLevel, DummySlot>::write_at_offset(
+        Orders::write_at_offset(
             storage,
             orderbook_base_slot,
             __packing_orderbook::FIELD_3_SLOT,
@@ -273,7 +275,7 @@ impl Orderbook {
         tick: i16,
     ) -> Result<(), TempoPrecompileError> {
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::Field0Slot::SLOT);
-        Mapping::<i16, TickLevel, DummySlot>::delete_at_offset(
+        Orders::delete_at_offset(
             storage,
             orderbook_base_slot,
             __packing_orderbook::FIELD_3_SLOT,

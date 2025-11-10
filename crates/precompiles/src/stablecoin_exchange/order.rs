@@ -64,6 +64,11 @@ pub struct Order {
     pub flip_tick: i16,
 }
 
+// Helper type to easily interact with u128 fields (order_id, prev, next)
+type OrderId = Slot<u128, DummySlot>;
+// Helper type to easily interact with u128 fields (amount, remaining)
+type OrderAmount = Slot<u128, DummySlot>;
+
 impl Order {
     /// Creates a new order with `prev` and `next` initialized to 0.
     #[allow(clippy::too_many_arguments)]
@@ -153,7 +158,7 @@ impl Order {
         new_remaining: u128,
     ) -> Result<(), TempoPrecompileError> {
         let order_base_slot = mapping_slot(order_id.to_be_bytes(), super::slots::Field1Slot::SLOT);
-        Slot::<u128, DummySlot>::write_at_offset_packed(
+        OrderAmount::write_at_offset_packed(
             storage,
             order_base_slot,
             __packing_order::FIELD_6_SLOT,
@@ -170,7 +175,7 @@ impl Order {
         new_next: u128,
     ) -> Result<(), TempoPrecompileError> {
         let order_base_slot = mapping_slot(order_id.to_be_bytes(), super::slots::Field1Slot::SLOT);
-        Slot::<u128, DummySlot>::write_at_offset_packed(
+        OrderId::write_at_offset_packed(
             storage,
             order_base_slot,
             __packing_order::FIELD_8_SLOT,
@@ -187,7 +192,7 @@ impl Order {
         new_prev: u128,
     ) -> Result<(), TempoPrecompileError> {
         let order_base_slot = mapping_slot(order_id.to_be_bytes(), super::slots::Field1Slot::SLOT);
-        Slot::<u128, DummySlot>::write_at_offset_packed(
+        OrderId::write_at_offset_packed(
             storage,
             order_base_slot,
             __packing_order::FIELD_7_SLOT,
