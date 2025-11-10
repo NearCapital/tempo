@@ -27,7 +27,7 @@ use commonware_utils::{
 use futures::future::join_all;
 use itertools::Itertools as _;
 use reth_node_metrics::recorder::PrometheusRecorder;
-use tempo_commonware_node::{consensus, subblocks};
+use tempo_commonware_node::consensus;
 use tracing::debug;
 
 pub mod execution_runtime;
@@ -68,8 +68,6 @@ pub struct RunningNode {
     pub public_key: PublicKey,
 
     pub oracle: simulated::Oracle<PublicKey>,
-
-    pub subblocks: subblocks::Mailbox,
 }
 
 impl Node {
@@ -82,7 +80,6 @@ impl Node {
             .try_init()
             .await
             .expect("must be able to start the engine");
-        let subblocks_mailbox = engine.subblocks_mailbox();
         let pending = oracle
             .control(public_key.clone())
             .register(0)
@@ -142,7 +139,6 @@ impl Node {
             node: self.node,
             public_key,
             oracle,
-            subblocks: subblocks_mailbox,
         }
     }
 }

@@ -11,7 +11,7 @@ pub(crate) mod epoch;
 pub(crate) mod marshal_utils;
 pub mod metrics;
 
-pub mod subblocks;
+pub(crate) mod subblocks;
 
 use commonware_cryptography::ed25519::{PrivateKey, PublicKey};
 use commonware_p2p::authenticated::lookup;
