@@ -264,8 +264,28 @@ pub struct Orderbook {
     pub best_bid_tick: i16,
     /// Best ask tick for lowest ask price
     pub best_ask_tick: i16,
+<<<<<<< HEAD
 }
 
+=======
+    #[allow(dead_code)]
+    /// Mapping of tick index to bid bitmap for price discovery
+    bid_bitmap: Mapping<i16, U256, DummySlot>,
+    /// Mapping of tick index to ask bitmap for price discovery
+    #[allow(dead_code)]
+    ask_bitmap: Mapping<i16, U256, DummySlot>,
+}
+
+// Helper type to easily access storage for orderbook tokens (base, quote)
+type Tokens = Slot<Address, DummySlot>;
+// Helper type to easily access storage for best orderbook orders (best_bid, best_ask)
+type BestOrders = Slot<i16, DummySlot>;
+// Helper type to easile access storage for orders (bids, asks)
+type Orders = Mapping<i16, TickLevel, DummySlot>;
+// Helper type to easily access storage for bitmaps (bid_bitmap, ask_bitmap)
+type BitMaps = Mapping<i16, U256, DummySlot>;
+
+>>>>>>> d44aebd (test(precompiles): ensure layout matches solc's (#821))
 impl Orderbook {
     // Orderbook struct field offsets
     /// Base token address field offset
@@ -467,9 +487,21 @@ impl<'a, S: PrecompileStorageProvider> TickBitmap<'a, S> {
         let bit_index = (tick & 0xFF) as usize;
         let mask = U256::from(1u8) << bit_index;
 
+<<<<<<< HEAD
         // Get storage slot for this word in the bitmap
         let bitmap_slot = self.get_bitmap_slot(word_index, is_bid);
         let current_word = self.storage.sload(self.address, bitmap_slot)?;
+=======
+        // Read current bitmap word
+        let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::BooksSlot::SLOT);
+        let bitmap_slot = if is_bid {
+            __packing_orderbook::BID_BITMAP_SLOT
+        } else {
+            __packing_orderbook::ASK_BITMAP_SLOT
+        };
+        let current_word =
+            BitMaps::read_at_offset(storage, orderbook_base_slot, bitmap_slot, word_index)?;
+>>>>>>> d44aebd (test(precompiles): ensure layout matches solc's (#821))
 
         // Set the bit
         let new_word = current_word | mask;
@@ -490,9 +522,21 @@ impl<'a, S: PrecompileStorageProvider> TickBitmap<'a, S> {
         let bit_index = (tick & 0xFF) as usize;
         let mask = !(U256::from(1u8) << bit_index);
 
+<<<<<<< HEAD
         // Get storage slot for this word in the bitmap
         let bitmap_slot = self.get_bitmap_slot(word_index, is_bid);
         let current_word = self.storage.sload(self.address, bitmap_slot)?;
+=======
+        // Read current bitmap word
+        let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::BooksSlot::SLOT);
+        let bitmap_slot = if is_bid {
+            __packing_orderbook::BID_BITMAP_SLOT
+        } else {
+            __packing_orderbook::ASK_BITMAP_SLOT
+        };
+        let current_word =
+            BitMaps::read_at_offset(storage, orderbook_base_slot, bitmap_slot, word_index)?;
+>>>>>>> d44aebd (test(precompiles): ensure layout matches solc's (#821))
 
         // Clear the bit
         let new_word = current_word & mask;
@@ -517,8 +561,18 @@ impl<'a, S: PrecompileStorageProvider> TickBitmap<'a, S> {
         let bit_index = (tick & 0xFF) as usize;
         let mask = U256::from(1u8) << bit_index;
 
+<<<<<<< HEAD
         let bitmap_slot = self.get_bitmap_slot(word_index, is_bid);
         let word = self.storage.sload(self.address, bitmap_slot)?;
+=======
+        let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::BooksSlot::SLOT);
+        let bitmap_slot = if is_bid {
+            __packing_orderbook::BID_BITMAP_SLOT
+        } else {
+            __packing_orderbook::ASK_BITMAP_SLOT
+        };
+        let word = BitMaps::read_at_offset(storage, orderbook_base_slot, bitmap_slot, word_index)?;
+>>>>>>> d44aebd (test(precompiles): ensure layout matches solc's (#821))
 
         Ok((word & mask) != U256::ZERO)
     }

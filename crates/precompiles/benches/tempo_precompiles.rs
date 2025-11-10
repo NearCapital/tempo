@@ -241,7 +241,7 @@ fn tip20_mutate(c: &mut Criterion) {
             )
             .unwrap();
 
-        let amount = U256::from(1);
+        let amount = U256::ONE;
         b.iter(|| {
             let token = black_box(&mut token);
             let admin = black_box(admin);
@@ -292,7 +292,7 @@ fn tip20_mutate(c: &mut Criterion) {
             )
             .unwrap();
 
-        let amount = U256::from(1);
+        let amount = U256::ONE;
         b.iter(|| {
             let token = black_box(&mut token);
             let from = black_box(from);
@@ -334,7 +334,7 @@ fn tip20_mutate(c: &mut Criterion) {
             )
             .unwrap();
 
-        let amount = U256::from(1);
+        let amount = U256::ONE;
 
         b.iter(|| {
             let token = black_box(&mut token);
@@ -372,7 +372,7 @@ fn tip20_mutate(c: &mut Criterion) {
             )
             .unwrap();
 
-        let amount = U256::from(1);
+        let amount = U256::ONE;
         b.iter(|| {
             let token = black_box(&mut token);
             let from = black_box(from);

@@ -181,7 +181,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
     pub fn update_rewards(&mut self, holder: Address) -> Result<Address> {
         let mut info = UserRewardInfo::from_storage(holder, self.storage, self.token_address)?;
 
-        let cached_delegate = info.delegated_recipient;
+        let cached_delegate = info.reward_recipient;
 
         let global_reward_per_token = self.get_global_reward_per_token()?;
         let reward_per_token_delta = global_reward_per_token
@@ -257,9 +257,15 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
             self.set_opted_in_supply(opted_in_supply)?;
         }
 
+<<<<<<< HEAD
         let mut info = UserRewardInfo::from_storage(msg_sender, self.storage, self.token_address)?;
         info.delegated_recipient = call.recipient;
         info.store(msg_sender, self.storage, self.token_address)?;
+=======
+        let mut info = self.sload_user_reward_info(msg_sender)?;
+        info.reward_recipient = call.recipient;
+        self.sstore_user_reward_info(msg_sender, info)?;
+>>>>>>> d44aebd (test(precompiles): ensure layout matches solc's (#821))
 
         // Emit reward recipient set event
         self.storage.emit_event(
@@ -430,6 +436,10 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
         let contract_balance = self.get_balance(contract_address)?;
         let max_amount = amount.min(contract_balance);
 
+<<<<<<< HEAD
+=======
+        let reward_recipient = info.reward_recipient;
+>>>>>>> d44aebd (test(precompiles): ensure layout matches solc's (#821))
         info.reward_balance = amount
             .checked_sub(max_amount)
             .ok_or(TempoPrecompileError::under_overflow())?;
@@ -447,7 +457,11 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
                 .ok_or(TempoPrecompileError::under_overflow())?;
             self.set_balance(msg_sender, recipient_balance)?;
 
+<<<<<<< HEAD
             if info.delegated_recipient != Address::ZERO {
+=======
+            if reward_recipient != Address::ZERO {
+>>>>>>> d44aebd (test(precompiles): ensure layout matches solc's (#821))
                 let opted_in_supply = U256::from(self.get_opted_in_supply()?)
                     .checked_add(max_amount)
                     .ok_or(TempoPrecompileError::under_overflow())?;
@@ -602,7 +616,7 @@ impl<'a, S: PrecompileStorageProvider> TIP20Token<'a, S> {
 
 #[derive(Debug, Clone)]
 pub struct UserRewardInfo {
-    pub delegated_recipient: Address,
+    pub reward_recipient: Address,
     pub reward_per_token: U256,
     pub reward_balance: U256,
 }
@@ -840,7 +854,7 @@ impl From<RewardStream> for ITIP20::RewardStream {
 impl From<UserRewardInfo> for ITIP20::UserRewardInfo {
     fn from(value: UserRewardInfo) -> Self {
         Self {
-            delegatedRecipient: value.delegated_recipient,
+            rewardRecipient: value.reward_recipient,
             rewardPerToken: value.reward_per_token,
             rewardBalance: value.reward_balance,
         }
@@ -926,8 +940,13 @@ mod tests {
 
         token.set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
 
+<<<<<<< HEAD
         let info = UserRewardInfo::from_storage(alice, token.storage, token.token_address)?;
         assert_eq!(info.delegated_recipient, alice);
+=======
+        let info = token.sload_user_reward_info(alice)?;
+        assert_eq!(info.reward_recipient, alice);
+>>>>>>> d44aebd (test(precompiles): ensure layout matches solc's (#821))
         assert_eq!(token.get_opted_in_supply()?, amount.to::<u128>());
         assert_eq!(info.reward_per_token, U256::ZERO);
 
@@ -938,8 +957,13 @@ mod tests {
             },
         )?;
 
+<<<<<<< HEAD
         let info = UserRewardInfo::from_storage(alice, token.storage, token.token_address)?;
         assert_eq!(info.delegated_recipient, Address::ZERO);
+=======
+        let info = token.sload_user_reward_info(alice)?;
+        assert_eq!(info.reward_recipient, Address::ZERO);
+>>>>>>> d44aebd (test(precompiles): ensure layout matches solc's (#821))
         assert_eq!(token.get_opted_in_supply()?, 0u128);
         assert_eq!(info.reward_per_token, U256::ZERO);
 
