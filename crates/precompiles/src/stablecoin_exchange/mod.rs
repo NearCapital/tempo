@@ -338,13 +338,6 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
         self.sload_books(pair_key)
     }
 
-    /// Add book key to book keys array
-    /// This function adds the specified book key to the `book_keys` array in storage
-    /// and increments the length of the array
-    fn push_to_book_keys(&mut self, book_key: B256) -> Result<()> {
-        BookKeys::push(self, book_key)
-    }
-
     /// Get all book keys
     pub fn get_book_keys(&mut self) -> Result<Vec<B256>> {
         self.sload_book_keys()
