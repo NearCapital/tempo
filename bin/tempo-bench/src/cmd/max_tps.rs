@@ -1,6 +1,6 @@
 use alloy::{
     eips::BlockNumberOrTag::Latest,
-    network::{Ethereum, EthereumWallet, Network, TransactionBuilder, TxSignerSync},
+    network::{Ethereum, EthereumWallet, TransactionBuilder, TxSignerSync},
     primitives::{Address, BlockNumber, ChainId, TxKind, U256},
     providers::{
         PendingTransactionBuilder, Provider, ProviderBuilder, RootProvider,
@@ -9,11 +9,12 @@ use alloy::{
             WalletFiller,
         },
     },
+    rpc::types::TransactionRequest,
     sol,
     sol_types::{SolCall, SolEvent},
     transports::http::reqwest::Url,
 };
-use alloy_consensus::{SignableTransaction, TxLegacy, transaction::RlpEcdsaEncodableTx};
+use alloy_consensus::{SignableTransaction, TxLegacy};
 use alloy_signer_local::{MnemonicBuilder, PrivateKeySigner, coins_bip39::English};
 use clap::Parser;
 use core_affinity::CoreId;
@@ -198,7 +199,7 @@ impl MaxTpsArgs {
 }
 
 fn send_transactions(
-    transactions: Arc<Vec<Vec<u8>>>,
+    transactions: Arc<Vec<TransactionRequest>>,
     num_workers: usize,
     _num_connections: u64,
     target_urls: Vec<Url>,
@@ -257,11 +258,19 @@ fn send_transactions(
 
                     match timeout(
                         Duration::from_secs(1),
-                        provider.send_raw_transaction(tx_bytes),
+                        provider.send_transaction(tx_bytes.clone()),
                     )
                     .await
                     {
-                        Ok(Ok(_)) => {
+                        Ok(Ok(tx)) => {
+                            let receipt = tx.get_receipt().await;
+
+                            if let Ok(receipt) = receipt {
+                                if !receipt.status() {
+                                    eprintln!("Tx failed {:?}", receipt.transaction_hash);
+                                }
+                            }
+
                             tx_counter.fetch_add(1, Ordering::Relaxed);
                         }
                         Ok(Err(e)) => eprintln!("Failed to send transaction: {e}"),
@@ -282,9 +291,7 @@ async fn generate_transactions(
     chain_id: u64,
     token_address: Address,
     rpc_url: &Url,
-) -> eyre::Result<Vec<Vec<u8>>> {
-    let (exchange, quote, base1, base2) = dex::setup(rpc_url.clone(), mnemonic).await?;
-
+) -> eyre::Result<Vec<TransactionRequest>> {
     println!("Generating {num_accounts} accounts...");
     let signers: Vec<PrivateKeySigner> = (0..num_accounts as u32)
         .into_par_iter()
@@ -297,6 +304,9 @@ async fn generate_transactions(
             Ok(signer)
         })
         .collect::<eyre::Result<Vec<_>>>()?;
+
+    let (_exchange, quote, base1, base2) =
+        dex::setup(rpc_url.clone(), mnemonic, signers.clone()).await?;
 
     let txs_per_sender = total_txs / num_accounts;
     ensure!(
@@ -321,15 +331,14 @@ async fn generate_transactions(
         }
     }
 
-    let transactions: Vec<Vec<u8>> = params
+    let transactions: Vec<_> = params
         .into_par_iter()
         .tqdm()
-        .map(|(signer, nonce)| match random::<u32>() % 6u32 {
-            0 => dex::place(&exchange, signer, nonce, chain_id, base1),
-            1 => dex::place(&exchange, signer, nonce, chain_id, base2),
-            2 => dex::swap_in(&exchange, signer, nonce, chain_id, base1, quote),
-            3 => dex::swap_in(&exchange, signer, nonce, chain_id, base2, quote),
-            4 | 5 => tip20::transfer(signer, nonce, chain_id, token_address),
+        .map(|(signer, nonce)| match random::<u32>() % 4u32 {
+            0 => dex::place(signer, nonce, chain_id, base1, rpc_url.clone()),
+            1 => dex::place(signer, nonce, chain_id, base2, rpc_url.clone()),
+            2 => dex::swap_in(signer, nonce, chain_id, base1, quote, rpc_url.clone()),
+            3 => dex::swap_in(signer, nonce, chain_id, base2, quote, rpc_url.clone()),
             v => unreachable!("Number {v} is outside the random range"),
         })
         .collect::<eyre::Result<Vec<_>>>()?;
@@ -340,6 +349,8 @@ async fn generate_transactions(
 
 mod dex {
     use super::*;
+    use alloy::rpc::types::TransactionRequest;
+    use tempo_contracts::precompiles::IStablecoinExchange;
 
     type DexProvider = FillProvider<
         JoinFill<
@@ -355,6 +366,7 @@ mod dex {
     pub(super) async fn setup(
         url: Url,
         mnemonic: &str,
+        signers: Vec<PrivateKeySigner>,
     ) -> eyre::Result<(
         IStablecoinExchangeInstance<DexProvider>,
         Address,
@@ -363,49 +375,110 @@ mod dex {
     )> {
         println!("Sending DEX setup transactions...");
 
-        let tx_count = ProgressBar::new(12);
+        let tx_count = ProgressBar::new(9 + 6 * signers.len() as u64);
         tx_count.tick();
 
         // Setup HTTP provider with a test wallet
         let wallet = MnemonicBuilder::from_phrase(mnemonic).build()?;
         let caller = wallet.address();
-        let provider = ProviderBuilder::new().wallet(wallet).connect_http(url);
+        let provider = ProviderBuilder::new()
+            .wallet(wallet.clone())
+            .connect_http(url.clone());
 
         let base1 = setup_test_token(provider.clone(), caller, &tx_count).await?;
         let base2 = setup_test_token(provider.clone(), caller, &tx_count).await?;
 
         let quote = ITIP20Instance::new(token_id_to_address(0), provider.clone());
 
-        let exchange = tempo_contracts::precompiles::IStablecoinExchange::new(
-            STABLECOIN_EXCHANGE_ADDRESS,
-            provider.clone(),
-        );
+        let exchange = IStablecoinExchange::new(STABLECOIN_EXCHANGE_ADDRESS, provider.clone());
 
-        let mint_amount = U256::from(1000000000u128);
+        let mint_amount = U256::from(1000000000000000u128);
 
         await_receipts(
             &mut vec![
                 exchange.createPair(*base1.address()).send().await?,
                 exchange.createPair(*base2.address()).send().await?,
-                base1.mint(caller, mint_amount).send().await?,
-                base2.mint(caller, mint_amount).send().await?,
-                quote.mint(caller, mint_amount).send().await?,
-                base1
-                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .send()
-                    .await?,
-                base2
-                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .send()
-                    .await?,
-                quote
-                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .send()
-                    .await?,
             ],
             &tx_count,
         )
         .await?;
+
+        let mut receipts = Vec::new();
+
+        for signer in signers.iter() {
+            receipts.extend([
+                base1
+                    .mint(signer.address(), mint_amount)
+                    .gas_price(TEMPO_BASE_FEE as u128)
+                    .gas(300_000)
+                    .send()
+                    .await?,
+                base2
+                    .mint(signer.address(), mint_amount)
+                    .gas_price(TEMPO_BASE_FEE as u128)
+                    .gas(300_000)
+                    .send()
+                    .await?,
+                quote
+                    .mint(signer.address(), mint_amount)
+                    .gas_price(TEMPO_BASE_FEE as u128)
+                    .gas(300_000)
+                    .send()
+                    .await?,
+                base1
+                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
+                    .gas_price(TEMPO_BASE_FEE as u128)
+                    .gas(300_000)
+                    .send()
+                    .await?,
+                base2
+                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
+                    .gas_price(TEMPO_BASE_FEE as u128)
+                    .gas(300_000)
+                    .send()
+                    .await?,
+                quote
+                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
+                    .gas_price(TEMPO_BASE_FEE as u128)
+                    .gas(300_000)
+                    .send()
+                    .await?,
+            ]);
+        }
+
+        await_receipts(&mut receipts, &tx_count).await?;
+
+        for signer in signers.into_iter() {
+            let account_provider = ProviderBuilder::new()
+                .wallet(signer)
+                .connect_http(url.clone());
+            let base1 = ITIP20::new(*base1.address(), account_provider.clone());
+            let base2 = ITIP20::new(*base2.address(), account_provider.clone());
+            let quote = ITIP20::new(*quote.address(), account_provider);
+
+            receipts.extend([
+                base1
+                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
+                    .gas_price(TEMPO_BASE_FEE as u128)
+                    .gas(300_000)
+                    .send()
+                    .await?,
+                base2
+                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
+                    .gas_price(TEMPO_BASE_FEE as u128)
+                    .gas(300_000)
+                    .send()
+                    .await?,
+                quote
+                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
+                    .gas_price(TEMPO_BASE_FEE as u128)
+                    .gas(300_000)
+                    .send()
+                    .await?,
+            ]);
+        }
+
+        await_receipts(&mut receipts, &tx_count).await?;
 
         Ok((
             exchange,
@@ -415,70 +488,50 @@ mod dex {
         ))
     }
 
-    pub(super) fn place<P, N>(
-        exchange: &IStablecoinExchangeInstance<P, N>,
+    pub(super) fn place(
         signer: PrivateKeySigner,
         nonce: u64,
         chain_id: ChainId,
         token_address: Address,
-    ) -> eyre::Result<Vec<u8>>
-    where
-        N: Network<
-            UnsignedTx: SignableTransaction<alloy::signers::Signature> + RlpEcdsaEncodableTx,
-        >,
-        P: Provider<N>,
-    {
+        rpc_url: Url,
+    ) -> eyre::Result<TransactionRequest> {
+        let account_provider = ProviderBuilder::new()
+            .wallet(signer.clone())
+            .connect_http(rpc_url.clone());
+        let exchange =
+            IStablecoinExchange::new(STABLECOIN_EXCHANGE_ADDRESS, account_provider.clone());
+        let tick = 1;
         let min_order_amount = MIN_ORDER_AMOUNT;
 
         // Place an order at exactly the dust limit (should succeed)
-        let mut tx = exchange
-            .place(token_address, min_order_amount, true, 0)
-            .into_transaction_request()
-            .with_gas_limit(30000)
-            .with_gas_price(TEMPO_BASE_FEE as u128)
-            .with_chain_id(chain_id)
-            .with_nonce(nonce)
-            .build_unsigned()?;
+        let payload = exchange
+            .place(token_address, min_order_amount, true, tick)
+            .into_transaction_request();
 
-        let signature = signer
-            .sign_transaction_sync(&mut tx)
-            .map_err(|e| eyre::eyre!("Failed to sign transaction: {e}"))?;
-        let mut payload = Vec::new();
-        tx.into_signed(signature).eip2718_encode(&mut payload);
         Ok(payload)
     }
 
-    pub(super) fn swap_in<P, N>(
-        exchange: &IStablecoinExchangeInstance<P, N>,
+    pub(super) fn swap_in(
         signer: PrivateKeySigner,
         nonce: u64,
         chain_id: ChainId,
         token_in: Address,
         token_out: Address,
-    ) -> eyre::Result<Vec<u8>>
-    where
-        N: Network<
-            UnsignedTx: SignableTransaction<alloy::signers::Signature> + RlpEcdsaEncodableTx,
-        >,
-        P: Provider<N>,
-    {
-        let min_order_amount = MIN_ORDER_AMOUNT;
+        rpc_url: Url,
+    ) -> eyre::Result<TransactionRequest> {
+        let account_provider = ProviderBuilder::new()
+            .wallet(signer.clone())
+            .connect_http(rpc_url.clone());
+        let exchange =
+            IStablecoinExchange::new(STABLECOIN_EXCHANGE_ADDRESS, account_provider.clone());
+        let min_amount_out = 0;
+        let amount_in = MIN_ORDER_AMOUNT;
 
         // Place an order at exactly the dust limit (should succeed)
-        let mut tx = exchange
-            .swapExactAmountIn(token_in, token_out, min_order_amount, min_order_amount)
-            .into_transaction_request()
-            .with_gas_limit(30000)
-            .with_gas_price(TEMPO_BASE_FEE as u128)
-            .with_chain_id(chain_id)
-            .with_nonce(nonce)
-            .build_unsigned()?;
+        let payload = exchange
+            .swapExactAmountIn(token_in, token_out, amount_in, min_amount_out)
+            .into_transaction_request();
 
-        let signature = signer
-            .sign_transaction_sync(&mut tx)
-            .map_err(|e| eyre::eyre!("Failed to sign transaction: {e}"))?;
-        let mut payload = Vec::new();
-        tx.into_signed(signature).eip2718_encode(&mut payload);
         Ok(payload)
     }
 

@@ -18,6 +18,8 @@ alloy = { workspace = true, features = [
     "signer-local",
     "network",
     "sol-types",
+    "rpc",
+    "rpc-types",
 ] }
 alloy-consensus = { workspace = true, features = ["secp256k1"] }
 clap = { workspace = true, features = ["derive", "env"] }
