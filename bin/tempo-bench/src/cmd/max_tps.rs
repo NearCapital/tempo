@@ -391,40 +391,19 @@ mod dex {
 
         for signer in signers.iter() {
             receipts.extend([
-                base1
-                    .mint(signer.address(), mint_amount)
-                    .gas_price(TEMPO_BASE_FEE as u128)
-                    .gas(300_000)
-                    .send()
-                    .await?,
-                base2
-                    .mint(signer.address(), mint_amount)
-                    .gas_price(TEMPO_BASE_FEE as u128)
-                    .gas(300_000)
-                    .send()
-                    .await?,
-                quote
-                    .mint(signer.address(), mint_amount)
-                    .gas_price(TEMPO_BASE_FEE as u128)
-                    .gas(300_000)
-                    .send()
-                    .await?,
+                base1.mint(signer.address(), mint_amount).send().await?,
+                base2.mint(signer.address(), mint_amount).send().await?,
+                quote.mint(signer.address(), mint_amount).send().await?,
                 base1
                     .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .gas_price(TEMPO_BASE_FEE as u128)
-                    .gas(300_000)
                     .send()
                     .await?,
                 base2
                     .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .gas_price(TEMPO_BASE_FEE as u128)
-                    .gas(300_000)
                     .send()
                     .await?,
                 quote
                     .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .gas_price(TEMPO_BASE_FEE as u128)
-                    .gas(300_000)
                     .send()
                     .await?,
             ]);
@@ -443,20 +422,14 @@ mod dex {
             receipts.extend([
                 base1
                     .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .gas_price(TEMPO_BASE_FEE as u128)
-                    .gas(300_000)
                     .send()
                     .await?,
                 base2
                     .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .gas_price(TEMPO_BASE_FEE as u128)
-                    .gas(300_000)
                     .send()
                     .await?,
                 quote
                     .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .gas_price(TEMPO_BASE_FEE as u128)
-                    .gas(300_000)
                     .send()
                     .await?,
             ]);
@@ -511,7 +484,7 @@ mod dex {
         let mut tx = exchange
             .place(token_address, min_order_amount, true, 0)
             .into_transaction_request()
-            .with_gas_limit(1_000_000)
+            .with_gas_limit(300_000)
             .with_gas_price(TEMPO_BASE_FEE as u128)
             .with_chain_id(chain_id)
             .with_nonce(nonce)
@@ -546,7 +519,7 @@ mod dex {
         let mut tx = exchange
             .swapExactAmountIn(token_in, token_out, min_order_amount, min_amount_out)
             .into_transaction_request()
-            .with_gas_limit(1_000_000)
+            .with_gas_limit(300_000)
             .with_gas_price(TEMPO_BASE_FEE as u128)
             .with_chain_id(chain_id)
             .with_nonce(nonce)
