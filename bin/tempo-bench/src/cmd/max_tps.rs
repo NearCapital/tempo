@@ -346,6 +346,11 @@ mod dex {
         RootProvider,
     >;
 
+    /// This method performs a one-time setup for sending a lot of transactions:
+    /// * Adds a quote token and a couple of user tokens paired with the quote token.
+    /// * Mints some large amount for all `signers` and approves unlimited spending for stablecoin
+    ///   exchange contract.
+    /// * Seeds initial liquidity by placing flip orders
     pub(super) async fn setup(
         url: Url,
         mnemonic: &str,
