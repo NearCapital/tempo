@@ -3,7 +3,7 @@
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, Transaction};
+use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, Transaction, transaction::TxHashRef};
 use alloy_eips::eip7840::BlobParams;
 use alloy_evm::{block::BlockExecutionResult, revm::primitives::Address};
 use reth_chainspec::{EthChainSpec, EthereumHardforks};
@@ -209,6 +209,15 @@ impl Consensus<Block> for TempoConsensus {
 
     fn validate_block_pre_execution(&self, block: &SealedBlock<Block>) -> Result<(), Self::Error> {
         let transactions = &block.body().transactions;
+
+        if let Some(tx) = transactions.iter().find(|&tx| {
+            tx.is_system_tx() && !tx.is_valid_system_tx(self.inner.chain_spec().chain().id())
+        }) {
+            return Err(ConsensusError::Other(format!(
+                "Invalid system transaction: {}",
+                tx.tx_hash()
+            )));
+        }
 
         // Check for optional rewards registry system transaction at the start
         if let Some(first_tx) = transactions.first()
