@@ -2,6 +2,8 @@ use super::*;
 use tempo_contracts::precompiles::IStablecoinExchange;
 use tempo_precompiles::stablecoin_exchange::{MAX_TICK, MIN_TICK, price_to_tick};
 
+const GAS_LIMIT: u64 = 500_000;
+
 type DexProvider = FillProvider<
     JoinFill<
         JoinFill<

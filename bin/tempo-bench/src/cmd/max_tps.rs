@@ -49,8 +49,6 @@ use tempo_precompiles::{
 };
 use tokio::time::timeout;
 
-const GAS_LIMIT: u64 = 1_000_000;
-
 /// Run maximum TPS throughput benchmarking
 #[derive(Parser, Debug)]
 pub struct MaxTpsArgs {
