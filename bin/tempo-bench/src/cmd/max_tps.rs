@@ -20,6 +20,7 @@ use alloy_signer_local::{MnemonicBuilder, PrivateKeySigner, coins_bip39::English
 use clap::Parser;
 use core_affinity::CoreId;
 use eyre::{Context, OptionExt, ensure};
+use futures::{StreamExt, stream::FuturesUnordered};
 use governor::{Quota, RateLimiter};
 use indicatif::ProgressBar;
 use rand::{random, seq::IndexedRandom};
@@ -112,6 +113,11 @@ pub struct MaxTpsArgs {
     #[arg(long)]
     benchmark_mode: Option<String>,
 
+    /// A limit of the maximum amount of concurrent requests, prevents issues with too many
+    /// connections open at once.
+    #[arg(long, default_value = "8")]
+    max_concurrent_requests: usize,
+
     /// A weight that determines the likelihood of generating a TIP-20 transfer transaction.
     #[arg(long, default_value = "0.8")]
     tip20_weight: f64,
@@ -157,6 +163,7 @@ impl MaxTpsArgs {
                 mnemonic: &self.mnemonic,
                 chain_id: self.chain_id,
                 rpc_url: target_urls[0].clone(),
+                max_concurrent_requests: self.max_concurrent_requests,
                 tip20_weight,
                 place_order_weight,
                 swap_weight,
@@ -298,6 +305,7 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
         mnemonic,
         chain_id,
         rpc_url,
+        max_concurrent_requests,
         tip20_weight: transfer_weight,
         place_order_weight: place_weight,
         swap_weight,
@@ -323,8 +331,13 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
         "txs per sender is 0, increase tps or decrease senders"
     );
 
-    let (exchange, quote, base1, base2) =
-        dex::setup(rpc_url.clone(), mnemonic, signers.clone()).await?;
+    let (exchange, quote, base1, base2) = dex::setup(
+        rpc_url.clone(),
+        mnemonic,
+        signers.clone(),
+        max_concurrent_requests,
+    )
+    .await?;
 
     // Fetch current nonces for all accounts
     let provider = ProviderBuilder::new().connect_http(rpc_url);
@@ -559,9 +572,22 @@ fn monitor_tps(tx_counter: Arc<AtomicU64>) -> thread::JoinHandle<()> {
 async fn await_receipts(
     pending_txs: &mut Vec<PendingTransactionBuilder<Ethereum>>,
     tx_count: &ProgressBar,
+    max_concurrent_requests: usize,
 ) -> eyre::Result<()> {
+    let mut futures = FuturesUnordered::new();
     for tx in pending_txs.drain(..) {
-        let receipt = tx.get_receipt().await?;
+        futures.push(tx.get_receipt());
+
+        if futures.len() >= max_concurrent_requests {
+            while let Some(fut) = futures.next().await {
+                let receipt = fut?;
+                tx_count.inc(1);
+                assert!(receipt.status());
+            }
+        }
+    }
+    while let Some(fut) = futures.next().await {
+        let receipt = fut?;
         tx_count.inc(1);
         assert!(receipt.status());
     }
@@ -587,6 +613,7 @@ struct GenerateTransactionsInput<'input> {
     mnemonic: &'input str,
     chain_id: u64,
     rpc_url: Url,
+    max_concurrent_requests: usize,
     tip20_weight: u64,
     place_order_weight: u64,
     swap_weight: u64,
