@@ -384,29 +384,19 @@ mod dex {
         let mint_amount = U256::from(1000000000000000u128);
         let first_order_amount = 1000000000000u128;
 
-        let mut receipts = vec![
-            exchange.createPair(*base1.address()).send().await?,
-            exchange.createPair(*base2.address()).send().await?,
-        ];
+        let user_tokens = [*base1.address(), *base2.address()];
+        let mut receipts = Vec::new();
+
+        for token in user_tokens {
+            receipts.push(exchange.createPair(token).send().await?);
+        }
+
+        let tokens = [&base1, &base2, &quote];
 
         for signer in signers.iter() {
-            receipts.extend([
-                base1.mint(signer.address(), mint_amount).send().await?,
-                base2.mint(signer.address(), mint_amount).send().await?,
-                quote.mint(signer.address(), mint_amount).send().await?,
-                base1
-                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .send()
-                    .await?,
-                base2
-                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .send()
-                    .await?,
-                quote
-                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .send()
-                    .await?,
-            ]);
+            for token in &tokens {
+                receipts.push(token.mint(signer.address(), mint_amount).send().await?);
+            }
         }
 
         await_receipts(&mut receipts, &tx_count).await?;
@@ -418,24 +408,22 @@ mod dex {
             let base1 = ITIP20::new(*base1.address(), account_provider.clone());
             let base2 = ITIP20::new(*base2.address(), account_provider.clone());
             let quote = ITIP20::new(*quote.address(), account_provider.clone());
+            let tokens = [&base1, &base2, &quote];
 
-            receipts.extend([
-                base1
-                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .send()
-                    .await?,
-                base2
-                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .send()
-                    .await?,
-                quote
-                    .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
-                    .send()
-                    .await?,
-            ]);
+            for token in tokens {
+                receipts.push(
+                    token
+                        .approve(STABLECOIN_EXCHANGE_ADDRESS, U256::MAX)
+                        .send()
+                        .await?,
+                );
+            }
         }
 
         await_receipts(&mut receipts, &tx_count).await?;
+
+        let tick_over = price_to_tick(100010);
+        let tick_under = price_to_tick(99990);
 
         for signer in signers.into_iter() {
             let account_provider = ProviderBuilder::new()
@@ -443,31 +431,14 @@ mod dex {
                 .connect_http(url.clone());
             let exchange = IStablecoinExchange::new(STABLECOIN_EXCHANGE_ADDRESS, account_provider);
 
-            let tick_over = price_to_tick(100010);
-            let tick_under = price_to_tick(99990);
-
-            receipts.extend([
-                exchange
-                    .placeFlip(
-                        *base1.address(),
-                        first_order_amount,
-                        true,
-                        tick_under,
-                        tick_over,
-                    )
-                    .send()
-                    .await?,
-                exchange
-                    .placeFlip(
-                        *base2.address(),
-                        first_order_amount,
-                        true,
-                        tick_under,
-                        tick_over,
-                    )
-                    .send()
-                    .await?,
-            ]);
+            for token in user_tokens {
+                receipts.push(
+                    exchange
+                        .placeFlip(token, first_order_amount, true, tick_under, tick_over)
+                        .send()
+                        .await?,
+                );
+            }
         }
 
         await_receipts(&mut receipts, &tx_count).await?;
@@ -553,7 +524,7 @@ mod dex {
         provider: P,
         caller: Address,
         tx_count: &ProgressBar,
-    ) -> eyre::Result<ITIP20Instance<impl Clone + Provider>>
+    ) -> eyre::Result<ITIP20Instance<P>>
     where
         P: Provider + Clone,
     {
