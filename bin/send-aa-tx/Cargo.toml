@@ -5,7 +5,14 @@ edition = "2021"
 
 [dependencies]
 # Alloy dependencies
-alloy = { workspace = true, features = ["rpc-client", "providers", "signers"] }
+alloy = { workspace = true, features = [
+    "providers",
+    "reqwest",
+    "signer-local",
+    "network",
+    "std",
+    "getrandom",
+] }
 alloy-eips = { workspace = true }
 alloy-primitives = { workspace = true }
 

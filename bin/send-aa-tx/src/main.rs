@@ -12,8 +12,8 @@ use tempo_primitives::{
     TempoTxEnvelope,
 };
 
-const RPC_URL: &str = "<RPC_URL>";
-const CHAIN_ID: u64 = 42427;
+const RPC_URL: &str = "http://<RPC_URL>";
+const CHAIN_ID: u64 = 42429;
 const BASE_FEE: u128 = 10_000_000_000; // 10 gwei
 
 #[tokio::main]
