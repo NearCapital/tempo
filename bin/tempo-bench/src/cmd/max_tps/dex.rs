@@ -140,7 +140,7 @@ where
     P: Provider<N>,
 {
     let min_order_amount = MIN_ORDER_AMOUNT;
-    let tick = (random::<u16>() % (MAX_TICK - MIN_TICK) as u16 + MIN_TICK as u16) as i16;
+    let tick = (random::<u16>() % (MAX_TICK - MIN_TICK) as u16) as i16 + MIN_TICK;
 
     // Place an order at exactly the dust limit (should succeed)
     let tx = exchange
