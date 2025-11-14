@@ -367,6 +367,8 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
         mnemonic,
         signers.clone(),
         max_concurrent_requests,
+        chain_id,
+        txs_per_sender,
     )
     .await?;
 
