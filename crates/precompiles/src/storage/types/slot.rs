@@ -6,7 +6,6 @@ use crate::{
     storage::{Storable, StorageOps},
 };
 
-
 /// Type-safe wrapper for a single EVM storage slot.
 ///
 /// # Type Parameters
@@ -200,11 +199,7 @@ impl<T> Slot<T> {
     where
         T: Storable<1>,
     {
-        crate::storage::packing::read_packed_at(
-            storage,
-            struct_base_slot,
-            location,
-        )
+        crate::storage::packing::read_packed_at(storage, struct_base_slot, location)
     }
 
     /// Writes a packed field to storage at a given base slot.
@@ -222,12 +217,7 @@ impl<T> Slot<T> {
     where
         T: Storable<1>,
     {
-        crate::storage::packing::write_packed_at(
-            storage,
-            struct_base_slot,
-            location,
-            &value,
-        )
+        crate::storage::packing::write_packed_at(storage, struct_base_slot, location, &value)
     }
 
     /// Deletes a packed field in storage at a given base slot (sets bytes to zero).
@@ -244,11 +234,7 @@ impl<T> Slot<T> {
     where
         T: Storable<1>,
     {
-        crate::storage::packing::clear_packed_at(
-            storage,
-            struct_base_slot,
-            location,
-        )
+        crate::storage::packing::clear_packed_at(storage, struct_base_slot, location)
     }
 }
 
@@ -532,16 +518,14 @@ mod tests {
         )?;
 
         // Read back
-        let read_address =
-            Slot::<Address>::read_at_offset(&mut contract, orderbook_base_slot, 0)?;
+        let read_address = Slot::<Address>::read_at_offset(&mut contract, orderbook_base_slot, 0)?;
 
         assert_eq!(read_address, base_address);
 
         // Delete
         Slot::<Address>::delete_at_offset(&mut contract, orderbook_base_slot, 0)?;
 
-        let deleted =
-            Slot::<Address>::read_at_offset(&mut contract, orderbook_base_slot, 0)?;
+        let deleted = Slot::<Address>::read_at_offset(&mut contract, orderbook_base_slot, 0)?;
 
         assert_eq!(deleted, Address::ZERO);
 
@@ -559,12 +543,7 @@ mod tests {
         // Test writing a multi-slot value like a String at offset 2
         let test_string = "Hello, Orderbook!".to_string();
 
-        Slot::<String>::write_at_offset(
-            &mut contract,
-            struct_base,
-            2,
-            test_string.clone(),
-        )?;
+        Slot::<String>::write_at_offset(&mut contract, struct_base, 2, test_string.clone())?;
 
         let read_string = Slot::<String>::read_at_offset(&mut contract, struct_base, 2)?;
 

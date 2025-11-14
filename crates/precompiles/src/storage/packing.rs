@@ -34,7 +34,11 @@ impl FieldLocation {
     /// Create a new field location
     #[inline]
     pub const fn new(offset_slots: usize, offset_bytes: usize, size_bytes: usize) -> Self {
-        Self { offset_slots, offset_bytes, size_bytes }
+        Self {
+            offset_slots,
+            offset_bytes,
+            size_bytes,
+        }
     }
 }
 
@@ -203,7 +207,8 @@ where
 {
     let slot = struct_base_slot + U256::from(location.offset_slots);
     let current = storage.sload(slot)?;
-    let new_value = insert_packed_value(current, value, location.offset_bytes, location.size_bytes)?;
+    let new_value =
+        insert_packed_value(current, value, location.offset_bytes, location.size_bytes)?;
     storage.sstore(slot, new_value)
 }
 
@@ -875,14 +880,32 @@ mod tests {
         let timestamp: u64 = 1234567890;
         let amount: u128 = 999888777666;
 
-        write_packed_at(&mut contract, struct_base, FieldLocation::new(0, 0, 1), &flag)?;
-        write_packed_at(&mut contract, struct_base, FieldLocation::new(0, 1, 8), &timestamp)?;
-        write_packed_at(&mut contract, struct_base, FieldLocation::new(0, 9, 16), &amount)?;
+        write_packed_at(
+            &mut contract,
+            struct_base,
+            FieldLocation::new(0, 0, 1),
+            &flag,
+        )?;
+        write_packed_at(
+            &mut contract,
+            struct_base,
+            FieldLocation::new(0, 1, 8),
+            &timestamp,
+        )?;
+        write_packed_at(
+            &mut contract,
+            struct_base,
+            FieldLocation::new(0, 9, 16),
+            &amount,
+        )?;
 
         // Verify all packed correctly
-        let read_flag = read_packed_at::<bool, _>(&mut contract, struct_base, FieldLocation::new(0, 0, 1))?;
-        let read_time = read_packed_at::<u64, _>(&mut contract, struct_base, FieldLocation::new(0, 1, 8))?;
-        let read_amount = read_packed_at::<u128, _>(&mut contract, struct_base, FieldLocation::new(0, 9, 16))?;
+        let read_flag =
+            read_packed_at::<bool, _>(&mut contract, struct_base, FieldLocation::new(0, 0, 1))?;
+        let read_time =
+            read_packed_at::<u64, _>(&mut contract, struct_base, FieldLocation::new(0, 1, 8))?;
+        let read_amount =
+            read_packed_at::<u128, _>(&mut contract, struct_base, FieldLocation::new(0, 9, 16))?;
 
         assert_eq!(read_flag, flag);
         assert_eq!(read_time, timestamp);
@@ -892,9 +915,12 @@ mod tests {
         clear_packed_at(&mut contract, struct_base, FieldLocation::new(0, 1, 8))?;
 
         // Verify
-        let read_flag = read_packed_at::<bool, _>(&mut contract, struct_base, FieldLocation::new(0, 0, 1))?;
-        let read_time = read_packed_at::<u64, _>(&mut contract, struct_base, FieldLocation::new(0, 1, 8))?;
-        let read_amount = read_packed_at::<u128, _>(&mut contract, struct_base, FieldLocation::new(0, 9, 16))?;
+        let read_flag =
+            read_packed_at::<bool, _>(&mut contract, struct_base, FieldLocation::new(0, 0, 1))?;
+        let read_time =
+            read_packed_at::<u64, _>(&mut contract, struct_base, FieldLocation::new(0, 1, 8))?;
+        let read_amount =
+            read_packed_at::<u128, _>(&mut contract, struct_base, FieldLocation::new(0, 9, 16))?;
 
         assert_eq!(read_flag, flag);
         assert_eq!(read_time, 0);
@@ -911,20 +937,38 @@ mod tests {
 
         // Field in slot 0
         let addr = Address::random();
-        write_packed_at(&mut contract, struct_base, FieldLocation::new(0, 0, 20), &addr)?;
+        write_packed_at(
+            &mut contract,
+            struct_base,
+            FieldLocation::new(0, 0, 20),
+            &addr,
+        )?;
 
         // Field in slot 1
         let value = U256::from(0xdeadbeefu32);
-        write_packed_at(&mut contract, struct_base, FieldLocation::new(1, 0, 32), &value)?;
+        write_packed_at(
+            &mut contract,
+            struct_base,
+            FieldLocation::new(1, 0, 32),
+            &value,
+        )?;
 
         // Field in slot 2
         let flag = false;
-        write_packed_at(&mut contract, struct_base, FieldLocation::new(2, 0, 1), &flag)?;
+        write_packed_at(
+            &mut contract,
+            struct_base,
+            FieldLocation::new(2, 0, 1),
+            &flag,
+        )?;
 
         // Verify all independent
-        let read_addr = read_packed_at::<Address, _>(&mut contract, struct_base, FieldLocation::new(0, 0, 20))?;
-        let read_val = read_packed_at::<U256, _>(&mut contract, struct_base, FieldLocation::new(1, 0, 32))?;
-        let read_flag = read_packed_at::<bool, _>(&mut contract, struct_base, FieldLocation::new(2, 0, 1))?;
+        let read_addr =
+            read_packed_at::<Address, _>(&mut contract, struct_base, FieldLocation::new(0, 0, 20))?;
+        let read_val =
+            read_packed_at::<U256, _>(&mut contract, struct_base, FieldLocation::new(1, 0, 32))?;
+        let read_flag =
+            read_packed_at::<bool, _>(&mut contract, struct_base, FieldLocation::new(2, 0, 1))?;
 
         assert_eq!(read_addr, addr);
         assert_eq!(read_val, value);

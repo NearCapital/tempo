@@ -205,7 +205,13 @@ where
     ///
     /// If the index is >= the current length, the vector is automatically expanded
     /// and the length is updated. Intermediate elements remain zero.
-    fn write_at<S: StorageOps>(&self, storage: &mut S, key: K, index: usize, value: V) -> Result<()>;
+    fn write_at<S: StorageOps>(
+        &self,
+        storage: &mut S,
+        key: K,
+        index: usize,
+        value: V,
+    ) -> Result<()>;
 
     /// Pushes a new element to the end of the vector for the given key.
     ///
@@ -236,7 +242,13 @@ where
         )
     }
 
-    fn write_at<S: StorageOps>(&self, storage: &mut S, key: K, index: usize, value: V) -> Result<()> {
+    fn write_at<S: StorageOps>(
+        &self,
+        storage: &mut S,
+        key: K,
+        index: usize,
+        value: V,
+    ) -> Result<()> {
         vec_write_at(
             storage,
             mapping_slot(key.as_storage_bytes(), self.slot()),
@@ -1880,7 +1892,9 @@ mod tests {
         let vec_slot = Slot::<Vec<U256>>::new(TEST_VEC_SLOT_2);
 
         // Write at index 5 (auto-expand)
-        vec_slot.write_at(&mut contract, 5, U256::from(999)).unwrap();
+        vec_slot
+            .write_at(&mut contract, 5, U256::from(999))
+            .unwrap();
 
         // Length should be 6
         let length = read_length(&mut contract, TEST_VEC_SLOT_2).unwrap();
