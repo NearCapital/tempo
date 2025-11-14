@@ -28,6 +28,7 @@ use rlimit::Resource;
 use serde::Serialize;
 use simple_tqdm::ParTqdm;
 use std::{
+    error::Error,
     fs::File,
     io::BufWriter,
     num::NonZeroU32,
@@ -368,7 +369,6 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
         signers.clone(),
         max_concurrent_requests,
         chain_id,
-        txs_per_sender,
     )
     .await?;
 
@@ -639,16 +639,18 @@ fn monitor_tps(tx_counter: Arc<AtomicU64>, target_count: u64) -> thread::JoinHan
     })
 }
 
-async fn join_all(
-    futures: impl IntoIterator<Item: Future<Output = eyre::Result<PendingTransactionBuilder<Ethereum>>>>,
+async fn join_all<E: Sync + Send + Error + 'static>(
+    futures: impl IntoIterator<Item: Future<Output = Result<PendingTransactionBuilder<Ethereum>, E>>>,
     tx_count: &ProgressBar,
     max_concurrent_requests: usize,
 ) -> eyre::Result<()> {
     let mut iter = stream::iter(futures)
-        .map(|receipt| async { eyre::Ok(receipt.await?.get_receipt().await?) })
+        .map(|receipt| async {
+            tx_count.inc(1);
+            eyre::Ok(receipt.await?.get_receipt().await?)
+        })
         .buffer_unordered(max_concurrent_requests);
     while let Some(receipt) = iter.next().await {
-        tx_count.inc(1);
         assert!(receipt?.status());
     }
 

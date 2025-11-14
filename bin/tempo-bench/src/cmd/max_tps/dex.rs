@@ -9,6 +9,27 @@ use tempo_precompiles::stablecoin_exchange::{MAX_TICK, MIN_TICK, price_to_tick};
 
 const GAS_LIMIT: u64 = 500_000;
 
+async fn fetch_nonces(
+    provider: impl Provider,
+    max_concurrent_requests: usize,
+    signers: impl IntoIterator<Item = PrivateKeySigner>,
+) -> eyre::Result<Vec<(PrivateKeySigner, u64)>> {
+    let mut futures = Vec::new();
+    let mut signers_with_nonces = Vec::new();
+    for signer in signers {
+        let address = signer.address();
+        let current_nonce = provider.get_transaction_count(address);
+        futures.push(async move { (signer, current_nonce.await) });
+    }
+
+    let mut iter = stream::iter(futures).buffer_unordered(max_concurrent_requests);
+    while let Some((signer, nonce)) = iter.next().await {
+        let nonce = nonce.context("Failed to get transaction count")?;
+        signers_with_nonces.push((signer.clone(), nonce));
+    }
+    Ok(signers_with_nonces)
+}
+
 /// This method performs a one-time setup for sending a lot of transactions:
 /// * Adds a quote token and a couple of user tokens paired with the quote token.
 /// * Mints some large amount for all `signers` and approves unlimited spending for stablecoin
@@ -20,7 +41,6 @@ pub(super) async fn setup(
     signers: Vec<PrivateKeySigner>,
     max_concurrent_requests: usize,
     chain_id: u64,
-    txs_per_sender: u64,
 ) -> eyre::Result<(
     IStablecoinExchangeInstance<DynProvider>,
     Address,
@@ -30,26 +50,8 @@ pub(super) async fn setup(
     println!("Sending DEX setup transactions...");
 
     let accounts = signers.len();
-    // Fetch current nonces for all accounts
-    let provider = ProviderBuilder::new().connect_http(url.clone());
 
     println!("Fetching nonces for {accounts} accounts...");
-
-    let mut futures = Vec::new();
-    let mut params = Vec::new();
-    for signer in signers {
-        let address = signer.address();
-        let current_nonce = provider.get_transaction_count(address);
-        futures.push(async move { (signer, current_nonce.await) });
-    }
-
-    let mut iter = stream::iter(futures).buffer_unordered(max_concurrent_requests);
-    while let Some((signer, nonce)) = iter.next().await {
-        let nonce = nonce.context("Failed to get transaction count")?;
-        for i in 0..txs_per_sender {
-            params.push((signer.clone(), nonce + i));
-        }
-    }
 
     let user_tokens_count = 2;
     let tokens_count = user_tokens_count + 1;
@@ -65,7 +67,6 @@ pub(super) async fn setup(
     // Setup HTTP provider with a test wallet
     let wallet = MnemonicBuilder::from_phrase(mnemonic).build()?;
     let caller = wallet.address();
-    let nonce = provider.get_transaction_count(caller).await?;
     let provider = ProviderBuilder::new()
         .wallet(wallet.clone())
         .connect_http(url.clone());
@@ -78,84 +79,87 @@ pub(super) async fn setup(
     let mint_amount = U256::from(1000000000000000u128);
     let first_order_amount = 1000000000000u128;
 
+    let mut nonce = provider.get_transaction_count(caller).await?;
     let user_tokens = [*base1.address(), *base2.address()];
     let tokens = [&base1, &base2, &quote];
     let mut futures = Vec::new();
 
-    for (i, &token) in user_tokens.iter().enumerate() {
+    for token in user_tokens {
+        let provider = ProviderBuilder::new().connect_http(url.clone());
         let provider = provider.clone();
         let signer = wallet.clone();
+        let tx = TxLegacy {
+            chain_id: Some(chain_id),
+            nonce: nonce + 1,
+            gas_price: TEMPO_BASE_FEE as u128,
+            gas_limit: GAS_LIMIT,
+            to: TxKind::Call(STABLECOIN_EXCHANGE_ADDRESS),
+            value: U256::ZERO,
+            input: createPairCall { base: token }.abi_encode().into(),
+        };
 
-        futures.push(Box::pin(async move {
+        let tx = into_signed_encoded(tx, signer)?;
+
+        futures.push(
+            Box::pin(async move { provider.send_raw_transaction(tx.as_slice()).await })
+                as Pin<Box<dyn Future<Output = _>>>,
+        );
+
+        nonce += 1;
+    }
+
+    for signer in signers.iter() {
+        for token in tokens {
+            let recipient = signer.address();
+            let signer = wallet.clone();
+            let provider = ProviderBuilder::new().connect_http(url.clone());
+            let provider = provider.clone();
             let tx = TxLegacy {
                 chain_id: Some(chain_id),
-                nonce: nonce + i as u64,
+                nonce: nonce + 1,
                 gas_price: TEMPO_BASE_FEE as u128,
                 gas_limit: GAS_LIMIT,
-                to: TxKind::Call(STABLECOIN_EXCHANGE_ADDRESS),
+                to: TxKind::Call(*token.address()),
                 value: U256::ZERO,
-                input: createPairCall { base: token }.abi_encode().into(),
+                input: ITIP20::mintCall {
+                    to: recipient,
+                    amount: mint_amount,
+                }
+                .abi_encode()
+                .into(),
             };
 
             let tx = into_signed_encoded(tx, signer)?;
 
-            eyre::Ok(provider.send_raw_transaction(tx.as_slice()).await?)
-        }) as Pin<Box<dyn Future<Output = _>>>);
-    }
+            futures.push(
+                Box::pin(async move { provider.send_raw_transaction(tx.as_slice()).await })
+                    as Pin<Box<dyn Future<Output = _>>>,
+            );
 
-    let mut params2 = Vec::new();
-    for (signer, nonce) in params.into_iter() {
-        let length = tokens.len();
-
-        for (i, token) in tokens.iter().enumerate() {
-            let recipient = signer.address();
-            let signer = wallet.clone();
-            let provider = provider.clone();
-            futures.push(Box::pin(async move {
-                let tx = TxLegacy {
-                    chain_id: Some(chain_id),
-                    nonce: nonce + i as u64,
-                    gas_price: TEMPO_BASE_FEE as u128,
-                    gas_limit: GAS_LIMIT,
-                    to: TxKind::Call(*token.address()),
-                    value: U256::ZERO,
-                    input: ITIP20::mintCall {
-                        to: recipient,
-                        amount: mint_amount,
-                    }
-                    .abi_encode()
-                    .into(),
-                };
-
-                let tx = into_signed_encoded(tx, signer)?;
-
-                eyre::Ok(provider.send_raw_transaction(tx.as_slice()).await?)
-            }) as Pin<Box<dyn Future<Output = _>>>);
+            nonce += 1;
         }
-
-        params2.push((signer, nonce + length as u64));
     }
 
     join_all(futures, &tx_count, max_concurrent_requests).await?;
 
-    let mut params3 = Vec::new();
     let mut futures = Vec::new();
 
-    for (signer, nonce) in params2.into_iter() {
-        let account_provider = ProviderBuilder::new()
-            .wallet(signer.clone())
-            .connect_http(url.clone());
-        let base1 = ITIP20::new(*base1.address(), account_provider.clone());
-        let base2 = ITIP20::new(*base2.address(), account_provider.clone());
-        let quote = ITIP20::new(*quote.address(), account_provider.clone());
-        let tokens = [base1, base2, quote];
-        let length = tokens.len();
+    let signers_with_nonces: Vec<_> = fetch_nonces(&provider, max_concurrent_requests, signers)
+        .await?
+        .into_iter()
+        .map(|(signer, nonce)| {
+            let account_provider = ProviderBuilder::new()
+                .wallet(signer.clone())
+                .connect_http(url.clone());
+            let base1 = ITIP20::new(*base1.address(), account_provider.clone());
+            let base2 = ITIP20::new(*base2.address(), account_provider.clone());
+            let quote = ITIP20::new(*quote.address(), account_provider.clone());
+            let tokens = [base1, base2, quote];
+            let length = tokens.len();
 
-        for (i, token) in tokens.into_iter().enumerate() {
-            let account_provider = account_provider.clone();
-            let signer = signer.clone();
-
-            futures.push(Box::pin(async move {
+            for (i, token) in tokens.into_iter().enumerate() {
+                let account_provider = account_provider.clone();
+                let signer = signer.clone();
                 let tx = TxLegacy {
                     chain_id: Some(chain_id),
                     nonce: nonce + i as u64,
@@ -173,12 +177,14 @@ pub(super) async fn setup(
 
                 let tx = into_signed_encoded(tx, signer)?;
 
-                eyre::Ok(account_provider.send_raw_transaction(tx.as_slice()).await?)
-            }) as Pin<Box<dyn Future<Output = _>>>);
-        }
+                futures.push(Box::pin(async move {
+                    account_provider.send_raw_transaction(tx.as_slice()).await
+                }) as Pin<Box<dyn Future<Output = _>>>);
+            }
 
-        params3.push((signer, nonce + length as u64));
-    }
+            eyre::Ok((signer, nonce + length as u64))
+        })
+        .collect::<eyre::Result<_, _>>()?;
 
     join_all(futures, &tx_count, max_concurrent_requests).await?;
 
@@ -187,36 +193,35 @@ pub(super) async fn setup(
 
     let mut futures = Vec::new();
 
-    for (signer, nonce) in params3.into_iter() {
+    for (signer, nonce) in signers_with_nonces.into_iter() {
         let account_provider = ProviderBuilder::new()
             .wallet(signer.clone())
             .connect_http(url.clone());
         for (i, token) in user_tokens.into_iter().enumerate() {
             let account_provider = account_provider.clone();
             let signer = signer.clone();
+            let tx = TxLegacy {
+                chain_id: Some(chain_id),
+                nonce: nonce + i as u64,
+                gas_price: TEMPO_BASE_FEE as u128,
+                gas_limit: GAS_LIMIT,
+                to: TxKind::Call(STABLECOIN_EXCHANGE_ADDRESS),
+                value: U256::ZERO,
+                input: placeFlipCall {
+                    token,
+                    amount: first_order_amount,
+                    isBid: true,
+                    tick: tick_under,
+                    flipTick: tick_over,
+                }
+                .abi_encode()
+                .into(),
+            };
+
+            let tx = into_signed_encoded(tx, signer)?;
 
             futures.push(Box::pin(async move {
-                let tx = TxLegacy {
-                    chain_id: Some(chain_id),
-                    nonce: nonce + i as u64,
-                    gas_price: TEMPO_BASE_FEE as u128,
-                    gas_limit: GAS_LIMIT,
-                    to: TxKind::Call(STABLECOIN_EXCHANGE_ADDRESS),
-                    value: U256::ZERO,
-                    input: placeFlipCall {
-                        token,
-                        amount: first_order_amount,
-                        isBid: true,
-                        tick: tick_under,
-                        flipTick: tick_over,
-                    }
-                    .abi_encode()
-                    .into(),
-                };
-
-                let tx = into_signed_encoded(tx, signer)?;
-
-                eyre::Ok(account_provider.send_raw_transaction(tx.as_slice()).await?)
+                account_provider.send_raw_transaction(tx.as_slice()).await
             }) as Pin<Box<dyn Future<Output = _>>>);
         }
     }
