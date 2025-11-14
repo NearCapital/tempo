@@ -176,14 +176,14 @@ fn gen_packing_module_from_ir(fields: &[LayoutField<'_>], mod_ident: &Ident) -> 
 /// Accepts indexed fields where the usize is the original field index in the struct.
 fn gen_load_impl(indexed_fields: &[(usize, &Ident, &Type)], packing: &Ident) -> TokenStream {
     let load_fields = indexed_fields.iter().map(|(_, name, ty)| {
-        let (slot_const, loc_const) = PackingConstants::new(name).storable();
+        let loc_const = PackingConstants::new(name).location();
         let layout_ctx =
             packing::gen_layout_ctx_expr(ty, false, quote! { #packing::#loc_const.offset_bytes });
 
         quote! {
             let #name = <#ty>::load(
                 storage,
-                base_slot + ::alloy::primitives::U256::from(#packing::#slot_const),
+                base_slot + ::alloy::primitives::U256::from(#packing::#loc_const.offset_slots),
                 #layout_ctx
             )?;
         }
@@ -198,12 +198,12 @@ fn gen_load_impl(indexed_fields: &[(usize, &Ident, &Type)], packing: &Ident) -> 
 /// Accepts indexed fields where the usize is the original field index in the struct.
 fn gen_store_impl(indexed_fields: &[(usize, &Ident, &Type)], packing: &Ident) -> TokenStream {
     let store_fields = indexed_fields.iter().map(|(_, name, ty)| {
-        let (slot_const, loc_const) = PackingConstants::new(name).storable();
+        let loc_const = PackingConstants::new(name).location();
         let layout_ctx =
             packing::gen_layout_ctx_expr(ty, false, quote! { #packing::#loc_const.offset_bytes });
 
         quote! {{
-            let target_slot = base_slot + ::alloy::primitives::U256::from(#packing::#slot_const);
+            let target_slot = base_slot + ::alloy::primitives::U256::from(#packing::#loc_const.offset_slots);
             self.#name.store(storage, target_slot, #layout_ctx)?;
         }}
     });
@@ -220,14 +220,14 @@ fn gen_to_evm_words_impl(
     packing: &Ident,
 ) -> TokenStream {
     let pack_fields = indexed_fields.iter().map(|(_, name, ty)| {
-        let (slot_const, loc_const) = PackingConstants::new(name).storable();
+        let loc_const = PackingConstants::new(name).location();
 
         quote! {{
             const SLOT_COUNT: usize = <#ty as crate::storage::StorableType>::SLOTS;
             if <#ty as crate::storage::StorableType>::IS_PACKABLE {
                 // Packable primitive: use packing module (handles both packed and unpacked)
-                result[#packing::#slot_const] = crate::storage::packing::insert_packed_value::<SLOT_COUNT, #ty>(
-                    result[#packing::#slot_const],
+                result[#packing::#loc_const.offset_slots] = crate::storage::packing::insert_packed_value::<SLOT_COUNT, #ty>(
+                    result[#packing::#loc_const.offset_slots],
                     &self.#name,
                     #packing::#loc_const.offset_bytes,
                     #packing::#loc_const.size
@@ -235,7 +235,7 @@ fn gen_to_evm_words_impl(
             } else {
                 let nested_words = self.#name.to_evm_words()?;
                 for (i, word) in nested_words.iter().enumerate() {
-                    result[#packing::#slot_const + i] = *word;
+                    result[#packing::#loc_const.offset_slots + i] = *word;
                 }
             }
         }}
@@ -255,14 +255,14 @@ fn gen_from_evm_words_impl(
     packing: &Ident,
 ) -> TokenStream {
     let decode_fields = indexed_fields.iter().map(|(_, name, ty)| {
-        let (slot_const, loc_const) = PackingConstants::new(name).storable();
+        let loc_const = PackingConstants::new(name).location();
 
         quote! {
             let #name = {
                 const SLOT_COUNT: usize = <#ty as crate::storage::StorableType>::SLOTS;
                 if <#ty as crate::storage::StorableType>::IS_PACKABLE {
                     // Packable primitive: use packing module (handles both packed and unpacked)
-                    let word = words[#packing::#slot_const];
+                    let word = words[#packing::#loc_const.offset_slots];
                     crate::storage::packing::extract_packed_value::<SLOT_COUNT, #ty>(
                         word,
                         #packing::#loc_const.offset_bytes,
@@ -270,7 +270,7 @@ fn gen_from_evm_words_impl(
                     )?
                 } else {
                     // Non-packable (structs, multi-slot types): use from_evm_words()
-                    let start = #packing::#slot_const;
+                    let start = #packing::#loc_const.offset_slots;
                     let nested_words = ::std::array::from_fn::<_, SLOT_COUNT, _>(|i| {
                         words[start + i]
                     });

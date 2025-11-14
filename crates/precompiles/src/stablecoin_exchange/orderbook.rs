@@ -184,7 +184,7 @@ impl Orderbook {
         let base = Tokens::read_at_offset(
             contract,
             orderbook_base_slot,
-            __packing_orderbook::BASE_SLOT,
+            __packing_orderbook::BASE_LOC.offset_slots,
         )?;
 
         Ok(base != Address::ZERO)
@@ -202,14 +202,14 @@ impl Orderbook {
             Orders::read_at_offset(
                 storage,
                 orderbook_base_slot,
-                __packing_orderbook::BIDS_SLOT,
+                __packing_orderbook::BIDS_LOC.offset_slots,
                 tick,
             )
         } else {
             Orders::read_at_offset(
                 storage,
                 orderbook_base_slot,
-                __packing_orderbook::ASKS_SLOT,
+                __packing_orderbook::ASKS_LOC.offset_slots,
                 tick,
             )
         }
@@ -228,7 +228,7 @@ impl Orderbook {
             Orders::write_at_offset(
                 storage,
                 orderbook_base_slot,
-                __packing_orderbook::BIDS_SLOT,
+                __packing_orderbook::BIDS_LOC.offset_slots,
                 tick,
                 tick_level,
             )
@@ -236,7 +236,7 @@ impl Orderbook {
             Orders::write_at_offset(
                 storage,
                 orderbook_base_slot,
-                __packing_orderbook::ASKS_SLOT,
+                __packing_orderbook::ASKS_LOC.offset_slots,
                 tick,
                 tick_level,
             )
@@ -255,14 +255,14 @@ impl Orderbook {
             Orders::delete_at_offset(
                 storage,
                 orderbook_base_slot,
-                __packing_orderbook::BIDS_SLOT,
+                __packing_orderbook::BIDS_LOC.offset_slots,
                 tick,
             )
         } else {
             Orders::delete_at_offset(
                 storage,
                 orderbook_base_slot,
-                __packing_orderbook::ASKS_SLOT,
+                __packing_orderbook::ASKS_LOC.offset_slots,
                 tick,
             )
         }
@@ -287,9 +287,9 @@ impl Orderbook {
         // Read current bitmap word
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::BOOKS);
         let bitmap_slot = if is_bid {
-            __packing_orderbook::BID_BITMAP_SLOT
+            __packing_orderbook::BID_BITMAP_LOC.offset_slots
         } else {
-            __packing_orderbook::ASK_BITMAP_SLOT
+            __packing_orderbook::ASK_BITMAP_LOC.offset_slots
         };
         let current_word =
             BitMaps::read_at_offset(storage, orderbook_base_slot, bitmap_slot, word_index)?;
@@ -326,9 +326,9 @@ impl Orderbook {
         // Read current bitmap word
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::BOOKS);
         let bitmap_slot = if is_bid {
-            __packing_orderbook::BID_BITMAP_SLOT
+            __packing_orderbook::BID_BITMAP_LOC.offset_slots
         } else {
-            __packing_orderbook::ASK_BITMAP_SLOT
+            __packing_orderbook::ASK_BITMAP_LOC.offset_slots
         };
         let current_word =
             BitMaps::read_at_offset(storage, orderbook_base_slot, bitmap_slot, word_index)?;
@@ -364,9 +364,9 @@ impl Orderbook {
 
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::BOOKS);
         let bitmap_slot = if is_bid {
-            __packing_orderbook::BID_BITMAP_SLOT
+            __packing_orderbook::BID_BITMAP_LOC.offset_slots
         } else {
-            __packing_orderbook::ASK_BITMAP_SLOT
+            __packing_orderbook::ASK_BITMAP_LOC.offset_slots
         };
         let word = BitMaps::read_at_offset(storage, orderbook_base_slot, bitmap_slot, word_index)?;
 

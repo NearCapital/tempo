@@ -24,14 +24,8 @@ impl PackingConstants {
         format_ident!("{}", &self.0)
     }
 
-    /// The `_SLOT` suffixed constant (usize slot, used by `Storable` macro)
-    fn slot_usize(&self) -> Ident {
-        let span = proc_macro2::Span::call_site();
-        Ident::new(&format!("{}_SLOT", self.0), span)
-    }
-
     /// The `_LOC` suffixed constant
-    fn location(&self) -> Ident {
+    pub(crate) fn location(&self) -> Ident {
         let span = proc_macro2::Span::call_site();
         Ident::new(&format!("{}_LOC", self.0), span)
     }
@@ -45,11 +39,6 @@ impl PackingConstants {
     /// Returns the constant identifiers required by both macros (slot, offset)
     pub(crate) fn into_tuple(self) -> (Ident, Ident) {
         (self.slot(), self.offset())
-    }
-
-    /// Returns the constant identifiers only required by `Storable` (slot_usize, loc)
-    pub(crate) fn storable(&self) -> (Ident, Ident) {
-        (self.slot_usize(), self.location())
     }
 }
 
@@ -178,8 +167,7 @@ pub(crate) fn gen_constants_from_ir(fields: &[LayoutField<'_>], gen_location: bo
     for field in fields {
         let ty = field.ty;
         let consts = PackingConstants::new(field.name);
-        let (slot_usize, loc_const) = consts.storable();
-        let (slot_const, offset_const) = consts.into_tuple();
+        let (loc_const, (slot_const, offset_const)) = (consts.location(), consts.into_tuple());
 
         // Generate byte count constants for each field
         let bytes_expr = quote! { <#ty as crate::storage::StorableType>::BYTES };
@@ -231,21 +219,20 @@ pub(crate) fn gen_constants_from_ir(fields: &[LayoutField<'_>], gen_location: bo
             pub const #slot_const: ::alloy::primitives::U256 = #slot_expr;
             pub const #offset_const: usize = #offset_expr;
         });
-        #[cfg(debug_assertions)]
-        {
-            let bytes_const = format_ident!("{slot_const}_BYTES");
-            constants.extend(quote! {
-                pub const #bytes_const: usize = #bytes_expr;
-            });
-        }
 
         // For the `Storable` macro, also generate the usize version of the slot, and the location constant
         if gen_location {
             constants.extend(quote! {
-                pub const #slot_usize: usize = #slot_const.as_limbs()[0] as usize;
                 pub const #loc_const: crate::storage::packing::FieldLocation =
-                    crate::storage::packing::FieldLocation::new(#slot_usize, #offset_const, #bytes_expr);
+                    crate::storage::packing::FieldLocation::new(#slot_const.as_limbs()[0] as usize, #offset_const, #bytes_expr);
             });
+        }
+
+        // generate constants used in tests for solidity layout compatibility assertions
+        #[cfg(debug_assertions)]
+        {
+            let bytes_const = format_ident!("{slot_const}_BYTES");
+            constants.extend(quote! { pub const #bytes_const: usize = #bytes_expr; });
         }
     }
 
