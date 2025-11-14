@@ -195,9 +195,9 @@ impl TestingNode {
     ///
     /// # Panics
     /// Panics if either consensus or execution is not running.
-    pub fn stop(&mut self) {
+    pub async fn stop(&mut self) {
         self.stop_consensus();
-        self.stop_execution();
+        self.stop_execution().await
     }
 
     /// Stop only the consensus engine.
@@ -220,23 +220,14 @@ impl TestingNode {
     ///
     /// # Panics
     /// Panics if execution node is not running.
-    fn stop_execution(&mut self) {
+    async fn stop_execution(&mut self) {
         let execution_node = self.execution_node.take().unwrap_or_else(|| {
             panic!(
                 "execution node is not running for {}, cannot stop",
                 self.uid
             )
         });
-
-        let uid = self.uid.clone();
-        execution_node
-            .node
-            .task_executor
-            .spawn_critical("testing_node_shutdown", async move {
-                panic!("TestingNode {uid} execution shutdown requested");
-            });
-
-        debug!(%self.uid, "stopped execution node for testing node");
+        execution_node.shutdown().await
     }
 
     /// Check if both consensus and execution are running
@@ -319,7 +310,10 @@ mod tests {
     use crate::{ExecutionRuntime, Setup, setup_validators};
     use alloy::providers::{Provider, ProviderBuilder};
     use commonware_p2p::simulated::Link;
-    use commonware_runtime::{Clock, Runner as _, deterministic::{Config, Runner}};
+    use commonware_runtime::{
+        Clock, Runner as _,
+        deterministic::{Config, Runner},
+    };
     use std::time::Duration;
 
     #[tokio::test]
@@ -346,13 +340,18 @@ mod tests {
                     connect_execution_layer_nodes: false,
                 };
 
-                let (mut nodes, _oracle) = setup_validators(context.clone(), &execution_runtime, setup).await;
+                let (mut nodes, _oracle) =
+                    setup_validators(context.clone(), &execution_runtime, setup).await;
 
                 let mut node = nodes.pop().unwrap();
                 node.start().await;
 
                 // Get the RPC HTTP address while running
-                let rpc_addr = node.execution().rpc_server_handles.rpc.http_local_addr()
+                let rpc_addr = node
+                    .execution()
+                    .rpc_server_handles
+                    .rpc
+                    .http_local_addr()
                     .expect("http rpc server should be running");
 
                 // Signal that node is started
@@ -362,10 +361,16 @@ mod tests {
                 let _ = rx_stopped.blocking_recv();
 
                 // Stop the node
-                node.stop();
+                node.stop().await;
                 assert!(!node.is_running(), "node should not be running after stop");
-                assert!(!node.is_consensus_running(), "consensus should not be running after stop");
-                assert!(!node.is_execution_running(), "execution should not be running after stop");
+                assert!(
+                    !node.is_consensus_running(),
+                    "consensus should not be running after stop"
+                );
+                assert!(
+                    !node.is_execution_running(),
+                    "execution should not be running after stop"
+                );
 
                 // Keep execution runtime alive so we can verify RPC is actually stopped
                 loop {
@@ -378,11 +383,13 @@ mod tests {
         let rpc_url = format!("http://{}", rpc_addr);
 
         // Verify RPC is accessible while running
-        let provider = ProviderBuilder::new()
-            .connect_http(rpc_url.parse().unwrap());
+        let provider = ProviderBuilder::new().connect_http(rpc_url.parse().unwrap());
 
         let block_number = provider.get_block_number().await;
-        assert!(block_number.is_ok(), "RPC should be accessible while running");
+        assert!(
+            block_number.is_ok(),
+            "RPC should be accessible while running"
+        );
 
         // Signal to stop the node
         let _ = tx_stopped.send(());
@@ -391,10 +398,8 @@ mod tests {
         tokio::time::sleep(Duration::from_secs(2)).await;
 
         // Verify RPC is no longer accessible after stopping
-        let result = tokio::time::timeout(
-            Duration::from_millis(500),
-            provider.get_block_number()
-        ).await;
+        let result =
+            tokio::time::timeout(Duration::from_millis(500), provider.get_block_number()).await;
 
         assert!(
             result.is_err() || result.unwrap().is_err(),

@@ -128,21 +128,19 @@ impl ExecutionRuntime {
             let rt = tokio::runtime::Runtime::new()
                 .expect("must be able to initialize a runtime to run execution/reth nodes");
             rt.block_on(async move {
-                let task_manager = TaskManager::current();
                 while let Some(msg) = from_handle.recv().await {
+                    // create a new task manager for the new node instance
+                    let task_manager = TaskManager::current();
                     match msg {
                         Message::SpawnNode {
                             name,
                             config,
                             response,
                         } => {
-                            let node = launch_execution_node(
-                                task_manager.executor(),
-                                datadir.join(name),
-                                config,
-                            )
-                            .await
-                            .expect("must be able to launch execution nodes");
+                            let node =
+                                launch_execution_node(task_manager, datadir.join(name), config)
+                                    .await
+                                    .expect("must be able to launch execution nodes");
                             response.send(node).expect(
                                 "receiver must hold the return channel until the node is returned",
                             );
@@ -287,8 +285,12 @@ impl ExecutionRuntimeHandle {
 /// This is essentially the same as [`reth_node_builder::NodeHandle`], but
 /// avoids the type parameters.
 pub struct ExecutionNode {
+    /// All handles to interact with the launched node instances and services.
     pub node: TempoFullNode,
-    pub _exit_fut: NodeExitFuture,
+    /// The [`TaskManager`] that drives the node's services.
+    pub task_manager: TaskManager,
+    /// The exist future that resolves when the node's engine future resolves.
+    pub exit_fut: NodeExitFuture,
 }
 
 impl ExecutionNode {
@@ -317,6 +319,14 @@ impl ExecutionNode {
             self_record.id,
             other_record.id
         );
+    }
+
+    /// Shuts down the node and awaits until the node is terminated.
+    pub async fn shutdown(self) {
+        let _ = self.node.rpc_server_handle().clone().stop();
+        self.task_manager
+            .graceful_shutdown_with_timeout(Duration::from_secs(1));
+        let _ = self.exit_fut.await;
     }
 }
 
@@ -355,7 +365,7 @@ impl std::fmt::Debug for ExecutionNode {
 ///    are not passed to it).
 /// 3. consensus config is not necessary
 pub async fn launch_execution_node<P: AsRef<Path>>(
-    executor: TaskExecutor,
+    task_manager: TaskManager,
     datadir: P,
     config: ExecutionNodeConfig,
 ) -> eyre::Result<ExecutionNode> {
@@ -394,14 +404,15 @@ pub async fn launch_execution_node<P: AsRef<Path>>(
 
     let node_handle = NodeBuilder::new(node_config)
         .with_database(database)
-        .with_launch_context(executor)
+        .with_launch_context(task_manager.executor())
         .node(TempoNode::default())
         .launch()
         .await
         .wrap_err("failed launching node")?;
     Ok(ExecutionNode {
         node: node_handle.node,
-        _exit_fut: node_handle.node_exit_future,
+        task_manager,
+        exit_fut: node_handle.node_exit_future,
     })
 }
 
