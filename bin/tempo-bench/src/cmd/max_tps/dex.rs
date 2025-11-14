@@ -1,6 +1,6 @@
 use super::*;
 use alloy::providers::DynProvider;
-use alloy_consensus::TxEip1559;
+use alloy_consensus::TxLegacy;
 use std::pin::Pin;
 use tempo_contracts::precompiles::{
     IStablecoinExchange,
@@ -90,15 +90,13 @@ pub(super) async fn setup(
         let signer = wallet.clone();
 
         futures.push(Box::pin(async move {
-            let tx = TxEip1559 {
-                chain_id,
+            let tx = TxLegacy {
+                chain_id: Some(chain_id),
                 nonce,
-                gas_limit: 1_000_000,
-                max_fee_per_gas: TEMPO_BASE_FEE as u128 + 1,
-                max_priority_fee_per_gas: 1,
+                gas_limit: GAS_LIMIT,
+                gas_price: TEMPO_BASE_FEE as u128,
                 to: TxKind::Call(STABLECOIN_EXCHANGE_ADDRESS),
                 value: U256::ZERO,
-                access_list: Default::default(),
                 input: createPairCall { base: token }.abi_encode().into(),
             };
 
@@ -161,15 +159,13 @@ pub(super) async fn setup(
                 let signer = signer.clone();
 
                 futures.push(Box::pin(async move {
-                    let tx = TxEip1559 {
-                        chain_id,
+                    let tx = TxLegacy {
+                        chain_id: Some(chain_id),
                         nonce: nonce + i as u64,
-                        max_fee_per_gas: TEMPO_BASE_FEE as u128 + 1,
-                        max_priority_fee_per_gas: 1,
-                        gas_limit: 1_000_000,
+                        gas_price: TEMPO_BASE_FEE as u128,
+                        gas_limit: 50_000,
                         to: TxKind::Call(token),
                         value: U256::ZERO,
-                        access_list: Default::default(),
                         input: ITIP20::approveCall {
                             spender: STABLECOIN_EXCHANGE_ADDRESS,
                             amount: U256::MAX,
@@ -203,15 +199,13 @@ pub(super) async fn setup(
             let signer = signer.clone();
 
             futures.push(Box::pin(async move {
-                let tx = TxEip1559 {
-                    chain_id,
+                let tx = TxLegacy {
+                    chain_id: Some(chain_id),
                     nonce: nonce + i as u64,
-                    max_fee_per_gas: TEMPO_BASE_FEE as u128 + 1,
-                    max_priority_fee_per_gas: 1,
+                    gas_price: TEMPO_BASE_FEE as u128,
                     gas_limit: 1_000_000,
                     to: TxKind::Call(STABLECOIN_EXCHANGE_ADDRESS),
                     value: U256::ZERO,
-                    access_list: Default::default(),
                     input: placeFlipCall {
                         token,
                         amount: first_order_amount,
