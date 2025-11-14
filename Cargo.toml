@@ -13,6 +13,7 @@ members = [
   "crates/alloy",
   "crates/chainspec",
   "crates/commonware-node",
+  "crates/commonware-node-config",
   "crates/dkg-onchain-artifacts",
   "crates/consensus",
   "crates/eyre",
