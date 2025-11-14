@@ -359,7 +359,7 @@ where
     }
 
     #[instrument(
-        parent = cause,
+        parent = &cause,
         skip_all,
         fields(
             request.epoch = epoch,
@@ -398,7 +398,7 @@ where
     }
 
     #[instrument(
-        parent = cause,
+        parent = &cause,
         skip_all,
         err,
     )]
@@ -443,7 +443,7 @@ where
     ///   block it is proposing). Always attempt to read dealings from the blocks
     ///   and track them (if a dealer or player both).
     #[instrument(
-        parent = cause,
+        parent = &cause,
         skip_all,
         fields(
             block.derived_epoch = utils::epoch(self.config.epoch_length, block.height()),
