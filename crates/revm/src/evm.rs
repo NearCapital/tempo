@@ -1,11 +1,12 @@
-use crate::{TempoBlockEnv, TempoTxEnv, instructions};
+use crate::{TempoBlockEnv, TempoTxEnv, constants::SYSTEM_TX_GAS_LIMIT_MODERATO, instructions};
 use alloy_evm::{Database, precompiles::PrecompilesMap};
-use alloy_primitives::Log;
+use alloy_primitives::{Address, Bytes, Log};
+use reth_evm::TransactionEnv;
 use revm::{
     Context, Inspector,
-    context::{CfgEnv, ContextError, Evm, FrameStack},
+    context::{CfgEnv, ContextError, Evm, FrameStack, TxEnv},
     handler::{
-        EthFrame, EthPrecompiles, EvmTr, FrameInitOrResult, FrameTr, ItemOrResult,
+        EthFrame, EthPrecompiles, EvmTr, FrameInitOrResult, FrameTr, ItemOrResult, SystemCallTx,
         instructions::EthInstructions,
     },
     inspector::InspectorEvmTr,
@@ -66,6 +67,28 @@ impl<DB: Database, I> TempoEvm<DB, I> {
             inner,
             logs: Vec::new(),
         }
+    }
+
+    /// Returns the configured hardfork specification
+    pub fn hardfork(&self) -> TempoHardfork {
+        self.ctx_ref().cfg.spec
+    }
+
+    /// Creates a new system transaction with the given input for the current hardfork.
+    pub fn create_system_tx_with_caller(
+        &self,
+        caller: Address,
+        system_contract_address: Address,
+        data: Bytes,
+    ) -> TempoTxEnv {
+        let mut system_tx = TxEnv::new_system_tx_with_caller(caller, system_contract_address, data);
+
+        if self.hardfork().is_moderato() {
+            // after moderato the gas limit for system txs was increased
+            system_tx.set_gas_limit(SYSTEM_TX_GAS_LIMIT_MODERATO)
+        }
+
+        system_tx.into()
     }
 }
 

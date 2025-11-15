@@ -10,6 +10,7 @@ use tracing as _;
 
 mod common;
 pub use common::{TempoStateAccess, TempoTx};
+pub mod constants;
 pub mod error;
 pub mod evm;
 pub mod exec;

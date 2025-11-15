@@ -7,14 +7,14 @@ use alloy_evm::Database;
 use revm::{
     DatabaseCommit, ExecuteCommitEvm, ExecuteEvm,
     context::{
-        ContextSetters, TxEnv,
+        ContextSetters,
         result::{ExecResultAndState, HaltReason},
     },
     context_interface::{
         ContextTr, JournalTr,
         result::{EVMError, ExecutionResult},
     },
-    handler::{Handler, SystemCallTx, system_call::SystemCallEvm},
+    handler::{Handler, system_call::SystemCallEvm},
     inspector::{InspectCommitEvm, InspectEvm, InspectSystemCallEvm, Inspector, InspectorHandler},
     primitives::{Address, Bytes},
     state::EvmState,
@@ -99,9 +99,11 @@ where
         system_contract_address: Address,
         data: Bytes,
     ) -> Result<Self::ExecutionResult, Self::Error> {
-        self.inner
-            .ctx
-            .set_tx(TxEnv::new_system_tx_with_caller(caller, system_contract_address, data).into());
+        self.inner.ctx.set_tx(self.create_system_tx_with_caller(
+            caller,
+            system_contract_address,
+            data,
+        ));
         let mut h = TempoEvmHandler::new();
         h.run_system_call(self)
     }
@@ -118,9 +120,11 @@ where
         system_contract_address: Address,
         data: Bytes,
     ) -> Result<Self::ExecutionResult, Self::Error> {
-        self.inner
-            .ctx
-            .set_tx(TxEnv::new_system_tx_with_caller(caller, system_contract_address, data).into());
+        self.inner.ctx.set_tx(self.create_system_tx_with_caller(
+            caller,
+            system_contract_address,
+            data,
+        ));
         let mut h = TempoEvmHandler::new();
         h.inspect_run_system_call(self)
     }
