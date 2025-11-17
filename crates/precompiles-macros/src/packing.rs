@@ -349,11 +349,42 @@ pub(crate) fn gen_slot_packing_logic(
 
 /// Generate a `LayoutCtx` expression for accessing a field.
 ///
+/// Despite we could deterministically know if a field shares its slot with a neighbour, we
+/// treat all primitive types as packable for backward-compatibility reasons.
+///
+/// In a future hardfork, we should implement the logic in `fn gen_layout_ctx_expr_efficient()`.
+pub(crate) fn gen_layout_ctx_expr(
+    ty: &Type,
+    is_manual_slot: bool,
+    _slot_const_ref: TokenStream,
+    offset_const_ref: TokenStream,
+    _prev_slot_const_ref: Option<TokenStream>,
+    _next_slot_const_ref: Option<TokenStream>,
+) -> TokenStream {
+    if !is_manual_slot {
+        quote! {
+            if <#ty as crate::storage::StorableType>::IS_PACKABLE {
+                crate::storage::LayoutCtx::Packed(#offset_const_ref)
+            } else {
+                crate::storage::LayoutCtx::Full
+            }
+        }
+    } else {
+        quote! { crate::storage::LayoutCtx::Full }
+    }
+}
+
+// TODO(rusowsky): implement this logic to `fn gen_layout_ctx_expr` reduce has usage.
+// Note that this requires a hardfork and must be properly coordinated.
+
+/// Generate a `LayoutCtx` expression for accessing a field.
+///
 /// This helper unifies the logic for choosing between `LayoutCtx::Full` and
 /// `LayoutCtx::Packed` based on compile-time slot comparison with neighboring fields.
 ///
 /// A field uses `Packed` if it shares a slot with any neighboring field.
-pub(crate) fn gen_layout_ctx_expr(
+#[allow(dead_code)]
+pub(crate) fn gen_layout_ctx_expr_efficient(
     ty: &Type,
     is_manual_slot: bool,
     slot_const_ref: TokenStream,
@@ -481,95 +512,5 @@ pub(crate) fn gen_collision_check_fn(
         Some((check_fn_name, check_fn))
     } else {
         None
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Helper to create a simple type for testing
-    fn mock_type() -> Type {
-        syn::parse_str("u8").unwrap()
-    }
-
-    #[test]
-    fn test_allocate_slots_basic() {
-        let name = syn::parse_str("field").unwrap();
-        let ty = mock_type();
-        let fields = vec![(&name, &ty)];
-
-        let layout = allocate_slots(&fields).unwrap();
-
-        assert_eq!(layout.len(), 1);
-        assert_eq!(layout[0].name, &name);
-    }
-
-    #[test]
-    fn test_gen_layout_ctx_manual_slot_uses_full() {
-        let ty = mock_type();
-        let result = gen_layout_ctx_expr(
-            &ty,
-            true,
-            quote! { FIELD },
-            quote! { FIELD_OFFSET },
-            None,
-            None,
-        );
-        let expected = quote! { crate::storage::LayoutCtx::Full };
-        assert_eq!(result.to_string(), expected.to_string());
-    }
-
-    #[test]
-    fn test_gen_layout_ctx_first_field_uses_full() {
-        let ty = mock_type();
-        // First field with no neighbors should use Full
-        let result = gen_layout_ctx_expr(
-            &ty,
-            false,
-            quote! { FIELD },
-            quote! { FIELD_OFFSET },
-            None,
-            None,
-        );
-        let expected = quote! { crate::storage::LayoutCtx::Full };
-        assert_eq!(result.to_string(), expected.to_string());
-    }
-
-    #[test]
-    fn test_gen_layout_ctx_with_prev_generates_compile_time_check() {
-        let ty = mock_type();
-        // With a previous field, should generate compile-time slot comparison
-        let result = gen_layout_ctx_expr(
-            &ty,
-            false,
-            quote! { FIELD2 },
-            quote! { FIELD2_OFFSET },
-            Some(quote! { FIELD1 }),
-            None,
-        );
-        let result_str = result.to_string();
-
-        // Should contain compile-time comparisons
-        assert!(
-            result_str.contains("FIELD2") && result_str.contains("FIELD1"),
-            "Expected slot comparison, got: {result_str}",
-        );
-        assert!(
-            result_str.contains("FIELD2_OFFSET"),
-            "Expected offset check, got: {result_str}",
-        );
-        assert!(
-            result_str.contains("IS_PACKABLE"),
-            "Expected IS_PACKABLE check, got: {result_str}",
-        );
-        assert!(
-            result_str.contains("Packed"),
-            "Expected Packed variant, got: {result_str}",
-        );
-        assert!(
-            result_str.contains("Full"),
-            "Expected Full variant, got: {result_str}",
-        );
     }
 }

@@ -3,7 +3,6 @@ pub mod hashmap;
 
 mod types;
 use tempo_chainspec::hardfork::TempoHardfork;
-use tracing;
 pub use types::*;
 
 pub mod packing;
@@ -78,15 +77,12 @@ where
     /// Performs an SSTORE operation at the provided slot, with the given value.
     fn sstore(&mut self, slot: U256, value: U256) -> Result<(), TempoPrecompileError> {
         let address = self.address();
-        tracing::trace!("[SSTORE: {address}] slot: {slot}, value: {value}");
         self.storage().sstore(address, slot, value)
     }
 
     /// Performs an SLOAD operation at the provided slot.
     fn sload(&mut self, slot: U256) -> Result<U256, TempoPrecompileError> {
         let address = self.address();
-        let value = self.storage().sload(address, slot)?;
-        tracing::trace!("[SLOAD: {address}] slot: {slot}, value: {value}");
-        Ok(value)
+        self.storage().sload(address, slot)
     }
 }
