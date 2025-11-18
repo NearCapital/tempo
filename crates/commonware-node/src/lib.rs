@@ -94,7 +94,7 @@ pub async fn run_consensus_stack(
 
     let fee_recipient = config
         .fee_recipient
-        .ok_or_eyre("requried option `consensus.fee-recipient` not set")?;
+        .ok_or_eyre("required option `consensus.fee-recipient` not set")?;
 
     let consensus_engine = crate::consensus::engine::Builder {
         context: context.with_label("engine"),

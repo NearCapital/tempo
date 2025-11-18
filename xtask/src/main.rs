@@ -41,6 +41,10 @@ struct Args {
 }
 
 #[derive(Debug, clap::Subcommand)]
+#[expect(
+    clippy::enum_variant_names,
+    reason = "the variant names map to actual cli inputs and are desired"
+)]
 enum Action {
     GenerateGenesis(GenerateGenesis),
     GenerateDevnet(GenerateDevnet),
