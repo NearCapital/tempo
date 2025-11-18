@@ -831,25 +831,19 @@ mod tests {
         let timestamp: u64 = 1234567890;
         let amount: u128 = 999888777666;
 
-        Slot::<bool>::new_at_offset(struct_base, 0)
-            .packed(0)
+        Slot::<bool>::new_at_loc(struct_base, FieldLocation::new(0, 0, 1))
             .write(&mut contract, flag)?;
-        Slot::<u64>::new_at_offset(struct_base, 0)
-            .packed(1)
+        Slot::<u64>::new_at_loc(struct_base, FieldLocation::new(0, 1, 8))
             .write(&mut contract, timestamp)?;
-        Slot::<u128>::new_at_offset(struct_base, 0)
-            .packed(9)
+        Slot::<u128>::new_at_loc(struct_base, FieldLocation::new(0, 9, 16))
             .write(&mut contract, amount)?;
 
         // Verify all packed correctly
-        let read_flag = Slot::<bool>::new_at_offset(struct_base, 0)
-            .packed(0)
+        let read_flag = Slot::<bool>::new_at_loc(struct_base, FieldLocation::new(0, 0, 1))
             .read(&mut contract)?;
-        let read_time = Slot::<u64>::new_at_offset(struct_base, 0)
-            .packed(1)
+        let read_time = Slot::<u64>::new_at_loc(struct_base, FieldLocation::new(0, 1, 8))
             .read(&mut contract)?;
-        let read_amount = Slot::<u128>::new_at_offset(struct_base, 0)
-            .packed(9)
+        let read_amount = Slot::<u128>::new_at_loc(struct_base, FieldLocation::new(0, 9, 16))
             .read(&mut contract)?;
 
         assert_eq!(read_flag, flag);
@@ -857,19 +851,14 @@ mod tests {
         assert_eq!(read_amount, amount);
 
         // Clear the middle one
-        Slot::<u64>::new_at_offset(struct_base, 0)
-            .packed(1)
-            .delete(&mut contract)?;
+        Slot::<u64>::new_at_loc(struct_base, FieldLocation::new(0, 1, 8)).delete(&mut contract)?;
 
         // Verify
-        let read_flag = Slot::<bool>::new_at_offset(struct_base, 0)
-            .packed(0)
+        let read_flag = Slot::<bool>::new_at_loc(struct_base, FieldLocation::new(0, 0, 1))
             .read(&mut contract)?;
-        let read_time = Slot::<u64>::new_at_offset(struct_base, 0)
-            .packed(1)
+        let read_time = Slot::<u64>::new_at_loc(struct_base, FieldLocation::new(0, 1, 8))
             .read(&mut contract)?;
-        let read_amount = Slot::<u128>::new_at_offset(struct_base, 0)
-            .packed(9)
+        let read_amount = Slot::<u128>::new_at_loc(struct_base, FieldLocation::new(0, 9, 16))
             .read(&mut contract)?;
 
         assert_eq!(read_flag, flag);
@@ -885,38 +874,32 @@ mod tests {
         let mut contract = setup_test_contract(&mut storage);
         let struct_base = U256::from(0x4000);
 
-        // Field in slot 0
-        let addr = Address::random();
-        Slot::<Address>::new_at_offset(struct_base, 0)
-            .packed(0)
-            .write(&mut contract, addr)?;
-
-        // Field in slot 1
-        let value = U256::from(0xdeadbeefu32);
-        Slot::<U256>::new_at_offset(struct_base, 1)
-            .packed(0)
-            .write(&mut contract, value)?;
-
-        // Field in slot 2
+        // Field in slot 0 (bool is 1 byte, packable)
         let flag = false;
-        Slot::<bool>::new_at_offset(struct_base, 2)
-            .packed(0)
+        Slot::<bool>::new_at_loc(struct_base, FieldLocation::new(0, 0, 1))
             .write(&mut contract, flag)?;
 
+        // Field in slot 1 (u128 is 16 bytes, packable)
+        let amount: u128 = 0xdeadbeef;
+        Slot::<u128>::new_at_loc(struct_base, FieldLocation::new(1, 0, 16))
+            .write(&mut contract, amount)?;
+
+        // Field in slot 2 (u64 is 8 bytes, packable)
+        let value: u64 = 123456789;
+        Slot::<u64>::new_at_loc(struct_base, FieldLocation::new(2, 0, 8))
+            .write(&mut contract, value)?;
+
         // Verify all independent
-        let read_addr = Slot::<Address>::new_at_offset(struct_base, 0)
-            .packed(0)
+        let read_flag = Slot::<bool>::new_at_loc(struct_base, FieldLocation::new(0, 0, 1))
             .read(&mut contract)?;
-        let read_val = Slot::<U256>::new_at_offset(struct_base, 1)
-            .packed(0)
+        let read_amount = Slot::<u128>::new_at_loc(struct_base, FieldLocation::new(1, 0, 16))
             .read(&mut contract)?;
-        let read_flag = Slot::<bool>::new_at_offset(struct_base, 2)
-            .packed(0)
+        let read_val = Slot::<u64>::new_at_loc(struct_base, FieldLocation::new(2, 0, 8))
             .read(&mut contract)?;
 
-        assert_eq!(read_addr, addr);
-        assert_eq!(read_val, value);
         assert_eq!(read_flag, flag);
+        assert_eq!(read_amount, amount);
+        assert_eq!(read_val, value);
 
         Ok(())
     }

@@ -162,12 +162,8 @@ impl Orderbook {
         new_best_bid: i16,
     ) -> Result<(), TempoPrecompileError> {
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::BOOKS);
-        BestOrders::new_at_offset(
-            orderbook_base_slot,
-            __packing_orderbook::BEST_BID_TICK_LOC.offset_slots,
-        )
-        .packed(__packing_orderbook::BEST_BID_TICK_LOC.offset_bytes)
-        .write(contract, new_best_bid)?;
+        BestOrders::new_at_loc(orderbook_base_slot, __packing_orderbook::BEST_BID_TICK_LOC)
+            .write(contract, new_best_bid)?;
         Ok(())
     }
 
@@ -178,12 +174,8 @@ impl Orderbook {
         new_best_ask: i16,
     ) -> Result<(), TempoPrecompileError> {
         let orderbook_base_slot = mapping_slot(book_key.as_slice(), super::slots::BOOKS);
-        BestOrders::new_at_offset(
-            orderbook_base_slot,
-            __packing_orderbook::BEST_ASK_TICK_LOC.offset_slots,
-        )
-        .packed(__packing_orderbook::BEST_ASK_TICK_LOC.offset_bytes)
-        .write(contract, new_best_ask)?;
+        BestOrders::new_at_loc(orderbook_base_slot, __packing_orderbook::BEST_ASK_TICK_LOC)
+            .write(contract, new_best_ask)?;
         Ok(())
     }
 
