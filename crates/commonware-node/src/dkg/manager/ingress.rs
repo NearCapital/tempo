@@ -97,9 +97,14 @@ impl Reporter for Mailbox {
     type Activity = Update<Block>;
 
     async fn report(&mut self, update: Self::Activity) {
-        let Self::Activity::Block(block) = update else {
-            return;
+        let block = match update {
+            Self::Activity::Block(block) => block,
+            _ => {
+                tracing::trace!("dropping tip update; DKG manager is only interested in blocks");
+                return;
+            }
         };
+
         let (response, rx) = oneshot::channel();
         if let Err(error) = self
             .inner
