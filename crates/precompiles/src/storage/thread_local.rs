@@ -35,13 +35,13 @@ thread_local! {
 /// Transaction-scoped guard that provides thread-local storage access
 ///
 /// This guard must be created once per transaction and ensures that the storage
-/// provider is available for the duration of the transaction. The guard is RAII:
-/// when dropped, it cleans up the thread-local state.
-pub struct StorageGuard<'a> {
-    _lifetime: PhantomData<&'a mut dyn PrecompileStorageProvider>,
+/// provider is available for the duration of the transaction. When dropped, it
+/// cleans up the thread-local state.
+pub struct StorageGuard {
+    _lifetime: PhantomData<&'static mut dyn PrecompileStorageProvider>,
 }
 
-impl<'a> StorageGuard<'a> {
+impl StorageGuard {
     /// Create a new storage guard
     ///
     /// # Safety
@@ -54,7 +54,7 @@ impl<'a> StorageGuard<'a> {
     /// # Panics
     ///
     /// Panics if a `StorageGuard` already exists on the current thread
-    pub unsafe fn new<S: PrecompileStorageProvider>(storage: &'a mut S) -> Self {
+    pub unsafe fn new<S: PrecompileStorageProvider>(storage: &mut S) -> Self {
         if STORAGE.with(|s| s.get()).is_some() {
             panic!(
                 "StorageGuard already exists - double initialization detected. \
@@ -63,11 +63,10 @@ impl<'a> StorageGuard<'a> {
         }
 
         // Convert to trait object pointer with explicit lifetime
-        // SAFETY: The caller ensures storage outlives this guard via lifetime 'a
-        let ptr: *mut (dyn PrecompileStorageProvider + 'a) = storage;
-        // Erase the lifetime for storage in thread-local (we track it via PhantomData)
-        let ptr_erased: *mut dyn PrecompileStorageProvider = unsafe { std::mem::transmute(ptr) };
-        STORAGE.with(|s| s.set(Some(ptr_erased)));
+        // SAFETY: The caller ensures storage outlives this guard
+        let ptr: *mut dyn PrecompileStorageProvider = storage;
+        let ptr_static: *mut dyn PrecompileStorageProvider = unsafe { std::mem::transmute(ptr) };
+        STORAGE.with(|s| s.set(Some(ptr_static)));
 
         Self {
             _lifetime: PhantomData,
@@ -75,7 +74,7 @@ impl<'a> StorageGuard<'a> {
     }
 }
 
-impl Drop for StorageGuard<'_> {
+impl Drop for StorageGuard {
     fn drop(&mut self) {
         STORAGE.with(|s| s.set(None));
         ADDRESS_STACK.with(|s| s.borrow_mut().clear());
@@ -84,7 +83,7 @@ impl Drop for StorageGuard<'_> {
 
 /// Contract-scoped guard that tracks the current contract address
 ///
-/// This guard is safe to use and implements RAII cleanup. When multiple contracts
+/// This guard is safe to use and is cleaned up when dropped. When multiple contracts
 /// are called in sequence (cross-contract calls), the address stack tracks which
 /// contract is currently active.
 pub struct AddressGuard {
