@@ -1,5 +1,5 @@
 use super::*;
-use alloy::providers::DynProvider;
+use alloy::providers::{DynProvider, WsConnect};
 use std::pin::Pin;
 use tempo_contracts::precompiles::IStablecoinExchange;
 use tempo_precompiles::stablecoin_exchange::{
@@ -42,7 +42,7 @@ pub(super) async fn setup(
     );
     tx_count.tick();
 
-    // Setup HTTP provider with a test wallet
+    // Setup WebSocket provider with a test wallet
     info!("");
     info!("[1/5] Setting up test wallet...");
     let wallet = MnemonicBuilder::from_phrase(mnemonic).build()?;
@@ -50,7 +50,7 @@ pub(super) async fn setup(
     info!("  Wallet address: {}", caller);
     let provider = ProviderBuilder::new()
         .wallet(wallet.clone())
-        .connect_http(url.clone());
+        .connect_ws(WsConnect::new(url.clone())).await?;
 
     info!("");
     info!("[2/5] Creating test tokens...");
@@ -110,14 +110,14 @@ pub(super) async fn setup(
 
     info!("");
     info!("[4/5] Approving token spending for all accounts...");
-    let signers: Vec<_> = signers
-        .into_iter()
-        .map(|signer| {
-            ProviderBuilder::new()
-                .wallet(signer.clone())
-                .connect_http(url.clone())
-        })
-        .collect();
+    let mut signer_providers = Vec::new();
+    for signer in signers.into_iter() {
+        let provider = ProviderBuilder::new()
+            .wallet(signer.clone())
+            .connect_ws(WsConnect::new(url.clone())).await?;
+        signer_providers.push(provider);
+    }
+    let signers = signer_providers;
 
     info!("  Approving {} tokens for {} accounts ({} txs)", tokens.len(), signers.len(), tokens.len() * signers.len());
     for account_provider in signers.iter() {

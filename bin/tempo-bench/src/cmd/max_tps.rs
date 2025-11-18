@@ -10,7 +10,7 @@ use alloy::{
     eips::{BlockNumberOrTag::Latest, Decodable2718},
     network::{Ethereum, Network, ReceiptResponse, TransactionBuilder, TxSignerSync},
     primitives::{Address, BlockNumber, ChainId, Signature, TxKind, U256},
-    providers::{PendingTransactionBuilder, Provider, ProviderBuilder},
+    providers::{PendingTransactionBuilder, Provider, ProviderBuilder, WsConnect},
     sol_types::{SolCall, SolEvent},
     transports::http::reqwest::Url,
 };
@@ -89,8 +89,8 @@ pub struct MaxTpsArgs {
     #[arg(long, default_value = "0x20c0000000000000000000000000000000000000")]
     token_address: Address,
 
-    /// Target URLs for network connections
-    #[arg(long, default_values_t = vec!["http://localhost:8545".to_string()])]
+    /// Target URLs for network connections (WebSocket)
+    #[arg(long, default_values_t = vec!["ws://localhost:8546".to_string()])]
     target_urls: Vec<String>,
 
     /// Total network connections
@@ -182,7 +182,7 @@ impl MaxTpsArgs {
         );
 
         // Get first block height before sending transactions
-        let provider = ProviderBuilder::new().connect_http(target_urls[0].clone());
+        let provider = ProviderBuilder::new().connect_ws(WsConnect::new(target_urls[0].clone())).await?;
         let start_block = provider
             .get_block(Latest.into())
             .await?
@@ -236,6 +236,9 @@ impl MaxTpsArgs {
             }
         });
 
+        // Create verification provider
+        let verification_provider = ProviderBuilder::new().connect_ws(WsConnect::new(target_urls[0].clone())).await?;
+
         // Spawn workers and send transactions (with verification services)
         send_transactions(
             transactions.clone(),
@@ -246,6 +249,7 @@ impl MaxTpsArgs {
             self.disable_thread_pinning,
             tx_counter,
             verification_stats.clone(),
+            verification_provider,
         )
         .context("Failed to send transactions")?;
 
@@ -305,7 +309,7 @@ impl MaxTpsArgs {
     }
 }
 
-fn send_transactions(
+fn send_transactions<P>(
     transactions: Arc<Vec<Vec<u8>>>,
     num_workers: usize,
     _num_connections: u64,
@@ -314,7 +318,11 @@ fn send_transactions(
     disable_thread_pinning: bool,
     tx_counter: Arc<AtomicU64>,
     verification_stats: verification::VerificationStats,
-) -> eyre::Result<()> {
+    verification_provider: P,
+) -> eyre::Result<()>
+where
+    P: Provider + Clone + Send + 'static,
+{
     // Get available cores
     let core_ids =
         core_affinity::get_core_ids().ok_or_else(|| eyre::eyre!("Failed to get core IDs"))?;
@@ -329,7 +337,6 @@ fn send_transactions(
     )));
 
     // Spawn single unified verification service
-    let verification_provider = ProviderBuilder::new().connect_http(target_urls[0].clone());
     let (verification_tx, _verification_handle) = spawn_verification_service(verification_provider, verification_stats.clone());
 
     let handles: Vec<_> = (0..num_sender_threads)
@@ -357,7 +364,7 @@ fn send_transactions(
 
                 rt.block_on(async {
                     // Create provider for sending
-                    let provider = ProviderBuilder::new().connect_http(target_urls[0].clone());
+                    let provider = ProviderBuilder::new().connect_ws(WsConnect::new(target_urls[0].clone())).await.expect("Failed to connect WebSocket");
 
                     // Send transactions
                     for tx_bytes in transactions[start..end].iter() {
@@ -434,7 +441,7 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
 
     let accounts = signers.len();
     // Fetch current nonces for all accounts
-    let provider = ProviderBuilder::new().connect_http(rpc_url);
+    let provider = ProviderBuilder::new().connect_ws(WsConnect::new(rpc_url)).await?;
 
     println!("Fetching nonces for {accounts} accounts...");
 
@@ -607,7 +614,7 @@ pub async fn generate_report(
     args: &MaxTpsArgs,
 ) -> eyre::Result<()> {
     let provider =
-        ProviderBuilder::new_with_network::<TempoNetwork>().connect_http(rpc_url.clone());
+        ProviderBuilder::new_with_network::<TempoNetwork>().connect_ws(WsConnect::new(rpc_url.clone())).await?;
 
     let mut last_block_timestamp: Option<u64> = None;
 
