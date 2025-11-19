@@ -1,7 +1,10 @@
 //! xtask is a Swiss army knife of tools that help with running and testing tempo.
 use std::net::SocketAddr;
 
-use crate::{generate_devnet::GenerateDevnet, generate_genesis::GenerateGenesis};
+use crate::{
+    generate_devnet::GenerateDevnet, generate_genesis::GenerateGenesis,
+    generate_localnet::GenerateLocalnet,
+};
 
 use alloy::signers::{
     local::{MnemonicBuilder, coins_bip39::English},
@@ -14,6 +17,7 @@ use eyre::Context;
 
 mod generate_devnet;
 mod generate_genesis;
+mod generate_localnet;
 mod genesis_args;
 
 #[tokio::main]
@@ -26,6 +30,10 @@ async fn main() -> eyre::Result<()> {
             .run()
             .await
             .wrap_err("failed to generate devnet configs"),
+        Action::GenerateLocalnet(args) => args
+            .run()
+            .await
+            .wrap_err("failed to generate localnet configs"),
         Action::GenerateAddPeer(cfg) => generate_config_to_add_peer(cfg),
     }
 }
@@ -48,6 +56,7 @@ struct Args {
 enum Action {
     GenerateGenesis(GenerateGenesis),
     GenerateDevnet(GenerateDevnet),
+    GenerateLocalnet(GenerateLocalnet),
     GenerateAddPeer(GenerateAddPeer),
 }
 
