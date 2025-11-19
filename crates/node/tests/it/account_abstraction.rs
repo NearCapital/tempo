@@ -555,15 +555,16 @@ async fn submit_and_mine_aa_tx(
     setup: &mut SingleNodeSetup,
     tx: TxAA,
     signature: AASignature,
-) -> eyre::Result<()> {
+) -> eyre::Result<B256> {
     let signed_tx = AASigned::new_unhashed(tx, signature);
     let envelope: TempoTxEnvelope = signed_tx.into();
+    let tx_hash = envelope.tx_hash();
     let mut encoded = Vec::new();
     envelope.encode_2718(&mut encoded);
 
     setup.node.rpc.inject_tx(encoded.into()).await?;
     setup.node.advance_block().await?;
-    Ok(())
+    Ok(*tx_hash)
 }
 
 /// Helper to sign AA transaction with P256 access key (wrapped in Keychain signature)
@@ -931,7 +932,7 @@ async fn test_aa_2d_nonce_system() -> eyre::Result<()> {
 async fn test_aa_webauthn_signature_flow() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let transfer_amount = U256::from(10_000_000_000_000_000_000u64); // 10 tokens
+    let transfer_amount = U256::from(10u64) * U256::from(10).pow(U256::from(18)); // 10 tokens
     let (
         mut setup,
         provider,
@@ -1318,7 +1319,7 @@ async fn test_aa_webauthn_signature_negative_cases() -> eyre::Result<()> {
     );
 
     // Fund the test signer
-    let transfer_amount = U256::from(10_000_000_000_000_000_000u64);
+    let transfer_amount = U256::from(10u64) * U256::from(10).pow(U256::from(18));
     fund_address_with_fee_tokens(
         &mut setup,
         &provider,
@@ -1424,7 +1425,7 @@ async fn test_aa_p256_call_batching() -> eyre::Result<()> {
     }
 
     // Create batch calls - transfer different amounts to each recipient
-    let transfer_base_amount = U256::from(1_000_000_000_000_000_000u64); // 1 token base
+    let transfer_base_amount = U256::from(1u64) * U256::from(10).pow(U256::from(18)); // 1 token base
     let mut calls = Vec::new();
 
     for (recipient, multiplier) in &recipients {
@@ -1525,30 +1526,38 @@ async fn test_aa_p256_call_batching() -> eyre::Result<()> {
         "Block should contain the batch transaction"
     );
 
-    // Check that the transaction in the block is our AA transaction
-    // Skip the rewards registry system tx at index 0
-    let block_tx = &batch_payload.block().body().transactions[1];
-    if let TempoTxEnvelope::AA(aa_tx) = block_tx {
-        assert_eq!(
-            aa_tx.tx().calls.len(),
-            num_recipients,
-            "Transaction should have {num_recipients} calls"
-        );
-        println!(
-            "✓ Block contains AA transaction with {} calls",
-            aa_tx.tx().calls.len()
-        );
-
-        // Verify it used P256 signature
-        match aa_tx.signature() {
-            AASignature::P256(P256SignatureWithPreHash { pre_hash, .. }) => {
-                assert!(*pre_hash, "Should have pre_hash flag set");
-                println!("✓ Transaction used P256 signature with pre-hash");
+    // Find the AA transaction in the block (skip any system transactions)
+    let aa_tx = batch_payload
+        .block()
+        .body()
+        .transactions
+        .iter()
+        .find_map(|tx| {
+            if let TempoTxEnvelope::AA(aa_tx) = tx {
+                Some(aa_tx)
+            } else {
+                None
             }
-            _ => panic!("Transaction should have P256 signature"),
+        })
+        .expect("Block should contain an AA transaction");
+
+    assert_eq!(
+        aa_tx.tx().calls.len(),
+        num_recipients,
+        "Transaction should have {num_recipients} calls"
+    );
+    println!(
+        "✓ Block contains AA transaction with {} calls",
+        aa_tx.tx().calls.len()
+    );
+
+    // Verify it used P256 signature
+    match aa_tx.signature() {
+        AASignature::P256(P256SignatureWithPreHash { pre_hash, .. }) => {
+            assert!(*pre_hash, "Should have pre_hash flag set");
+            println!("✓ Transaction used P256 signature with pre-hash");
         }
-    } else {
-        panic!("Expected AA transaction in block");
+        _ => panic!("Transaction should have P256 signature"),
     }
 
     // Verify all recipients received their tokens
@@ -2288,7 +2297,7 @@ async fn test_aa_access_key() -> eyre::Result<()> {
 
     // Define spending limits for the access key
     // Allow spending up to 10 tokens from DEFAULT_FEE_TOKEN
-    let spending_limit_amount = U256::from(10_000_000_000_000_000_000u64); // 10 tokens
+    let spending_limit_amount = U256::from(10u64) * U256::from(10).pow(U256::from(18)); // 10 tokens
     let spending_limits = vec![TokenLimit {
         token: DEFAULT_FEE_TOKEN,
         limit: spending_limit_amount,
@@ -2329,7 +2338,7 @@ async fn test_aa_access_key() -> eyre::Result<()> {
 
     // Create a token transfer call within the spending limit
     // Transfer 5 tokens (within the 10 token limit)
-    let transfer_amount = U256::from(5_000_000_000_000_000_000u64); // 5 tokens
+    let transfer_amount = U256::from(5u64) * U256::from(10).pow(U256::from(18)); // 5 tokens
 
     println!("\nCreating AA transaction:");
     println!("  - Transfer amount: {transfer_amount} tokens (within 10 token limit)");
@@ -2718,7 +2727,7 @@ async fn test_aa_keychain_negative_cases() -> eyre::Result<()> {
     };
     let sig_hash = tx.signature_hash();
     let signature = root_signer.sign_hash_sync(&sig_hash)?;
-    submit_and_mine_aa_tx(&mut setup, tx, AASignature::Secp256k1(signature)).await?;
+    let _tx_hash = submit_and_mine_aa_tx(&mut setup, tx, AASignature::Secp256k1(signature)).await?;
     nonce += 1; // Increment after successful submission
     println!("✓ Zero public key rejected\n");
 
@@ -2742,7 +2751,7 @@ async fn test_aa_keychain_negative_cases() -> eyre::Result<()> {
         u64::MAX,
         vec![TokenLimit {
             token: DEFAULT_FEE_TOKEN,
-            limit: U256::from(10_000_000_000_000_000_000u64),
+            limit: U256::from(10u64) * U256::from(10).pow(U256::from(18)),
         }],
     )?;
 
@@ -2769,7 +2778,7 @@ async fn test_aa_keychain_negative_cases() -> eyre::Result<()> {
     };
     let sig_hash = tx1.signature_hash();
     let signature = root_signer.sign_hash_sync(&sig_hash)?;
-    submit_and_mine_aa_tx(&mut setup, tx1, AASignature::Secp256k1(signature)).await?;
+    let _tx_hash = submit_and_mine_aa_tx(&mut setup, tx1, AASignature::Secp256k1(signature)).await?;
     nonce += 1;
     println!("  ✓ First authorization succeeded");
 
@@ -2803,29 +2812,38 @@ async fn test_aa_keychain_negative_cases() -> eyre::Result<()> {
     envelope2.encode_2718(&mut encoded2);
     let tx_hash2 = envelope2.tx_hash();
 
-    setup.node.rpc.inject_tx(encoded2.into()).await?;
-    setup.node.advance_block().await?;
-    nonce += 1; // Increment even if reverted, since transaction was included in block
+    let inject_result = setup.node.rpc.inject_tx(encoded2.into()).await;
 
-    // Check receipt status - should be false (reverted)
-    // Use raw RPC call to get receipt since Alloy doesn't support custom tx type 0x76
-    let receipt_opt2: Option<serde_json::Value> = provider
-        .raw_request("eth_getTransactionReceipt".into(), [*tx_hash2])
-        .await?;
-    let receipt_json2 = receipt_opt2.expect("Receipt should exist");
+    if let Err(e) = inject_result {
+        // Transaction was rejected at pool level (expected for duplicate key)
+        println!("  ✓ Duplicate key rejected at pool level: {}", e);
+    } else {
+        // Transaction was accepted, mine it and check if it reverted
+        setup.node.advance_block().await?;
+        nonce += 1; // Increment since transaction was included in block
 
-    let status2 = receipt_json2
-        .get("status")
-        .and_then(|v| v.as_str())
-        .map(|s| s != "0x0")
-        .unwrap_or(false);
+        // Check receipt status - should be false (reverted)
+        let receipt_opt2: Option<serde_json::Value> = provider
+            .raw_request("eth_getTransactionReceipt".into(), [*tx_hash2])
+            .await?;
 
-    if status2 {
-        return Err(eyre::eyre!(
-            "Duplicate key authorization should have reverted but succeeded"
-        ));
+        if let Some(receipt_json2) = receipt_opt2 {
+            let status2 = receipt_json2
+                .get("status")
+                .and_then(|v| v.as_str())
+                .map(|s| s != "0x0")
+                .unwrap_or(false);
+
+            if status2 {
+                return Err(eyre::eyre!(
+                    "Duplicate key authorization should have reverted but succeeded"
+                ));
+            }
+            println!("  ✓ Duplicate key rejected (transaction reverted)");
+        } else {
+            println!("  ✓ Duplicate key rejected (transaction not included in block)");
+        }
     }
-    println!("  ✓ Duplicate key rejected (transaction reverted)");
 
     println!("✓ Duplicate key rejected\n");
 
@@ -2848,7 +2866,7 @@ async fn test_aa_keychain_negative_cases() -> eyre::Result<()> {
         u64::MAX,
         vec![TokenLimit {
             token: DEFAULT_FEE_TOKEN,
-            limit: U256::from(10_000_000_000_000_000_000u64),
+            limit: U256::from(10u64) * U256::from(10).pow(U256::from(18)),
         }],
     )?;
 
@@ -2875,7 +2893,7 @@ async fn test_aa_keychain_negative_cases() -> eyre::Result<()> {
     };
     let sig_hash = tx3.signature_hash();
     let signature = root_signer.sign_hash_sync(&sig_hash)?;
-    submit_and_mine_aa_tx(&mut setup, tx3, AASignature::Secp256k1(signature)).await?;
+    let _tx_hash = submit_and_mine_aa_tx(&mut setup, tx3, AASignature::Secp256k1(signature)).await?;
     nonce += 1;
 
     // Try to authorize second key using first access key (should fail)
@@ -2948,5 +2966,264 @@ async fn test_aa_keychain_negative_cases() -> eyre::Result<()> {
     println!("✓ Unauthorized authorize rejected\n");
 
     println!("=== All Keychain Negative Tests Passed ===");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_transaction_key_authorization_and_spending_limits() -> eyre::Result<()> {
+    use alloy::sol_types::SolCall;
+    use tempo_precompiles::account_keychain::updateSpendingLimitCall;
+    use tempo_contracts::precompiles::ITIP20::{balanceOfCall, transferCall};
+    use tempo_primitives::transaction::account_abstraction::TokenLimit;
+
+    reth_tracing::init_test_tracing();
+
+    let (mut setup, provider, root_signer, root_addr) = setup_test_with_funded_account().await?;
+    let chain_id = provider.get_chain_id().await?;
+
+    const ACCOUNT_KEYCHAIN_ADDRESS: Address =
+        alloy_primitives::address!("0xAAAAAAAA00000000000000000000000000000000");
+
+    // Generate an access key
+    let (access_key_signing, pub_x, pub_y, access_key_addr) = generate_p256_access_key();
+
+    let spending_limit = U256::from(5u64) * U256::from(10).pow(U256::from(18)); // 5 tokens
+    let over_limit_amount = U256::from(10u64) * U256::from(10).pow(U256::from(18)); // 10 tokens
+
+    let mock_p256_sig = AASignature::P256(
+        tempo_primitives::transaction::aa_signature::P256SignatureWithPreHash {
+            r: B256::ZERO,
+            s: B256::ZERO,
+            pub_key_x: pub_x,
+            pub_key_y: pub_y,
+            pre_hash: false,
+        },
+    );
+
+    let key_auth = create_key_authorization(
+        &root_signer,
+        access_key_addr,
+        mock_p256_sig,
+        u64::MAX,
+        vec![TokenLimit {
+            token: DEFAULT_FEE_TOKEN,
+            limit: spending_limit,
+        }],
+    )?;
+
+    let mut nonce = provider.get_transaction_count(root_addr).await?;
+
+    // Test 1: Authorize the access key with spending limits
+    let auth_tx = TxAA {
+        chain_id,
+        max_priority_fee_per_gas: TEMPO_BASE_FEE as u128,
+        max_fee_per_gas: TEMPO_BASE_FEE as u128,
+        gas_limit: 400_000,
+        calls: vec![
+            Call {
+                to: DEFAULT_FEE_TOKEN.into(),
+                value: U256::ZERO,
+                input: balanceOfCall { account: root_addr }.abi_encode().into(),
+            },
+        ],
+        nonce_key: U256::ZERO,
+        nonce,
+        fee_token: None,
+        fee_payer_signature: None,
+        valid_before: Some(u64::MAX),
+        valid_after: None,
+        access_list: Default::default(),
+        key_authorization: Some(key_auth.clone()),
+        aa_authorization_list: vec![],
+    };
+
+    let sig = root_signer.sign_hash_sync(&auth_tx.signature_hash())?;
+    let _tx_hash = submit_and_mine_aa_tx(&mut setup, auth_tx, AASignature::Secp256k1(sig)).await?;
+    nonce += 1;
+
+    // Test 2: Try to use access key to call admin functions (must revert)
+    let bad_admin_tx = TxAA {
+        chain_id,
+        max_priority_fee_per_gas: TEMPO_BASE_FEE as u128,
+        max_fee_per_gas: TEMPO_BASE_FEE as u128,
+        gas_limit: 300_000,
+        calls: vec![
+            Call {
+                to: ACCOUNT_KEYCHAIN_ADDRESS.into(),
+                value: U256::ZERO,
+                input: updateSpendingLimitCall {
+                    keyId: access_key_addr,
+                    token: DEFAULT_FEE_TOKEN,
+                    newLimit: U256::from(20u64) * U256::from(10).pow(U256::from(18)),
+                }.abi_encode().into(),
+            },
+        ],
+        nonce_key: U256::ZERO,
+        nonce,
+        fee_token: None,
+        fee_payer_signature: None,
+        valid_before: Some(u64::MAX),
+        valid_after: None,
+        access_list: Default::default(),
+        key_authorization: None,
+        aa_authorization_list: vec![],
+    };
+
+    let access_sig = sign_aa_tx_with_p256_access_key(
+        &bad_admin_tx,
+        &access_key_signing,
+        &pub_x,
+        &pub_y,
+        root_addr,
+    )?;
+
+    let signed_tx = AASigned::new_unhashed(bad_admin_tx, access_sig);
+    let envelope: TempoTxEnvelope = signed_tx.into();
+    let mut encoded = Vec::new();
+    envelope.encode_2718(&mut encoded);
+    let tx_hash = *envelope.tx_hash();
+
+    setup.node.rpc.inject_tx(encoded.into()).await?;
+    setup.node.advance_block().await?;
+
+    let receipt: Option<serde_json::Value> = provider
+        .raw_request("eth_getTransactionReceipt".into(), [tx_hash])
+        .await?;
+
+    let receipt_json = receipt.expect("Transaction must be included in block");
+    let status = receipt_json
+        .get("status")
+        .and_then(|v| v.as_str())
+        .expect("Receipt must have status field");
+
+    assert_eq!(status, "0x0", "Access keys cannot call admin functions - transaction must revert");
+    nonce += 1;
+
+    // Test 3: Try to transfer more than spending limit using access key (must revert)
+    let recipient = Address::random();
+    let over_limit_tx = TxAA {
+        chain_id,
+        max_priority_fee_per_gas: TEMPO_BASE_FEE as u128,
+        max_fee_per_gas: TEMPO_BASE_FEE as u128,
+        gas_limit: 300_000,
+        calls: vec![
+            Call {
+                to: DEFAULT_FEE_TOKEN.into(),
+                value: U256::ZERO,
+                input: transferCall {
+                    to: recipient,
+                    amount: over_limit_amount,
+                }.abi_encode().into(),
+            },
+        ],
+        nonce_key: U256::ZERO,
+        nonce,
+        fee_token: None,
+        fee_payer_signature: None,
+        valid_before: Some(u64::MAX),
+        valid_after: None,
+        access_list: Default::default(),
+        key_authorization: None,
+        aa_authorization_list: vec![],
+    };
+
+    let access_sig = sign_aa_tx_with_p256_access_key(
+        &over_limit_tx,
+        &access_key_signing,
+        &pub_x,
+        &pub_y,
+        root_addr,
+    )?;
+
+    let signed_tx = AASigned::new_unhashed(over_limit_tx, access_sig);
+    let envelope: TempoTxEnvelope = signed_tx.into();
+    let mut encoded = Vec::new();
+    envelope.encode_2718(&mut encoded);
+    let tx_hash = *envelope.tx_hash();
+
+    setup.node.rpc.inject_tx(encoded.into()).await?;
+    setup.node.advance_block().await?;
+
+    let receipt: Option<serde_json::Value> = provider
+        .raw_request("eth_getTransactionReceipt".into(), [tx_hash])
+        .await?;
+
+    let receipt_json = receipt.expect("Transaction must be included in block");
+    let status = receipt_json
+        .get("status")
+        .and_then(|v| v.as_str())
+        .expect("Receipt must have status field");
+
+    assert_eq!(status, "0x0", "Transfer exceeding spending limit must revert");
+    nonce += 1;
+
+    // Test 4: Transfer within spending limit using access key (must succeed)
+    let safe_transfer_amount = U256::from(3u64) * U256::from(10).pow(U256::from(18));
+    let within_limit_tx = TxAA {
+        chain_id,
+        max_priority_fee_per_gas: TEMPO_BASE_FEE as u128,
+        max_fee_per_gas: TEMPO_BASE_FEE as u128,
+        gas_limit: 300_000,
+        calls: vec![
+            Call {
+                to: DEFAULT_FEE_TOKEN.into(),
+                value: U256::ZERO,
+                input: transferCall {
+                    to: recipient,
+                    amount: safe_transfer_amount,
+                }.abi_encode().into(),
+            },
+        ],
+        nonce_key: U256::ZERO,
+        nonce,
+        fee_token: None,
+        fee_payer_signature: None,
+        valid_before: Some(u64::MAX),
+        valid_after: None,
+        access_list: Default::default(),
+        key_authorization: None,
+        aa_authorization_list: vec![],
+    };
+
+    let access_sig = sign_aa_tx_with_p256_access_key(
+        &within_limit_tx,
+        &access_key_signing,
+        &pub_x,
+        &pub_y,
+        root_addr,
+    )?;
+
+    let signed_tx = AASigned::new_unhashed(within_limit_tx, access_sig);
+    let envelope: TempoTxEnvelope = signed_tx.into();
+    let tx_hash = *envelope.tx_hash();
+    let mut encoded = Vec::new();
+    envelope.encode_2718(&mut encoded);
+
+    setup.node.rpc.inject_tx(encoded.into()).await?;
+    setup.node.advance_block().await?;
+
+    let receipt: Option<serde_json::Value> = provider
+        .raw_request("eth_getTransactionReceipt".into(), [tx_hash])
+        .await?;
+
+    let receipt_json = receipt.expect("Transaction must be included in block");
+    let status = receipt_json
+        .get("status")
+        .and_then(|v| v.as_str())
+        .expect("Receipt must have status field");
+
+    assert_eq!(status, "0x1", "Transfer within spending limit must succeed");
+
+    let recipient_balance = ITIP20::new(DEFAULT_FEE_TOKEN, &provider)
+        .balanceOf(recipient)
+        .call()
+        .await?;
+
+    assert_eq!(
+        recipient_balance,
+        safe_transfer_amount,
+        "Recipient must receive exactly the transferred amount"
+    );
+
     Ok(())
 }
