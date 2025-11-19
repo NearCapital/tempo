@@ -26,7 +26,7 @@ const MAX_CALL_DEPTH: usize = 64;
 
 thread_local! {
     /// Thread-local storage for the current storage provider pointer
-    static STORAGE: Cell<Option<*mut dyn PrecompileStorageProvider>> = const { Cell::new(None) };
+    pub(crate) static STORAGE: Cell<Option<*mut dyn PrecompileStorageProvider>> = const { Cell::new(None) };
 
     /// Thread-local stack of contract addresses for nested calls
     static ADDRESS_STACK: RefCell<Vec<Address>> = RefCell::new(Vec::new());
@@ -76,6 +76,7 @@ impl StorageGuard {
 
 impl Drop for StorageGuard {
     fn drop(&mut self) {
+        // Clean up thread-local state
         STORAGE.with(|s| s.set(None));
         ADDRESS_STACK.with(|s| s.borrow_mut().clear());
     }
