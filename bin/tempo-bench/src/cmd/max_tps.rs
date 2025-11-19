@@ -119,6 +119,14 @@ pub struct MaxTpsArgs {
     #[arg(long, default_value = "8")]
     max_concurrent_requests: usize,
 
+    /// A number of transaction to send, before waiting for their receipts, that should be likely
+    /// safe.
+    ///
+    /// Large amount of transactions in a block will result in system transaction OutOfGas error.
+    /// Large amount of transactions sent very quickly can overflow the txpool.
+    #[arg(long, default_value = "10000")]
+    max_concurrent_transactions: usize,
+
     /// A weight that determines the likelihood of generating a TIP-20 transfer transaction.
     #[arg(long, default_value = "0.8")]
     tip20_weight: f64,
@@ -170,6 +178,7 @@ impl MaxTpsArgs {
                 chain_id: self.chain_id,
                 rpc_url: target_urls[0].clone(),
                 max_concurrent_requests: self.max_concurrent_requests,
+                max_concurrent_transactions: self.max_concurrent_transactions,
                 tip20_weight,
                 place_order_weight,
                 swap_weight,
@@ -336,6 +345,7 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
         chain_id,
         rpc_url,
         max_concurrent_requests,
+        max_concurrent_transactions,
         tip20_weight: transfer_weight,
         place_order_weight: place_weight,
         swap_weight,
@@ -367,6 +377,7 @@ async fn generate_transactions(input: GenerateTransactionsInput<'_>) -> eyre::Re
         mnemonic,
         signers.clone(),
         max_concurrent_requests,
+        max_concurrent_transactions,
     )
     .await?;
 
@@ -642,16 +653,13 @@ async fn join_all<
     futures: impl IntoIterator<Item = T>,
     tx_count: &ProgressBar,
     max_concurrent_requests: usize,
+    max_concurrent_transactions: usize,
 ) -> eyre::Result<()> {
-    /// A number of transaction to send before waiting for receipt that should be likely safe.
-    /// Large amount of transactions in a block will result in system transaction OutOfGas error.
-    const TX_LIMIT: usize = 10_000;
-
     let mut buf: Vec<Vec<T>> = Vec::new();
 
     for future in futures {
         match buf.last_mut() {
-            Some(buf) if buf.len() < TX_LIMIT => buf.push(future),
+            Some(buf) if buf.len() < max_concurrent_transactions => buf.push(future),
             _ => buf.push(vec![future]),
         }
     }
@@ -699,6 +707,7 @@ struct GenerateTransactionsInput<'input> {
     rpc_url: Url,
     from_mnemonic_index: u32,
     max_concurrent_requests: usize,
+    max_concurrent_transactions: usize,
     tip20_weight: u64,
     place_order_weight: u64,
     swap_weight: u64,

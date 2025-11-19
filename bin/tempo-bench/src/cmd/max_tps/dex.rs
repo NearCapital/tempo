@@ -17,6 +17,7 @@ pub(super) async fn setup(
     mnemonic: &str,
     signers: Vec<PrivateKeySigner>,
     max_concurrent_requests: usize,
+    max_concurrent_transactions: usize,
 ) -> eyre::Result<(
     IStablecoinExchangeInstance<DynProvider>,
     Address,
@@ -88,7 +89,13 @@ pub(super) async fn setup(
         }
     }
 
-    join_all(futures, &tx_count, max_concurrent_requests).await?;
+    join_all(
+        futures,
+        &tx_count,
+        max_concurrent_requests,
+        max_concurrent_transactions,
+    )
+    .await?;
 
     let mut futures = Vec::new();
     let mut signers_with_nonce = Vec::with_capacity(signers_count as usize);
@@ -110,7 +117,13 @@ pub(super) async fn setup(
         signers_with_nonce.push((signer, nonce + tokens_count));
     }
 
-    join_all(futures, &tx_count, max_concurrent_requests).await?;
+    join_all(
+        futures,
+        &tx_count,
+        max_concurrent_requests,
+        max_concurrent_transactions,
+    )
+    .await?;
 
     let tick_over = exchange.priceToTick(100010).call().await?;
     let tick_under = exchange.priceToTick(99990).call().await?;
@@ -137,7 +150,13 @@ pub(super) async fn setup(
         }
     }
 
-    join_all(futures, &tx_count, max_concurrent_requests).await?;
+    join_all(
+        futures,
+        &tx_count,
+        max_concurrent_requests,
+        max_concurrent_transactions,
+    )
+    .await?;
 
     let exchange = IStablecoinExchange::new(STABLECOIN_EXCHANGE_ADDRESS, provider.clone().erased());
 
