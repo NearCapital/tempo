@@ -150,6 +150,7 @@ impl std::str::FromStr for AddrOrFqdn {
     type Err = NotAddrOrHostPort;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
         if let Ok(addr) = s.parse::<SocketAddr>() {
             return Ok(Self::Addr(addr));
         }

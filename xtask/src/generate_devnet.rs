@@ -48,7 +48,7 @@ impl GenerateDevnet {
         // Copy the seed here before genesis_args are consumed.
         let seed = genesis_args.seed;
 
-        let (_, consensus_config) = genesis_args
+        let (genesis, consensus_config) = genesis_args
             .generate_genesis_and_consensus_config()
             .await
             .wrap_err("failed to generate genesis")?;
@@ -126,6 +126,8 @@ impl GenerateDevnet {
                     execution_peers: vec![],
                 },
             ));
+
+            println!("created a config for validator `{}`", validator.net_address);
         }
 
         for (validator, mut config) in all_configs {
@@ -138,9 +140,15 @@ impl GenerateDevnet {
             std::fs::write(&dst, config_json).wrap_err_with(|| {
                 format!("failed to write deployment config to `{}`", dst.display())
             })?;
+            println!("wrote config for validator `{}`", validator.net_address);
         }
-
         eprintln!("config files written");
+
+        let genesis_ser = serde_json::to_string_pretty(&genesis)
+            .wrap_err("failed serializing genesis as json")?;
+        let dst = output.join("genesis.json");
+        std::fs::write(&dst, &genesis_ser)
+            .wrap_err_with(|| format!("failed writing genesis to `{}`", dst.display()))?;
         Ok(())
     }
 }

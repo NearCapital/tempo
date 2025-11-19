@@ -175,7 +175,7 @@ impl ValidatorState {
     /// Pushes `syncing_players` into the participants queue.
     ///
     /// This method is called on successful DKG ceremonies: the current players
-    /// wll become the next dealers, and the current syncing players will become
+    /// will become the next dealers, and the current syncing players will become
     /// the next regular players.
     ///
     /// Removes and returns the old dealers.
@@ -192,7 +192,7 @@ impl ValidatorState {
     ///
     /// This method is called on failed DKG ceremonies: the current dealers
     /// will remain dealers for the next epoch, the current players are dropped
-    /// (since for them, the cermony failed), and the current syncing players
+    /// (since for them, the ceremony failed), and the current syncing players
     /// will become the next regular players.
     pub(super) fn push_on_failure(
         &mut self,

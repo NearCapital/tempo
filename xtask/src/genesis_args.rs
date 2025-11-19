@@ -22,8 +22,7 @@ use reth_evm::{
         inspector::JournalExt,
     },
 };
-use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::collections::BTreeMap;
 use tempo_chainspec::spec::TEMPO_BASE_FEE;
 use tempo_contracts::{
     ARACHNID_CREATE2_FACTORY_ADDRESS, CREATEX_ADDRESS, DEFAULT_7702_DELEGATE_ADDRESS,
@@ -54,10 +53,6 @@ pub(crate) struct GenesisArgs {
     /// Number of accounts to generate
     #[arg(short, long, default_value = "50000")]
     accounts: u32,
-
-    /// Output file path
-    #[arg(short, long)]
-    output: PathBuf,
 
     /// Mnemonic to use for account generation
     #[arg(
@@ -553,6 +548,7 @@ fn construct_consensus_config_and_initialize_validator_config(
     seed: Option<u64>,
     evm: &mut TempoEvm<CacheDB<EmptyDB>>,
 ) -> eyre::Result<ConsensusConfig> {
+    println!("Creating data for all validators: `{net_addresses:?}`");
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed.unwrap_or_else(rand::random::<u64>));
 
     let threshold = commonware_utils::quorum(net_addresses.len() as u32);
@@ -573,7 +569,7 @@ fn construct_consensus_config_and_initialize_validator_config(
     .collect::<OrderedAssociated<_, _>>();
 
     let mut validators = Vec::with_capacity(net_addresses.len());
-    for i in 0..validators.len() {
+    for i in 0..net_addresses.len() {
         validators.push((
             keys.keys()[i].clone(),
             Validator {
@@ -611,7 +607,7 @@ fn construct_consensus_config_and_initialize_validator_config(
                     publicKey: public_key.encode().freeze().as_ref().try_into().unwrap(),
                     active: true,
                     inboundAddress: net_address.to_string(),
-                    outboundAddress: net_address.to_string(),
+                    outboundAddress: "127.0.0.1:8000".to_string(),
                 },
             )
             .wrap_err("failed to call addValidator smart contract")?;
