@@ -192,44 +192,47 @@ impl MaxTpsArgs {
         // Spawn monitoring thread for TPS tracking
         let _monitor_handle = monitor_tps(tx_counter.clone(), total_txs);
 
-        // Spawn workers and send transactions
-        send_transactions(
-            transactions.clone(),
-            self.workers,
-            self.total_connections,
-            target_urls.clone(),
-            self.tps,
-            self.disable_thread_pinning,
-            tx_counter,
-        )
-        .context("Failed to send transactions")?;
-
-        // Graceful period of 1 second for `monitor_tps` to print out last statement
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        let mut rng = rand::rng();
-        let sample_size = transactions.len().min(self.sample_size);
         let mut end_block_number = start_block_number;
-        println!("Collecting a sample of {sample_size} receipts");
-        let progress = ProgressBar::new(sample_size as u64);
-        progress.tick();
 
-        for transaction in transactions.choose_multiple(&mut rng, sample_size) {
-            let tx = EthereumTxEnvelope::<TxEip4844>::decode_2718_exact(transaction.as_slice())
-                .expect("should be serialized as EIP-2718");
-            let tx_hash = *tx.hash();
-            let receipt = PendingTransactionBuilder::new(provider.root().clone(), tx_hash)
-                .get_receipt()
-                .await?;
-            progress.inc(1);
+        for sec in 0..self.duration {
+            // Spawn workers and send transactions for `sec`-th second
+            send_transactions(
+                transactions.clone(),
+                self.workers,
+                self.total_connections,
+                target_urls.clone(),
+                self.tps,
+                self.disable_thread_pinning,
+                tx_counter.clone(),
+                sec,
+            )
+            .context("Failed to send transactions")?;
 
-            if let Some(block_number) = receipt.block_number
-                && block_number > end_block_number
-            {
-                end_block_number = block_number;
+            let mut rng = rand::rng();
+            let sample_size = transactions.len().min(self.sample_size);
+            println!("Collecting a sample of {sample_size} receipts");
+            let progress = ProgressBar::new(sample_size as u64);
+            progress.tick();
+            let start = (sec * self.tps) as usize;
+            let end = ((sec + 1) * self.tps) as usize;
+
+            for transaction in transactions[start..end].choose_multiple(&mut rng, sample_size) {
+                let tx = EthereumTxEnvelope::<TxEip4844>::decode_2718_exact(transaction.as_slice())
+                    .expect("should be serialized as EIP-2718");
+                let tx_hash = *tx.hash();
+                let receipt = PendingTransactionBuilder::new(provider.root().clone(), tx_hash)
+                    .get_receipt()
+                    .await?;
+                progress.inc(1);
+
+                if let Some(block_number) = receipt.block_number
+                    && block_number > end_block_number
+                {
+                    end_block_number = block_number;
+                }
             }
+            progress.force_draw();
         }
-        progress.force_draw();
 
         generate_report(
             &target_urls[0].clone(),
@@ -243,6 +246,7 @@ impl MaxTpsArgs {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn send_transactions(
     transactions: Arc<Vec<Vec<u8>>>,
     num_workers: usize,
@@ -251,6 +255,7 @@ fn send_transactions(
     tps: u64,
     disable_thread_pinning: bool,
     tx_counter: Arc<AtomicU64>,
+    sec: u64,
 ) -> eyre::Result<()> {
     // Get available cores
     let core_ids =
@@ -258,7 +263,13 @@ fn send_transactions(
     println!("Detected {} effective cores.", core_ids.len());
 
     let num_sender_threads = num_workers.min(core_ids.len());
-    let chunk_size = transactions.len().div_ceil(num_sender_threads);
+    let chunk_size = transactions.len().div_ceil(tps as usize);
+    let small_chunk_size = chunk_size / num_sender_threads;
+
+    println!(
+        "len {} tps {tps} chunk_size {chunk_size} small_chunk_size {small_chunk_size} num_sender_threads {num_sender_threads}",
+        transactions.len()
+    );
 
     // Create a shared rate limiter for all threads
     let rate_limiter = Arc::new(RateLimiter::direct(Quota::per_second(
@@ -277,8 +288,8 @@ fn send_transactions(
             let transactions = transactions.clone();
             let target_urls = target_urls.to_vec();
             let tx_counter = tx_counter.clone();
-            let start = thread_id * chunk_size;
-            let end = (start + chunk_size).min(transactions.len());
+            let start = thread_id * small_chunk_size + (sec * tps) as usize;
+            let end = (start + small_chunk_size).min(transactions.len());
 
             // Spawn thread and send transactions over specified duration
             thread::spawn(move || {

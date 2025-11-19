@@ -21,13 +21,13 @@ build binary extra_args="":
 
 [group('localnet')]
 [doc('Generates a genesis file')]
-genesis accounts="1000" output="genesis.json" profile="maxperf":
+genesis accounts="1000000" output="genesis.json" profile="maxperf":
     cargo run -p tempo-xtask --profile {{profile}} -- generate-genesis --output {{output}} -a {{accounts}}
 
 [group('localnet')]
 [doc('Deletes local network data and launches a new localnet')]
 [confirm('This will wipe your data directory (unless you have reset=false) - please confirm before proceeding (y/n):')]
-localnet accounts="1000" reset="true" profile="maxperf" features="asm-keccak" args="":
+localnet accounts="1000000" reset="true" profile="maxperf" features="asm-keccak" args="":
     #!/bin/bash
     if [[ "{{reset}}" = "true" ]]; then
         rm -r ./localnet/ || true
