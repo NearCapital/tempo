@@ -34,6 +34,7 @@ use futures::{
     channel::{mpsc, oneshot},
     future::{Either, always_ready, try_join},
 };
+use parking_lot::Mutex;
 use rand::{CryptoRng, Rng};
 use reth_node_builder::ConsensusEngineHandle;
 use reth_primitives_traits::SealedBlock;
@@ -146,6 +147,17 @@ where
     TContext: Pacer + governor::clock::Clock + Rng + CryptoRng + Spawner + Storage + Metrics,
 {
     async fn run_until_stopped(mut self) {
+
+        struct Ondrop;
+
+        impl Drop for Ondrop {
+            fn drop(&mut self) {
+                println!("\n\n\nDropping Application actor\n\n\n");
+            }
+        }
+
+        let guard = Ondrop{};
+
         while let Some(msg) = self.mailbox.next().await {
             if let Err(error) = self.handle_message(msg) {
                 error_span!("handle message").in_scope(|| {
@@ -156,6 +168,7 @@ where
                 });
                 break;
             }
+            tokio::task::yield_now().await;
         }
     }
 
@@ -447,6 +460,17 @@ impl Inner<Init> {
         parent_digest: Digest,
         round: Round,
     ) -> eyre::Result<Block> {
+
+        struct Ondrop;
+
+        impl Drop for Ondrop {
+            fn drop(&mut self) {
+                println!("\n\n\nDropping Inner Propose actor\n\n\n");
+            }
+        }
+
+        let on_drop = Ondrop{};
+
         let genesis_block = self.genesis_block.clone();
         let parent_request = if parent_digest == genesis_block.digest() {
             Either::Left(always_ready(|| Ok((*genesis_block).clone())))
@@ -718,6 +742,9 @@ impl Inner<Uninit> {
         }
         .build(context.with_label("executor"));
 
+        let executor_mailbox = executor.mailbox().clone();
+        let handle = executor.start();
+
         let initialized = Inner {
             fee_recipient: self.fee_recipient,
             epoch_length: self.epoch_length,
@@ -729,13 +756,13 @@ impl Inner<Uninit> {
             state: Init {
                 latest_proposed_block: Arc::new(RwLock::new(None)),
                 dkg_manager,
-                executor_mailbox: executor.mailbox().clone(),
+                executor_mailbox,
+                executor_handle: AbortOnDrop(handle).into()
             },
             subblocks: self.subblocks,
             scheme_provider: self.scheme_provider,
         };
 
-        executor.start();
 
         Ok(initialized)
     }
@@ -751,6 +778,21 @@ struct Init {
     latest_proposed_block: Arc<RwLock<Option<Block>>>,
     dkg_manager: crate::dkg::manager::Mailbox,
     executor_mailbox: ExecutorMailbox,
+    executor_handle: Arc<AbortOnDrop>,
+}
+
+struct AbortOnDrop(Handle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+impl std::fmt::Debug for AbortOnDrop {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AbortOnDrop").finish()
+    }
 }
 
 /// Verifies `block` given its `parent` against the execution layer.

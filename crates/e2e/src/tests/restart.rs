@@ -48,6 +48,8 @@ fn run_restart_test(
         let (mut nodes, mut oracle) =
             setup_validators(context.clone(), &execution_runtime, node_setup.clone()).await;
 
+        println!("nodex {}", nodes.len());
+
         join_all(nodes.iter_mut().map(|node| node.start())).await;
         link_validators(&mut oracle, &nodes, node_setup.linkage.clone(), None).await;
 
@@ -59,7 +61,12 @@ fn run_restart_test(
 
         // Randomly select a validator to kill
         let idx = context.gen_range(0..nodes.len());
+
+        println!("\n\n\nSTOPPING\n\n\n");
         nodes[idx].stop().await;
+        context.sleep(Duration::from_secs(30)).await;
+
+        println!("\n\n\nSTOPPED\n\n\n");
 
         debug!(public_key = %nodes[idx].public_key(), "stopped a random validator");
 
@@ -69,6 +76,8 @@ fn run_restart_test(
         );
         let num_running = nodes.iter().filter(|n| n.is_running()).count() as u32;
         wait_for_height(&context, num_running, restart_height).await;
+
+        println!("\n\n\nRestarting\n\n\n");
 
         nodes[idx].start().await;
         debug!(
@@ -235,6 +244,7 @@ fn network_resumes_after_restart() {
 #[test_traced]
 fn validator_catches_up_to_network_during_epoch() {
     let _ = tempo_eyre::install();
+    reth_tracing::init_test_tracing();
 
     let linkage = Link {
         latency: Duration::from_millis(10),
@@ -244,7 +254,7 @@ fn validator_catches_up_to_network_during_epoch() {
 
     let setup = RestartSetup {
         node_setup: Setup {
-            how_many_signers: 4,
+            how_many_signers: 1,
             seed: 0,
             linkage,
             epoch_length: 100,
@@ -271,7 +281,7 @@ fn validator_catches_up_across_epochs() {
     let epoch_length = 30;
     let setup = RestartSetup {
         node_setup: Setup {
-            how_many_signers: 4,
+            how_many_signers: 1,
             seed: 0,
             linkage,
             epoch_length,

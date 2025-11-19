@@ -212,9 +212,9 @@ impl TestingNode {
         handle.abort();
 
         // Wait for the consensus handle to actually finish
-        let _ = handle.await;
+        let err= handle.await;
 
-        debug!(%self.uid, "stopped consensus for testing node");
+        debug!(%self.uid, ?err, "stopped consensus for testing node");
     }
 
     /// Stop only the execution node.
@@ -231,7 +231,7 @@ impl TestingNode {
                 self.uid
             )
         });
-        execution_node.shutdown().await
+        execution_node.shutdown().await;
     }
 
     /// Check if both consensus and execution are running
@@ -322,6 +322,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stop_shuts_down_everything() {
+
         let _ = tempo_eyre::install();
 
         let runner = Runner::from(Config::default().with_seed(0));

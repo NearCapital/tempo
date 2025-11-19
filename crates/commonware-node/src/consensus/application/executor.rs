@@ -178,6 +178,16 @@ where
             return;
         };
 
+        struct Ondrop;
+
+        impl Drop for Ondrop {
+            fn drop(&mut self) {
+                println!("\n\n\nDropping Executor actor\n\n\n");
+            }
+        }
+
+        let guard = Ondrop{};
+
         loop {
             select! {
                 msg = self.mailbox.next() => {

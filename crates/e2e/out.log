@@ -1,0 +1,194 @@
+    Blocking waiting for file lock on package cache
+warning: unused import: `parking_lot::Mutex`
+  --> crates/commonware-node/src/consensus/application/actor.rs:37:5
+   |
+37 | use parking_lot::Mutex;
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `commonware_utils::futures::AbortablePool`
+  --> crates/commonware-node/src/consensus/engine.rs:26:5
+   |
+26 | use commonware_utils::futures::AbortablePool;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `futures::future::try_join_all`
+  --> crates/commonware-node/src/consensus/engine.rs:29:5
+   |
+29 | use futures::future::try_join_all;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> crates/commonware-node/src/consensus/engine.rs:442:13
+    |
+442 |         let mut handles = vec![
+    |             ----^^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `guard`
+   --> crates/commonware-node/src/consensus/application/executor.rs:189:13
+    |
+189 |         let guard = Ondrop{};
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_guard`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `guard`
+   --> crates/commonware-node/src/consensus/application/actor.rs:159:13
+    |
+159 |         let guard = Ondrop{};
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_guard`
+
+warning: unused variable: `on_drop`
+   --> crates/commonware-node/src/consensus/application/actor.rs:472:13
+    |
+472 |         let on_drop = Ondrop{};
+    |             ^^^^^^^
+    |
+help: you might have meant to pattern match on the similarly named struct `Ondrop`
+    |
+472 -         let on_drop = Ondrop{};
+472 +         let consensus::application::actor::Inner<consensus::application::actor::Init>::propose::{closure#0}::Ondrop = Ondrop{};
+    |
+help: if this is intentional, prefix it with an underscore
+    |
+472 |         let _on_drop = Ondrop{};
+    |             +
+
+warning: unused variable: `handles`
+   --> crates/commonware-node/src/consensus/engine.rs:451:13
+    |
+451 |         let handles = AbortOnDrop(handles);
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_handles`
+
+warning: unused variable: `guard`
+   --> crates/commonware-node/src/subblocks.rs:155:13
+    |
+155 |         let guard = Ondrop{};
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_guard`
+
+warning: field `executor_handle` is never read
+   --> crates/commonware-node/src/consensus/application/actor.rs:781:5
+    |
+777 | struct Init {
+    |        ---- field in this struct
+...
+781 |     executor_handle: Arc<AbortOnDrop>,
+    |     ^^^^^^^^^^^^^^^
+    |
+    = note: `Init` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `tempo-commonware-node` (lib) generated 10 warnings (run `cargo fix --lib -p tempo-commonware-node` to apply 9 suggestions)
+   Compiling tempo-e2e v0.4.0 (/Users/Matthias/git/rust/tempo/crates/e2e)
+warning: variable does not need to be mutable
+   --> crates/e2e/src/execution_runtime.rs:352:40
+    |
+352 |         let Self { node, task_manager, mut exit_fut, database } = self;
+    |                                        ----^^^^^^^^
+    |                                        |
+    |                                        help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: type `DropDb` is more private than the item `ExecutionNode::database`
+   --> crates/e2e/src/execution_runtime.rs:297:5
+    |
+297 |     pub database: DropDb,
+    |     ^^^^^^^^^^^^^^^^^^^^ field `ExecutionNode::database` is reachable at visibility `pub`
+    |
+note: but type `DropDb` is only usable at visibility `pub(self)`
+   --> crates/e2e/src/execution_runtime.rs:300:1
+    |
+300 | struct DropDb(Arc<DatabaseEnv>,);
+    | ^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: unused implementer of `futures::Future` that must be used
+   --> crates/e2e/src/execution_runtime.rs:448:5
+    |
+448 |     node.shutdown();
+    |     ^^^^^^^^^^^^^^^
+    |
+    = note: futures do nothing unless you `.await` or poll them
+    = note: requested on the command line with `-W unused-must-use`
+
+warning: `tempo-e2e` (lib test) generated 3 warnings (run `cargo fix --lib -p tempo-e2e --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.74s
+     Running unittests src/lib.rs (/Users/Matthias/git/rust/tempo/target/debug/deps/tempo_e2e-4907e357c8e89424)
+
+running 1 test
+running crititaltask stages metrics listener task Default
+running task Blocking
+running crititaltask transaction-validation-service Blocking
+running task Blocking
+running crititaltask txpool maintenance task Default
+running crititaltask p2p txpool Default
+running crititaltask p2p eth request handler Default
+running crititaltask payload builder service Default
+running task Default
+running task Default
+running crititaltask events task Default
+running crititaltask eth state cache Default
+running crititaltask cache canonical blocks task Default
+running crititaltask cache canonical blocks for fee history task Default
+running crititaltask tx-batcher Default
+running crititaltask eth-filters_stale-filters-clean Default
+running crititaltask consensus engine Default
+[crates/e2e/src/execution_runtime.rs:308:13] count = 23
+terminated task Blocking
+terminated crititaltask txpool maintenance task Default
+terminated crititaltask p2p txpool Default
+terminated crititaltask payload builder service Default
+terminated task Default
+terminated task Default
+terminated crititaltask p2p eth request handler Default
+terminated crititaltask stages metrics listener task Default
+terminated crititaltask transaction-validation-service Blocking
+terminated crititaltask events task Default
+terminated crititaltask cache canonical blocks task Default
+terminated crititaltask cache canonical blocks for fee history task Default
+terminated crititaltask eth state cache Default
+terminated crititaltask tx-batcher Default
+terminated crititaltask eth-filters_stale-filters-clean Default
+terminated crititaltask consensus engine Default
+
+
+
+Engine Task dropped
+
+
+
+
+
+
+Persistence Service
+
+
+
+[crates/e2e/src/execution_runtime.rs:308:13] count = 1
+[crates/e2e/src/execution_runtime.rs:310:17] "dropped all clones" = "dropped all clones"
+
+thread '<unnamed>' (9447522) panicked at crates/e2e/src/execution_runtime.rs:450:5:
+explicit panic
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'tests::restart::validator_catches_up_to_network_during_epoch' (9447521) panicked at crates/e2e/src/lib.rs:124:10:
+must be able to spawn dummy execution node: the execution runtime dropped the response channel before sending an execution node
+
+Caused by:
+    channel closed
+test tests::restart::validator_catches_up_to_network_during_epoch ... FAILED
+
+failures:
+
+failures:
+    tests::restart::validator_catches_up_to_network_during_epoch
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 2.01s
+
+error: test failed, to rerun pass `--lib`

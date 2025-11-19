@@ -34,6 +34,7 @@ reth-node-builder.workspace = true
 reth-node-core.workspace = true
 reth-node-metrics.workspace = true
 reth-rpc-builder.workspace = true
+reth-tracing.workspace = true
 
 secp256k1 = { version = "0.30", default-features = false, features = ["global-context"] }
 

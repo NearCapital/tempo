@@ -11447,6 +11447,7 @@ dependencies = [
  "reth-node-core",
  "reth-node-metrics",
  "reth-rpc-builder",
+ "reth-tracing",
  "secp256k1 0.30.0",
  "serde_json",
  "tempfile",

@@ -29,6 +29,7 @@ use reth_node_core::{
 use reth_rpc_builder::RpcModuleSelection;
 use secp256k1::SecretKey;
 use std::net::TcpListener;
+use reth_db::DatabaseEnv;
 use tempfile::TempDir;
 use tempo_chainspec::TempoChainSpec;
 use tempo_node::{TempoFullNode, node::TempoNode};
@@ -129,6 +130,7 @@ impl ExecutionRuntime {
                 .expect("must be able to initialize a runtime to run execution/reth nodes");
             rt.block_on(async move {
                 while let Some(msg) = from_handle.recv().await {
+
                     // create a new task manager for the new node instance
                     let task_manager = TaskManager::current();
                     match msg {
@@ -291,6 +293,30 @@ pub struct ExecutionNode {
     pub task_manager: TaskManager,
     /// The exist future that resolves when the node's engine future resolves.
     pub exit_fut: NodeExitFuture,
+
+    pub database: DropDb,
+}
+
+struct DropDb(Arc<DatabaseEnv>,);
+
+impl Drop for DropDb {
+
+    fn drop(&mut self) {
+        let mut i = 1;
+        loop {
+            let count = Arc::strong_count(&self.0);
+            dbg!(count);
+            if count == 1 {
+                dbg!("dropped all clones");
+                return
+            }
+            i+=1;
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            if i == 30 {
+                break;
+            }
+        }
+    }
 }
 
 impl ExecutionNode {
@@ -323,10 +349,13 @@ impl ExecutionNode {
 
     /// Shuts down the node and awaits until the node is terminated.
     pub async fn shutdown(self) {
-        let _ = self.node.rpc_server_handle().clone().stop();
-        self.task_manager
-            .graceful_shutdown_with_timeout(Duration::from_secs(1));
-        let _ = self.exit_fut.await;
+        let Self { node, task_manager, mut exit_fut, database } = self;
+        let _ = node.rpc_server_handle().clone().stop();
+        task_manager
+            .graceful_shutdown_with_timeout(Duration::from_secs(30));
+        let _ = exit_fut.await;
+        drop(node);
+        drop(database)
     }
 }
 
@@ -403,17 +432,22 @@ pub async fn launch_execution_node<P: AsRef<Path>>(
     );
 
     let node_handle = NodeBuilder::new(node_config)
-        .with_database(database)
+        .with_database(database.clone())
         .with_launch_context(task_manager.executor())
         .node(TempoNode::default())
         .launch()
         .await
         .wrap_err("failed launching node")?;
-    Ok(ExecutionNode {
+
+    let node = ExecutionNode {
         node: node_handle.node,
         task_manager,
         exit_fut: node_handle.node_exit_future,
-    })
+        database: DropDb(database)
+    };
+    node.shutdown();
+
+    panic!()
 }
 
 #[derive(Debug)]

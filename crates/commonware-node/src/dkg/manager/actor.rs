@@ -40,6 +40,17 @@ where
     metrics: Metrics,
 }
 
+
+impl<TContext> Drop for Actor<TContext>
+where
+    TContext: Clock + commonware_runtime::Metrics + Storage,
+{
+
+    fn drop(&mut self) {
+        println!("\n\n\n\n Dropping DKG Actor\n\n\n\n");
+    }
+}
+
 impl<TContext> Actor<TContext>
 where
     TContext: Clock + CryptoRngCore + commonware_runtime::Metrics + Spawner + Storage,
@@ -181,6 +192,7 @@ where
         };
 
         while let Some(message) = self.mailbox.next().await {
+            println!("DKG mail box");
             let cause = message.cause;
             match message.command {
                 super::Command::GetIntermediateDealing(get_ceremony_deal) => {
@@ -194,11 +206,13 @@ where
                         .await;
                 }
                 super::Command::Finalize(finalize) => {
+                    println!("DKG FINALIZE");
                     ceremony = self
                         .handle_finalize(cause, finalize, ceremony, &mut ceremony_mux)
                         .await;
                 }
             }
+            tokio::task::yield_now().await;
         }
     }
 

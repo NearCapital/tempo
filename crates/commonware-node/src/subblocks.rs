@@ -144,6 +144,16 @@ impl<TContext: Spawner + Metrics + Pacer> Actor<TContext> {
             impl Receiver<PublicKey = PublicKey>,
         ),
     ) {
+        struct Ondrop;
+
+        impl Drop for Ondrop {
+            fn drop(&mut self) {
+                println!("\n\n\nDropping Subblocks actor\n\n\n");
+            }
+        }
+
+        let guard = Ondrop{};
+
         loop {
             tokio::select! {
                 biased;

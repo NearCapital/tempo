@@ -23,6 +23,7 @@ use commonware_runtime::{
     Clock, ContextCell, Handle, Metrics, Network, Pacer, Spawner, Storage, buffer::PoolRef,
     spawn_cell,
 };
+use commonware_utils::futures::AbortablePool;
 use commonware_utils::set::Ordered;
 use eyre::WrapErr as _;
 use futures::future::try_join_all;
@@ -438,18 +439,37 @@ where
 
         let dkg_manager = self.dkg_manager.start(dkg_channel);
 
-        try_join_all(vec![
+        let mut handles = vec![
             application,
             broadcast,
             epoch_manager,
             marshal,
             dkg_manager,
             subblocks,
-        ])
-        .await
-        .map(|_| ())
-        // TODO: look into adding error context so that we know which
-        // component failed.
-        .wrap_err("one of the consensus engine's actors failed")
+        ];
+
+        let handles = AbortOnDrop(handles);
+
+        futures::future::pending::<()>().await;
+        Ok(())
+
+        // try_join_all(handles)
+        // .await
+        // .map(|_| ())
+        // // TODO: look into adding error context so that we know which
+        // // component failed.
+        // .wrap_err("one of the consensus engine's actors failed")
+    }
+}
+
+
+struct AbortOnDrop(Vec<Handle<()>>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        for handle in self.0.drain(..) {
+            println!("\n\nABORTING\n\n");
+            handle.abort();
+        }
     }
 }
