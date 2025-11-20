@@ -158,27 +158,9 @@ fn gen_contract_storage(
 ) -> syn::Result<proc_macro2::TokenStream> {
     // Generate the complete output
     let allocated_fields = packing::allocate_slots(fields)?;
-    let transformed_struct = layout::gen_struct(ident, vis);
+    let transformed_struct = layout::gen_struct(ident, vis, &allocated_fields);
     let storage_trait = layout::gen_contract_storage_impl(ident);
-    let constructor = layout::gen_constructor(ident);
-    let methods: Vec<_> = allocated_fields
-        .iter()
-        .enumerate()
-        .map(|(idx, allocated)| {
-            let prev_field = if idx > 0 {
-                Some(&allocated_fields[idx - 1])
-            } else {
-                None
-            };
-            let next_field = if idx + 1 < allocated_fields.len() {
-                Some(&allocated_fields[idx + 1])
-            } else {
-                None
-            };
-            layout::gen_getters_and_setters(ident, allocated, prev_field, next_field)
-        })
-        .collect();
-
+    let constructor = layout::gen_constructor(ident, &allocated_fields);
     let slots_module = layout::gen_slots_module(&allocated_fields);
 
     let output = quote! {
@@ -186,7 +168,6 @@ fn gen_contract_storage(
         #transformed_struct
         #constructor
         #storage_trait
-        #(#methods)*
     };
 
     Ok(output)

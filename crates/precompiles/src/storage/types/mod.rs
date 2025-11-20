@@ -5,13 +5,14 @@ pub mod mapping;
 pub use mapping::*;
 
 pub mod array;
-mod bytes_like;
-mod primitives;
-pub use array::*;
 pub mod vec;
 
+mod bytes_like;
+mod primitives;
+
 use crate::{error::Result, storage::StorageOps};
-use alloy::primitives::U256;
+use alloy::primitives::{Address, U256};
+use std::rc::Rc;
 
 /// Describes how a type is laid out in EVM storage.
 ///
@@ -145,7 +146,7 @@ pub trait StorableType {
     type Handler;
 
     /// Creates a handler for this type at the given storage location.
-    fn handle(slot: U256, ctx: LayoutCtx) -> Self::Handler;
+    fn handle(slot: U256, ctx: LayoutCtx, address: Rc<Address>) -> Self::Handler;
 }
 
 /// Trait for types that can be stored/loaded from EVM storage.
@@ -192,7 +193,7 @@ pub trait Storable<const SLOTS: usize>: Sized + StorableType {
     /// - Storage read fails
     /// - Data cannot be decoded into this type
     /// - Context is invalid for this type (e.g., `Packed` for a multi-slot type)
-    fn load<S: StorageOps>(storage: &mut S, base_slot: U256, ctx: LayoutCtx) -> Result<Self>;
+    fn load<S: StorageOps>(storage: &S, base_slot: U256, ctx: LayoutCtx) -> Result<Self>;
 
     /// Store this type to storage starting at the given base slot.
     ///

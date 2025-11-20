@@ -102,15 +102,17 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
             const LAYOUT: crate::storage::Layout = crate::storage::Layout::Slots(#mod_ident::SLOT_COUNT);
             type Handler = #handler_name;
 
-            fn handle(slot: ::alloy::primitives::U256, _ctx: crate::storage::LayoutCtx) -> Self::Handler {
-                #handler_name::new(slot)
+            fn handle(slot: ::alloy::primitives::U256, _ctx: crate::storage::LayoutCtx, address: ::std::rc::Rc<::alloy::primitives::Address>) -> Self::Handler {
+                #handler_name::new(slot, address)
             }
         }
 
         // `Storable` implementation: loads/stores only directly accessible fields, skips mappings
         impl #impl_generics crate::storage::Storable<{ #mod_ident::SLOT_COUNT }> for #strukt #ty_generics #where_clause {
             fn load<S: crate::storage::StorageOps>(
-                storage: &mut S, base_slot: ::alloy::primitives::U256, ctx: crate::storage::LayoutCtx
+                storage: &S,
+                base_slot: ::alloy::primitives::U256,
+                ctx: crate::storage::LayoutCtx
             ) -> crate::error::Result<Self> {
                 use crate::storage::Storable;
                 debug_assert_eq!(ctx, crate::storage::LayoutCtx::FULL, "Struct types can only be loaded with LayoutCtx::FULL");
@@ -124,7 +126,10 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
             }
 
             fn store<S: crate::storage::StorageOps>(
-                &self, storage: &mut S, base_slot: ::alloy::primitives::U256, ctx: crate::storage::LayoutCtx
+                &self,
+                storage: &mut S,
+                base_slot: ::alloy::primitives::U256,
+                ctx: crate::storage::LayoutCtx
             ) -> crate::error::Result<()> {
                 use crate::storage::Storable;
                 debug_assert_eq!(ctx, crate::storage::LayoutCtx::FULL, "Struct types can only be stored with LayoutCtx::FULL");
@@ -210,47 +215,45 @@ fn gen_handler_struct(
         /// Provides both full-struct operations (read/write/delete) and individual field access.
         pub struct #handler_name {
             base_slot: ::alloy::primitives::U256,
+            address: ::std::rc::Rc<::alloy::primitives::Address>,
         }
 
         impl #handler_name {
             /// Creates a new handler for the struct at the given base slot.
             #[inline]
-            pub const fn new(base_slot: ::alloy::primitives::U256) -> Self {
-                Self { base_slot }
+            pub fn new(base_slot: ::alloy::primitives::U256, address: ::std::rc::Rc<::alloy::primitives::Address>) -> Self {
+                Self { base_slot, address }
             }
 
             /// Returns a `Slot` accessor for full-struct operations.
             #[inline]
             fn as_slot(&self) -> crate::storage::Slot<#struct_name> {
-                crate::storage::Slot::new(self.base_slot)
+                crate::storage::Slot::new(self.base_slot, ::std::rc::Rc::clone(&self.address))
             }
 
             /// Reads the entire struct from storage.
             #[inline]
-            pub fn read<S: crate::storage::StorageOps>(
-                &self,
-                storage: &mut S
+            pub fn read(
+                &mut self
             ) -> crate::error::Result<#struct_name> {
-                self.as_slot().read(storage)
+                self.as_slot().read()
             }
 
             /// Writes the entire struct to storage.
             #[inline]
-            pub fn write<S: crate::storage::StorageOps>(
-                &self,
-                storage: &mut S,
+            pub fn write(
+                &mut self,
                 value: #struct_name
             ) -> crate::error::Result<()> {
-                self.as_slot().write(storage, value)
+                self.as_slot().write(value)
             }
 
             /// Deletes the entire struct from storage (sets all slots to zero).
             #[inline]
-            pub fn delete<S: crate::storage::StorageOps>(
-                &self,
-                storage: &mut S
+            pub fn delete(
+                &mut self
             ) -> crate::error::Result<()> {
-                self.as_slot().delete(storage)
+                self.as_slot().delete()
             }
 
             // Field accessors
@@ -273,7 +276,8 @@ fn gen_field_accessor(field: &LayoutField<'_>, mod_ident: &Ident) -> TokenStream
                 pub fn #field_name(&self) -> crate::storage::Slot<#ty> {
                     crate::storage::Slot::new_at_loc::<{ <#ty as crate::storage::StorableType>::SLOTS }>(
                         self.base_slot,
-                        #mod_ident::#loc_const
+                        #mod_ident::#loc_const,
+                        ::std::rc::Rc::clone(&self.address)
                     )
                 }
             }
@@ -284,7 +288,7 @@ fn gen_field_accessor(field: &LayoutField<'_>, mod_ident: &Ident) -> TokenStream
                 /// Returns a `Mapping` accessor for the `#field_name` field.
                 #[inline]
                 pub fn #field_name(&self) -> crate::storage::Mapping<#key, #value> {
-                    crate::storage::Mapping::new(self.base_slot + #mod_ident::#slot_const)
+                    crate::storage::Mapping::new(self.base_slot + #mod_ident::#slot_const, ::std::rc::Rc::clone(&self.address))
                 }
             }
         }
@@ -294,7 +298,7 @@ fn gen_field_accessor(field: &LayoutField<'_>, mod_ident: &Ident) -> TokenStream
                 /// Returns a `NestedMapping` accessor for the `#field_name` field.
                 #[inline]
                 pub fn #field_name(&self) -> crate::storage::NestedMapping<#key1, #key2, #value> {
-                    crate::storage::NestedMapping::new(self.base_slot + #mod_ident::#slot_const)
+                    crate::storage::NestedMapping::new(self.base_slot + #mod_ident::#slot_const, ::std::rc::Rc::clone(&self.address))
                 }
             }
         }

@@ -45,8 +45,8 @@ fn gen_storable_type_impl(type_path: &TokenStream, byte_count: usize) -> TokenSt
             const LAYOUT: Layout = Layout::Bytes(#byte_count);
             type Handler = crate::storage::Slot<Self>;
 
-            fn handle(slot: U256, ctx: LayoutCtx) -> Self::Handler {
-                crate::storage::Slot::new_with_ctx(slot, ctx)
+            fn handle(slot: U256, ctx: LayoutCtx, address: ::std::rc::Rc<::alloy::primitives::Address>) -> Self::Handler {
+                crate::storage::Slot::new_with_ctx(slot, ctx, address)
             }
         }
     }
@@ -82,7 +82,7 @@ fn gen_storable_impl(
             quote! {
                 impl Storable<1> for #type_path {
                     #[inline]
-                    fn load<S: StorageOps>(storage: &mut S, base_slot: U256, ctx: LayoutCtx) -> Result<Self> {
+                    fn load<S: StorageOps>(storage: &S, base_slot: U256, ctx: LayoutCtx) -> Result<Self> {
                         match ctx.packed_offset() {
                             None => {
                                 let value = storage.sload(base_slot)?;
@@ -156,7 +156,7 @@ fn gen_storable_impl(
             quote! {
                 impl Storable<1> for #type_path {
                     #[inline]
-                    fn load<S: StorageOps>(storage: &mut S, base_slot: U256, ctx: LayoutCtx) -> Result<Self> {
+                    fn load<S: StorageOps>(storage: &S, base_slot: U256, ctx: LayoutCtx) -> Result<Self> {
                         match ctx.packed_offset() {
                             None => {
                                 let value = storage.sload(base_slot)?;
@@ -204,7 +204,7 @@ fn gen_storable_impl(
             quote! {
                 impl Storable<1> for #type_path {
                     #[inline]
-                    fn load<S: StorageOps>(storage: &mut S, base_slot: ::alloy::primitives::U256, ctx: LayoutCtx) -> Result<Self> {
+                    fn load<S: StorageOps>(storage: &S, base_slot: ::alloy::primitives::U256, ctx: LayoutCtx) -> Result<Self> {
                         match ctx.packed_offset() {
                             None => {
                                 let value = storage.sload(base_slot)?;
@@ -258,7 +258,7 @@ fn gen_storable_impl(
             quote! {
                 impl Storable<1> for #type_path {
                     #[inline]
-                    fn load<S: StorageOps>(storage: &mut S, base_slot: ::alloy::primitives::U256, ctx: LayoutCtx) -> Result<Self> {
+                    fn load<S: StorageOps>(storage: &S, base_slot: ::alloy::primitives::U256, ctx: LayoutCtx) -> Result<Self> {
                         match ctx.packed_offset() {
                             None => {
                                 let value = storage.sload(base_slot)?;
@@ -468,13 +468,6 @@ fn gen_array_impl(config: &ArrayConfig) -> TokenStream {
         elem_is_packable,
     } = config;
 
-    // Generate a unique module name for this array type
-    let elem_type_str = elem_type
-        .to_string()
-        .replace("::", "_")
-        .replace(['<', '>', ' ', '[', ']', ';'], "_");
-    let mod_ident = quote::format_ident!("__array_{}_{}", elem_type_str, array_size);
-
     // Calculate slot count at compile time
     let slot_count = if *elem_is_packable {
         // Packed: multiple elements per slot
@@ -509,31 +502,22 @@ fn gen_array_impl(config: &ArrayConfig) -> TokenStream {
     };
 
     quote! {
-        // Helper module with compile-time constants
-        mod #mod_ident {
-            use super::*;
-            pub const ELEM_BYTES: usize = <#elem_type as StorableType>::BYTES;
-            pub const ELEM_SLOTS: usize = 1; // For single-slot primitives
-            pub const ARRAY_LEN: usize = #array_size;
-            pub const SLOT_COUNT: usize = #slot_count;
-        }
-
         // Implement StorableType
-        impl StorableType for [#elem_type; #array_size] {
+        impl crate::storage::StorableType for [#elem_type; #array_size] {
             // Arrays cannot be packed, so they must take full slots
-            const LAYOUT: Layout = Layout::Slots(#mod_ident::SLOT_COUNT);
+            const LAYOUT: crate::storage::Layout = crate::storage::Layout::Slots(#slot_count);
 
-            type Handler = crate::storage::types::ArrayHandler<#elem_type, #array_size>;
+            type Handler = crate::storage::types::array::ArrayHandler<#elem_type, #array_size>;
 
-            fn handle(slot: U256, ctx: LayoutCtx) -> Self::Handler {
-                debug_assert_eq!(ctx, LayoutCtx::FULL, "Arrays cannot be packed");
-                Self::Handler::new(slot)
+            fn handle(slot: ::alloy::primitives::U256, ctx: crate::storage::LayoutCtx, address: ::std::rc::Rc<::alloy::primitives::Address>) -> Self::Handler {
+                debug_assert_eq!(ctx, crate::storage::LayoutCtx::FULL, "Arrays cannot be packed");
+                Self::Handler::new(slot, address)
             }
         }
 
         // Implement Storable
-        impl Storable<{ #mod_ident::SLOT_COUNT }> for [#elem_type; #array_size] {
-            fn load<S: StorageOps>(storage: &mut S, base_slot: U256, ctx: LayoutCtx) -> Result<Self> {
+        impl crate::storage::Storable<{ #slot_count }> for [#elem_type; #array_size] {
+            fn load<S: crate::storage::StorageOps>(storage: &S, base_slot: ::alloy::primitives::U256, ctx: crate::storage::LayoutCtx) -> crate::error::Result<Self> {
                 debug_assert_eq!(
                     ctx, crate::storage::LayoutCtx::FULL,
                     "Arrays can only be loaded with LayoutCtx::FULL"
@@ -543,7 +527,7 @@ fn gen_array_impl(config: &ArrayConfig) -> TokenStream {
                 #load_impl
             }
 
-            fn store<S: StorageOps>(&self, storage: &mut S, base_slot: U256, ctx: LayoutCtx) -> Result<()> {
+            fn store<S: crate::storage::StorageOps>(&self, storage: &mut S, base_slot: ::alloy::primitives::U256, ctx: crate::storage::LayoutCtx) -> crate::error::Result<()> {
                 debug_assert_eq!(
                     ctx, crate::storage::LayoutCtx::FULL,
                     "Arrays can only be stored with LayoutCtx::FULL"
@@ -553,24 +537,24 @@ fn gen_array_impl(config: &ArrayConfig) -> TokenStream {
                 #store_impl
             }
 
-            fn to_evm_words(&self) -> Result<[U256; { #mod_ident::SLOT_COUNT }]> {
+            fn to_evm_words(&self) -> crate::error::Result<[::alloy::primitives::U256; { #slot_count }]> {
                 use crate::storage::packing::{calc_element_slot, calc_element_offset, insert_packed_value};
                 #to_evm_words_impl
             }
 
-            fn from_evm_words(words: [U256; { #mod_ident::SLOT_COUNT }]) -> Result<Self> {
+            fn from_evm_words(words: [::alloy::primitives::U256; { #slot_count }]) -> crate::error::Result<Self> {
                 use crate::storage::packing::{calc_element_slot, calc_element_offset, extract_packed_value};
                 #from_evm_words_impl
             }
         }
 
         // Implement StorageKey for use as mapping keys
-        impl StorageKey for [#elem_type; #array_size] {
+        impl crate::storage::StorageKey for [#elem_type; #array_size] {
             #[inline]
             fn as_storage_bytes(&self) -> impl AsRef<[u8]> {
                 // Serialize to EVM words and concatenate into a Vec
                 let words = self.to_evm_words().expect("to_evm_words failed");
-                let mut bytes = Vec::with_capacity(#mod_ident::SLOT_COUNT * 32);
+                let mut bytes = Vec::with_capacity(#slot_count * 32);
                 for word in words.iter() {
                     bytes.extend_from_slice(&word.to_be_bytes::<32>());
                 }
@@ -626,8 +610,8 @@ fn gen_unpacked_array_load(array_size: &usize) -> TokenStream {
     quote! {
         let mut result = [Default::default(); #array_size];
         for i in 0..#array_size {
-            let elem_slot = base_slot + U256::from(i);
-            result[i] = Storable::<1>::load(storage, elem_slot, LayoutCtx::FULL)?;
+            let elem_slot = base_slot + ::alloy::primitives::U256::from(i);
+            result[i] = crate::storage::Storable::<1>::load(storage, elem_slot, crate::storage::LayoutCtx::FULL)?;
         }
         Ok(result)
     }
@@ -637,8 +621,8 @@ fn gen_unpacked_array_load(array_size: &usize) -> TokenStream {
 fn gen_unpacked_array_store() -> TokenStream {
     quote! {
         for (i, elem) in self.iter().enumerate() {
-            let elem_slot = base_slot + U256::from(i);
-            elem.store(storage, elem_slot, LayoutCtx::FULL)?;
+            let elem_slot = base_slot + ::alloy::primitives::U256::from(i);
+            elem.store(storage, elem_slot, crate::storage::LayoutCtx::FULL)?;
         }
         Ok(())
     }
@@ -648,7 +632,7 @@ fn gen_unpacked_array_store() -> TokenStream {
 fn gen_packed_array_to_evm_words(array_size: &usize, elem_byte_count: &usize) -> TokenStream {
     let slot_count = (*array_size * elem_byte_count).div_ceil(32);
     quote! {
-        let mut result = [U256::ZERO; #slot_count];
+        let mut result = [::alloy::primitives::U256::ZERO; #slot_count];
         for (i, elem) in self.iter().enumerate() {
             let slot_idx = calc_element_slot(i, #elem_byte_count);
             let offset = calc_element_offset(i, #elem_byte_count);
@@ -674,7 +658,7 @@ fn gen_packed_array_from_evm_words(array_size: &usize, elem_byte_count: &usize) 
 /// Generate to_evm_words implementation for unpacked arrays
 fn gen_unpacked_array_to_evm_words(array_size: &usize) -> TokenStream {
     quote! {
-        let mut result = [U256::ZERO; #array_size];
+        let mut result = [::alloy::primitives::U256::ZERO; #array_size];
         for (i, elem) in self.iter().enumerate() {
             let elem_words = elem.to_evm_words()?;
             result[i] = elem_words[0];
@@ -688,7 +672,7 @@ fn gen_unpacked_array_from_evm_words(array_size: &usize) -> TokenStream {
     quote! {
         let mut result = [Default::default(); #array_size];
         for i in 0..#array_size {
-            result[i] = Storable::<1>::from_evm_words([words[i]])?;
+            result[i] = crate::storage::Storable::<1>::from_evm_words([words[i]])?;
         }
         Ok(result)
     }
@@ -882,25 +866,35 @@ fn gen_struct_array_impl(struct_type: &TokenStream, array_size: usize) -> TokenS
 
             type Handler = crate::storage::Slot<Self>;
 
-            fn handle(slot: ::alloy::primitives::U256, ctx: crate::storage::LayoutCtx) -> Self::Handler {
-                crate::storage::Slot::new_with_ctx(slot, ctx)
+            fn handle(slot: ::alloy::primitives::U256, ctx: crate::storage::LayoutCtx, address: ::std::rc::Rc<::alloy::primitives::Address>) -> Self::Handler {
+                crate::storage::Slot::new_with_ctx(slot, ctx, address)
             }
         }
 
         // Implement Storable
         impl crate::storage::Storable<{ #mod_ident::SLOT_COUNT }> for [#struct_type; #array_size] {
             fn load<S: crate::storage::StorageOps>(
-                storage: &mut S,
-                base_slot: ::alloy::primitives::U256
+                storage: &S,
+                base_slot: ::alloy::primitives::U256,
+                ctx: crate::storage::LayoutCtx
             ) -> crate::error::Result<Self> {
+                debug_assert_eq!(
+                    ctx, crate::storage::LayoutCtx::FULL,
+                    "Struct arrays can only be loaded with LayoutCtx::FULL"
+                );
                 #load_impl
             }
 
             fn store<S: crate::storage::StorageOps>(
                 &self,
                 storage: &mut S,
-                base_slot: ::alloy::primitives::U256
+                base_slot: ::alloy::primitives::U256,
+                ctx: crate::storage::LayoutCtx
             ) -> crate::error::Result<()> {
+                debug_assert_eq!(
+                    ctx, crate::storage::LayoutCtx::FULL,
+                    "Struct arrays can only be stored with LayoutCtx::FULL"
+                );
                 #store_impl
             }
 
@@ -945,7 +939,7 @@ fn gen_struct_array_load(struct_type: &TokenStream, array_size: usize) -> TokenS
                 ).ok_or(crate::error::TempoError::SlotOverflow)?
             ).ok_or(crate::error::TempoError::SlotOverflow)?;
 
-            result[i] = <#struct_type as crate::storage::Storable<{<#struct_type as crate::storage::StorableType>::SLOTS}>>::load(storage, elem_slot)?;
+            result[i] = <#struct_type as crate::storage::Storable<{<#struct_type as crate::storage::StorableType>::SLOTS}>>::load(storage, elem_slot, crate::storage::LayoutCtx::FULL)?;
         }
         Ok(result)
     }
@@ -962,7 +956,7 @@ fn gen_struct_array_store(struct_type: &TokenStream) -> TokenStream {
                 ).ok_or(crate::error::TempoError::SlotOverflow)?
             ).ok_or(crate::error::TempoError::SlotOverflow)?;
 
-            <#struct_type as crate::storage::Storable<{<#struct_type as crate::storage::StorableType>::SLOTS}>>::store(elem, storage, elem_slot)?;
+            <#struct_type as crate::storage::Storable<{<#struct_type as crate::storage::StorableType>::SLOTS}>>::store(elem, storage, elem_slot, crate::storage::LayoutCtx::FULL)?;
         }
         Ok(())
     }
