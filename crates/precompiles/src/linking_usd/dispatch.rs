@@ -4,7 +4,7 @@ use crate::{
     metadata, mutate, mutate_void,
     storage::{ContractStorage, PrecompileStorageProvider},
     tip20::{IRolesAuth, ITIP20},
-    view,
+    unknown_selector, view,
 };
 
 use alloy::{primitives::Address, sol_types::SolCall};
@@ -25,6 +25,16 @@ impl<S: PrecompileStorageProvider> Precompile for LinkingUSD<'_, S> {
             })?
             .try_into()
             .unwrap();
+
+        // Post-Allegretto, precompile dispatch no longer routes to linking
+        // but we return unknown selector as an additional measure
+        if self.token.storage().spec().is_allegretto() {
+            return unknown_selector(
+                selector,
+                self.token.storage().gas_used(),
+                self.token.storage().spec(),
+            );
+        }
 
         let result = match selector {
             // Metadata

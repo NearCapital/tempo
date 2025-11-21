@@ -164,7 +164,7 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
 
     /// Transfer tokens, accounting for linking USD
     fn transfer(&mut self, token: Address, to: Address, amount: u128) -> Result<()> {
-        if token == LINKING_USD_ADDRESS {
+        if !self.storage.spec().is_allegretto() && token == LINKING_USD_ADDRESS {
             LinkingUSD::new(self.storage).transfer(
                 self.address,
                 ITIP20::transferCall {
@@ -186,7 +186,7 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
 
     /// Transfer tokens from user, accounting for linking USD
     fn transfer_from(&mut self, token: Address, from: Address, amount: u128) -> Result<()> {
-        if token == LINKING_USD_ADDRESS {
+        if !self.storage.spec().is_allegretto() && token == LINKING_USD_ADDRESS {
             LinkingUSD::new(self.storage).transfer_from(
                 self.address,
                 ITIP20::transferFromCall {

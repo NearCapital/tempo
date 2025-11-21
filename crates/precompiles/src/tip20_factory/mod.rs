@@ -59,21 +59,20 @@ impl<'a, S: PrecompileStorageProvider> TIP20Factory<'a, S> {
         // Ensure that the quote token is a valid TIP20 that is currently deployed.
         // Note that the token Id increments on each deployment.
         if self.storage.spec().is_moderato() {
-            // Post allegretto, ensure the first tip20 deployed specifies
+            // Post-Allegretto, ensure the first tip20 deployed specifies
             // address(0) as the quote token
             if self.storage.spec().is_allegretto() && token_id == 0 {
                 if call.quoteToken != Address::ZERO {
                     return Err(TIP20Error::invalid_quote_token().into());
                 }
             } else if !is_tip20(call.quoteToken)
-            // Post-Moderato: Fixed validation - quote token id must be < current token_id (strictly less than).
+                // Post-Moderato: Fixed validation - quote token id must be < current token_id (strictly less than).
                 || address_to_token_id_unchecked(call.quoteToken) >= token_id
             {
                 return Err(TIP20Error::invalid_quote_token().into());
             }
         } else {
             // Pre-Moderato: Original validation with off-by-one bug for consensus compatibility.
-            // The buggy check allowed quote_token_id == token_id to pass.
             if !is_tip20(call.quoteToken)
                 || address_to_token_id_unchecked(call.quoteToken) > token_id
             {
@@ -372,5 +371,65 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_first_token_post_allegretto() {
+        // Test that first tip20 has 0 address as quote token post allegretto, otherwise fail
+        let mut storage = HashMapStorageProvider::new(1).with_spec(TempoHardfork::Allegretto);
+        let sender = Address::random();
+        let mut factory = TIP20Factory::new(&mut storage);
+
+        factory
+            .initialize()
+            .expect("Factory initialization should succeed");
+
+        // Valid call with Address::ZERO should succeed
+        let valid_call = ITIP20Factory::createTokenCall {
+            name: "First Token".to_string(),
+            symbol: "FIRST".to_string(),
+            currency: "USD".to_string(),
+            quoteToken: Address::ZERO,
+            admin: sender,
+        };
+
+        let result = factory.create_token(sender, valid_call);
+        assert!(result.is_ok(),);
+
+        // Reset factory for invalid test
+        let mut factory = TIP20Factory::new(&mut storage);
+
+        // Invalid call with non-zero address should fail
+        let invalid_call = ITIP20Factory::createTokenCall {
+            name: "First Token".to_string(),
+            symbol: "FIRST".to_string(),
+            currency: "USD".to_string(),
+            quoteToken: Address::random(),
+            admin: sender,
+        };
+
+        let result = factory.create_token(sender, invalid_call);
+        assert_eq!(
+            result.unwrap_err(),
+            TempoPrecompileError::TIP20(TIP20Error::invalid_quote_token())
+        );
+    }
+
+    #[test]
+    fn test_token_counter_starts_at_zero_post_allegretto() {
+        // Ensure that token counter starts at 0 post allegretto
+        let mut storage = HashMapStorageProvider::new(1).with_spec(TempoHardfork::Allegretto);
+        let mut factory = TIP20Factory::new(&mut storage);
+
+        factory
+            .initialize()
+            .expect("Factory initialization should succeed");
+
+        let token_id = factory.token_id_counter().unwrap();
+        assert_eq!(
+            token_id,
+            U256::ZERO,
+            "Post-Allegretto counter should start at 0"
+        );
     }
 }

@@ -71,10 +71,13 @@ pub trait Precompile {
 pub fn extend_tempo_precompiles(precompiles: &mut PrecompilesMap, cfg: &CfgEnv<TempoHardfork>) {
     let chain_id = cfg.chain_id;
     let spec = cfg.spec;
+
     precompiles.set_precompile_lookup(move |address: &Address| {
         if is_tip20(*address) {
             let token_id = address_to_token_id_unchecked(*address);
-            if token_id == 0 {
+            // If the current spec is pre-Allegretto hardfork,
+            // route token_id=0 to LinkingUSD
+            if !spec.is_allegretto() && token_id == 0 {
                 Some(LinkingUSDPrecompile::create(chain_id, spec))
             } else {
                 Some(TIP20Precompile::create(*address, chain_id, spec))
