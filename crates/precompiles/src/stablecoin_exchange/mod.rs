@@ -6,12 +6,13 @@ pub mod orderbook;
 
 pub use order::Order;
 pub use orderbook::{MAX_TICK, MIN_TICK, Orderbook, PRICE_SCALE, TickLevel, tick_to_price};
+use tempo_contracts::precompiles::PATH_USD_ADDRESS;
 pub use tempo_contracts::precompiles::{
     IStablecoinExchange, StablecoinExchangeError, StablecoinExchangeEvents,
 };
 
 use crate::{
-    LINKING_USD_ADDRESS, STABLECOIN_EXCHANGE_ADDRESS,
+    STABLECOIN_EXCHANGE_ADDRESS,
     error::{Result, TempoPrecompileError},
     linking_usd::LinkingUSD,
     stablecoin_exchange::orderbook::{
@@ -1429,12 +1430,11 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
         Ok(route)
     }
 
-    /// Find the path from a token to the root (LinkingUSD)
-    /// Returns a vector of addresses starting with the token and ending with LinkingUSD
+    /// Find the path from a token to the root
     fn find_path_to_root(&mut self, mut token: Address) -> Result<Vec<Address>> {
         let mut path = vec![token];
 
-        while token != LINKING_USD_ADDRESS {
+        while token != PATH_USD_ADDRESS {
             token = TIP20Token::from_address(token, self.storage).quote_token()?;
             path.push(token);
         }
