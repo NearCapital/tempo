@@ -757,20 +757,15 @@ where
                 .signature
                 .key_id(&aa_tx_env.signature_hash)
                 .map_err(|_| {
-                    EVMError::Transaction(
-                        TempoInvalidTransaction::AccessKeyAuthorizationFailed {
-                            reason: "Failed to recover access key address from inner signature"
-                                .to_string(),
-                        },
-                    )
+                    EVMError::Transaction(TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                        reason: "Failed to recover access key address from inner signature"
+                            .to_string(),
+                    })
                 })?
                 .ok_or_else(|| {
-                    EVMError::Transaction(
-                        TempoInvalidTransaction::AccessKeyAuthorizationFailed {
-                            reason: "Expected Keychain signature but got different type"
-                                .to_string(),
-                        },
-                    )
+                    EVMError::Transaction(TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                        reason: "Expected Keychain signature but got different type".to_string(),
+                    })
                 })?;
 
             // Check if this transaction includes a KeyAuthorization for the same key
