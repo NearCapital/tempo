@@ -193,7 +193,7 @@ mod tests {
         database::{CacheDB, EmptyDB},
         state::{AccountInfo, Bytecode},
     };
-    use tempo_contracts::DEFAULT_7702_DELEGATE_ADDRESS;
+    use tempo_contracts::{DEFAULT_7702_DELEGATE_ADDRESS, precompiles::PATH_USD_ADDRESS};
     use tempo_evm::TempoEvmFactory;
     use tempo_precompiles::{
         LINKING_USD_ADDRESS, storage::evm::EvmPrecompileStorageProvider, tip20::TIP20Token,
@@ -214,7 +214,7 @@ mod tests {
             .initialize("USD", "USD", "USD", Address::ZERO, Address::ZERO)
             .unwrap();
         TIP20Token::new(1, &mut storage)
-            .initialize("USD", "USD", "USD", LINKING_USD_ADDRESS, Address::ZERO)
+            .initialize("USD", "USD", "USD", PATH_USD_ADDRESS, Address::ZERO)
             .unwrap();
         drop(storage);
 

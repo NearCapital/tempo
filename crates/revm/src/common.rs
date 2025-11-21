@@ -6,9 +6,9 @@ use revm::{
     Database, context::JournalTr, interpreter::instructions::utility::IntoAddress,
     state::AccountInfo,
 };
-use tempo_contracts::precompiles::IFeeManager;
+use tempo_contracts::precompiles::{IFeeManager, PATH_USD_ADDRESS};
 use tempo_precompiles::{
-    DEFAULT_FEE_TOKEN, LINKING_USD_ADDRESS, TIP_FEE_MANAGER_ADDRESS,
+    TIP_FEE_MANAGER_ADDRESS,
     storage::slots::mapping_slot,
     tip_fee_manager,
     tip20::{self, is_tip20},
@@ -157,13 +157,13 @@ pub trait TempoStateAccess<T> {
             return Ok(validator_fee_token);
         }
 
-        Ok(DEFAULT_FEE_TOKEN)
+        Ok(PATH_USD_ADDRESS)
     }
 
     /// Checks if the given token can be used as a fee token.
     fn is_valid_fee_token(&mut self, fee_token: Address) -> Result<bool, Self::Error> {
         // Ensure it's a TIP20
-        if !is_tip20(fee_token) || fee_token == LINKING_USD_ADDRESS {
+        if !is_tip20(fee_token) {
             return Ok(false);
         }
 
