@@ -2,8 +2,26 @@ use crate::{
     FieldKind,
     packing::{self, LayoutField, PackingConstants, SlotAssignment},
 };
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{Ident, Visibility};
+
+/// Generates a public handler field declaration for a storage field
+pub(crate) fn gen_handler_field_decl(field: &LayoutField<'_>) -> proc_macro2::TokenStream {
+    let field_name = field.name;
+    let handler_type = match &field.kind {
+        FieldKind::Slot(ty) => quote! { crate::storage::Slot<#ty> },
+        FieldKind::Mapping { key, value } => {
+            quote! { crate::storage::Mapping<#key, #value> }
+        }
+        FieldKind::NestedMapping { key1, key2, value } => {
+            quote! { crate::storage::NestedMapping<#key1, #key2, #value> }
+        }
+    };
+
+    quote! {
+        pub #field_name: #handler_type
+    }
+}
 
 /// Generate the transformed struct with handler fields
 pub(crate) fn gen_struct(
@@ -12,22 +30,7 @@ pub(crate) fn gen_struct(
     allocated_fields: &[LayoutField<'_>],
 ) -> proc_macro2::TokenStream {
     // Generate handler field for each storage variable
-    let handler_fields = allocated_fields.iter().map(|field| {
-        let field_name = field.name;
-        let handler_type = match &field.kind {
-            FieldKind::Slot(ty) => quote! { crate::storage::Slot<#ty> },
-            FieldKind::Mapping { key, value } => {
-                quote! { crate::storage::Mapping<#key, #value> }
-            }
-            FieldKind::NestedMapping { key1, key2, value } => {
-                quote! { crate::storage::NestedMapping<#key1, #key2, #value> }
-            }
-        };
-
-        quote! {
-            pub #field_name: #handler_type
-        }
-    });
+    let handler_fields = allocated_fields.iter().map(gen_handler_field_decl);
 
     quote! {
         #vis struct #name {
@@ -42,33 +45,21 @@ pub(crate) fn gen_constructor(
     name: &Ident,
     allocated_fields: &[LayoutField<'_>],
 ) -> proc_macro2::TokenStream {
-    let consts = PackingConstants::new;
-
     // Generate handler initializations for each field
     let field_inits = allocated_fields.iter().enumerate().map(|(idx, field)| {
         let field_name = field.name;
-        let slot_const = consts(field_name).slot();
-        let offset_const = consts(field_name).offset();
-
-        // Calculate neighbor slot references for packing detection
-        let prev_slot_const_ref = if idx > 0 {
-            let prev = &allocated_fields[idx - 1];
-            let prev_slot = consts(prev.name).slot();
-            Some(quote! { slots::#prev_slot })
-        } else {
-            None
-        };
-
-        let next_slot_const_ref = if idx + 1 < allocated_fields.len() {
-            let next = &allocated_fields[idx + 1];
-            let next_slot = consts(next.name).slot();
-            Some(quote! { slots::#next_slot })
-        } else {
-            None
-        };
+        let (slot_const, offset_const) = PackingConstants::new(field_name).into_tuple();
 
         let handler_init = match &field.kind {
             FieldKind::Slot(ty) => {
+                // Calculate neighbor slot references for packing detection
+                let (prev_slot_const_ref, next_slot_const_ref) = packing::get_neighbor_slot_refs(
+                    idx,
+                    allocated_fields,
+                    &format_ident!("slots"),
+                    |field| field.name,
+                );
+
                 // Generate LayoutCtx expression based on packing
                 let layout_ctx = packing::gen_layout_ctx_expr_inefficient(
                     ty,

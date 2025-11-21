@@ -6,6 +6,7 @@ use syn::{Data, DeriveInput, Fields, Ident, Type};
 
 use crate::{
     FieldInfo, FieldKind,
+    layout::gen_handler_field_decl,
     packing::{self, LayoutField, PackingConstants},
     storable_primitives::gen_struct_arrays,
     utils::{extract_mapping_types, extract_storable_array_sizes, to_snake_case},
@@ -203,18 +204,67 @@ fn gen_handler_struct(
 ) -> TokenStream {
     let handler_name = format_ident!("{}Handler", struct_name);
 
-    // Generate field accessor methods
-    let field_accessors: Vec<_> = fields
-        .iter()
-        .map(|field| gen_field_accessor(field, mod_ident))
-        .collect();
+    // Generate public handler fields (reusing shared function)
+    let handler_fields = fields.iter().map(gen_handler_field_decl);
+
+    // Generate field initializations for constructor
+    // For storable structs, we need to add base_slot to field offsets
+    let field_inits = fields.iter().enumerate().map(|(idx, field)| {
+        let field_name = field.name;
+        let consts = PackingConstants::new(field_name);
+        let (loc_const, slot_const) = (consts.location(), consts.slot());
+
+        match &field.kind {
+            FieldKind::Slot(ty) => {
+                // Calculate neighbor slot references for packing detection
+                let (prev_slot_const_ref, next_slot_const_ref) =
+                    packing::get_neighbor_slot_refs(idx, fields, mod_ident, |field| field.name);
+
+                // Generate `LayoutCtx` expression with compile-time packing detection
+                let layout_ctx = packing::gen_layout_ctx_expr(
+                    ty,
+                    false,
+                    quote! { #mod_ident::#loc_const.offset_slots },
+                    quote! { #mod_ident::#loc_const.offset_bytes },
+                    prev_slot_const_ref,
+                    next_slot_const_ref,
+                );
+
+                quote! {
+                    #field_name: crate::storage::Slot::new_with_ctx(
+                        base_slot + ::alloy::primitives::U256::from(#mod_ident::#loc_const.offset_slots),
+                        #layout_ctx,
+                        ::std::rc::Rc::clone(&address_rc)
+                    )
+                }
+            }
+            FieldKind::Mapping { .. } => {
+                // For Mapping fields, add base_slot to the field's slot offset
+                quote! {
+                    #field_name: crate::storage::Mapping::new(
+                        base_slot + #mod_ident::#slot_const,
+                        ::std::rc::Rc::clone(&address_rc)
+                    )
+                }
+            }
+            FieldKind::NestedMapping { .. } => {
+                // For NestedMapping fields, add base_slot to the field's slot offset
+                quote! {
+                    #field_name: crate::storage::NestedMapping::new(
+                        base_slot + #mod_ident::#slot_const,
+                        ::std::rc::Rc::clone(&address_rc)
+                    )
+                }
+            }
+        }
+    });
 
     quote! {
         /// Type-safe handler for accessing `#struct_name` in storage.
         ///
-        /// Provides both full-struct operations (read/write/delete) and individual field access.
+        /// Provides individual field access via public fields.
         pub struct #handler_name {
-            base_slot: ::alloy::primitives::U256,
+            #(#handler_fields,)*
             address: ::std::rc::Rc<::alloy::primitives::Address>,
         }
 
@@ -222,112 +272,15 @@ fn gen_handler_struct(
             /// Creates a new handler for the struct at the given base slot.
             #[inline]
             pub fn new(base_slot: ::alloy::primitives::U256, address: ::std::rc::Rc<::alloy::primitives::Address>) -> Self {
-                Self { base_slot, address }
-            }
+                let address_rc = address;
 
-            /// Returns a `Slot` accessor for full-struct operations.
-            #[inline]
-            fn as_slot(&self) -> crate::storage::Slot<#struct_name> {
-                crate::storage::Slot::new(self.base_slot, ::std::rc::Rc::clone(&self.address))
-            }
-
-            /// Reads the entire struct from storage.
-            #[inline]
-            pub fn read(
-                &mut self
-            ) -> crate::error::Result<#struct_name> {
-                self.as_slot().read()
-            }
-
-            /// Writes the entire struct to storage.
-            #[inline]
-            pub fn write(
-                &mut self,
-                value: #struct_name
-            ) -> crate::error::Result<()> {
-                self.as_slot().write(value)
-            }
-
-            /// Deletes the entire struct from storage (sets all slots to zero).
-            #[inline]
-            pub fn delete(
-                &mut self
-            ) -> crate::error::Result<()> {
-                self.as_slot().delete()
-            }
-
-            // Field accessors
-            #(#field_accessors)*
-        }
-    }
-}
-
-/// Generate a field accessor method for the handler.
-fn gen_field_accessor(field: &LayoutField<'_>, mod_ident: &Ident) -> TokenStream {
-    let field_name = field.name;
-
-    match &field.kind {
-        FieldKind::Slot(ty) => {
-            // Use FieldLocation constant for scalar fields
-            let loc_const = PackingConstants::new(field_name).location();
-            quote! {
-                /// Returns a `Slot` accessor for the `#field_name` field.
-                #[inline]
-                pub fn #field_name(&self) -> crate::storage::Slot<#ty> {
-                    crate::storage::Slot::new_at_loc::<{ <#ty as crate::storage::StorableType>::SLOTS }>(
-                        self.base_slot,
-                        #mod_ident::#loc_const,
-                        ::std::rc::Rc::clone(&self.address)
-                    )
-                }
-            }
-        }
-        FieldKind::Mapping { key, value } => {
-            let slot_const = PackingConstants::new(field_name).slot();
-            quote! {
-                /// Returns a `Mapping` accessor for the `#field_name` field.
-                #[inline]
-                pub fn #field_name(&self) -> crate::storage::Mapping<#key, #value> {
-                    crate::storage::Mapping::new(self.base_slot + #mod_ident::#slot_const, ::std::rc::Rc::clone(&self.address))
-                }
-            }
-        }
-        FieldKind::NestedMapping { key1, key2, value } => {
-            let slot_const = PackingConstants::new(field_name).slot();
-            quote! {
-                /// Returns a `NestedMapping` accessor for the `#field_name` field.
-                #[inline]
-                pub fn #field_name(&self) -> crate::storage::NestedMapping<#key1, #key2, #value> {
-                    crate::storage::NestedMapping::new(self.base_slot + #mod_ident::#slot_const, ::std::rc::Rc::clone(&self.address))
+                Self {
+                    #(#field_inits,)*
+                    address: address_rc,
                 }
             }
         }
     }
-}
-
-/// Helper to compute prev and next slot constant references for a field at a given index.
-fn get_neighbor_slot_refs(
-    idx: usize,
-    fields: &[(&Ident, &Type)],
-    packing: &Ident,
-) -> (Option<TokenStream>, Option<TokenStream>) {
-    let prev_slot_ref = if idx > 0 {
-        let prev_name = fields[idx - 1].0;
-        let prev_slot = PackingConstants::new(prev_name).location();
-        Some(quote! { #packing::#prev_slot.offset_slots })
-    } else {
-        None
-    };
-
-    let next_slot_ref = if idx + 1 < fields.len() {
-        let next_name = fields[idx + 1].0;
-        let next_slot = PackingConstants::new(next_name).location();
-        Some(quote! { #packing::#next_slot.offset_slots })
-    } else {
-        None
-    };
-
-    (prev_slot_ref, next_slot_ref)
 }
 
 /// Generate either `fn load()` or `fn store()` implementation.
@@ -340,8 +293,9 @@ fn gen_storage_op_impl(fields: &[(&Ident, &Type)], packing: &Ident, is_load: boo
         .enumerate()
         .map(|(idx, (name, ty))| {
             let (prev_slot_const_ref, next_slot_const_ref) =
-                get_neighbor_slot_refs(idx, fields, packing);
+                packing::get_neighbor_slot_refs(idx, fields, packing, |(name, _ty)| name);
 
+            // Generate `LayoutCtx` expression with compile-time packing detection
             let loc_const = PackingConstants::new(name).location();
             let layout_ctx = packing::gen_layout_ctx_expr(
                 ty,

@@ -235,6 +235,37 @@ pub(crate) fn classify_field_type(ty: &Type) -> syn::Result<FieldKind<'_>> {
     Ok(FieldKind::Slot(ty))
 }
 
+/// Helper to compute prev and next slot constant references for a field at a given index.
+///
+/// Generic over the field type - uses a closure to extract the field name.
+pub(crate) fn get_neighbor_slot_refs<T, F>(
+    idx: usize,
+    fields: &[T],
+    packing: &Ident,
+    get_name: F,
+) -> (Option<TokenStream>, Option<TokenStream>)
+where
+    F: Fn(&T) -> &Ident,
+{
+    let prev_slot_ref = if idx > 0 {
+        let prev_name = get_name(&fields[idx - 1]);
+        let prev_slot = PackingConstants::new(prev_name).location();
+        Some(quote! { #packing::#prev_slot.offset_slots })
+    } else {
+        None
+    };
+
+    let next_slot_ref = if idx + 1 < fields.len() {
+        let next_name = get_name(&fields[idx + 1]);
+        let next_slot = PackingConstants::new(next_name).location();
+        Some(quote! { #packing::#next_slot.offset_slots })
+    } else {
+        None
+    };
+
+    (prev_slot_ref, next_slot_ref)
+}
+
 /// Generate slot packing decision logic.
 ///
 /// This function generates const expressions that determine whether two consecutive
