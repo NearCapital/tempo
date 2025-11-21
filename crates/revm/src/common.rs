@@ -8,10 +8,12 @@ use revm::{
 };
 use tempo_contracts::precompiles::IFeeManager;
 use tempo_precompiles::{
-    DEFAULT_FEE_TOKEN, LINKING_USD_ADDRESS, TIP_FEE_MANAGER_ADDRESS,
+    DEFAULT_FEE_TOKEN,
+    LINKING_USD_ADDRESS,
+    TIP_FEE_MANAGER_ADDRESS,
     storage::slots::mapping_slot,
-    tip_fee_manager,
-    tip20::{self, is_tip20},
+    // tip_fee_manager,
+    // tip20::{self, is_tip20},
 };
 use tempo_primitives::TempoTxEnvelope;
 
@@ -95,41 +97,41 @@ pub trait TempoStateAccess<T> {
         tx: impl TempoTx,
         fee_payer: Address,
     ) -> Result<Option<Address>, Self::Error> {
-        // If there is a fee token explicitly set on the tx type, use that.
-        if let Some(fee_token) = tx.fee_token() {
-            return Ok(Some(fee_token));
-        }
+        // // If there is a fee token explicitly set on the tx type, use that.
+        // if let Some(fee_token) = tx.fee_token() {
+        //     return Ok(Some(fee_token));
+        // }
 
-        // If the fee payer is also the msg.sender and the transaction is calling FeeManager to set a
-        // new preference, the newly set preference should be used immediately instead of the
-        // previously stored one
-        if !tx.is_aa()
-            && fee_payer == tx.caller()
-            && let Some((kind, input)) = tx.calls().next()
-            && kind.to() == Some(&TIP_FEE_MANAGER_ADDRESS)
-            && let Ok(call) = IFeeManager::setUserTokenCall::abi_decode(input)
-        {
-            return Ok(Some(call.token));
-        }
+        // // If the fee payer is also the msg.sender and the transaction is calling FeeManager to set a
+        // // new preference, the newly set preference should be used immediately instead of the
+        // // previously stored one
+        // if !tx.is_aa()
+        //     && fee_payer == tx.caller()
+        //     && let Some((kind, input)) = tx.calls().next()
+        //     && kind.to() == Some(&TIP_FEE_MANAGER_ADDRESS)
+        //     && let Ok(call) = IFeeManager::setUserTokenCall::abi_decode(input)
+        // {
+        //     return Ok(Some(call.token));
+        // }
 
-        let user_slot = mapping_slot(fee_payer, tip_fee_manager::slots::USER_TOKENS);
-        // ensure TIP_FEE_MANAGER_ADDRESS is loaded
-        self.basic(TIP_FEE_MANAGER_ADDRESS)?;
-        let stored_user_token = self
-            .sload(TIP_FEE_MANAGER_ADDRESS, user_slot)?
-            .into_address();
+        // let user_slot = mapping_slot(fee_payer, tip_fee_manager::slots::USER_TOKENS);
+        // // ensure TIP_FEE_MANAGER_ADDRESS is loaded
+        // self.basic(TIP_FEE_MANAGER_ADDRESS)?;
+        // let stored_user_token = self
+        //     .sload(TIP_FEE_MANAGER_ADDRESS, user_slot)?
+        //     .into_address();
 
-        if !stored_user_token.is_zero() {
-            return Ok(Some(stored_user_token));
-        }
+        // if !stored_user_token.is_zero() {
+        //     return Ok(Some(stored_user_token));
+        // }
 
-        // If tx.to() is a TIP-20 token, use that token as the fee token
-        if let Some(to) = tx.calls().next().and_then(|(kind, _)| kind.to().copied())
-            && tx.calls().all(|(kind, _)| kind.to() == Some(&to))
-            && self.is_valid_fee_token(to)?
-        {
-            return Ok(Some(to));
-        }
+        // // If tx.to() is a TIP-20 token, use that token as the fee token
+        // if let Some(to) = tx.calls().next().and_then(|(kind, _)| kind.to().copied())
+        //     && tx.calls().all(|(kind, _)| kind.to() == Some(&to))
+        //     && self.is_valid_fee_token(to)?
+        // {
+        //     return Ok(Some(to));
+        // }
 
         Ok(None)
     }
@@ -142,44 +144,48 @@ pub trait TempoStateAccess<T> {
         validator: Address,
         fee_payer: Address,
     ) -> Result<Address, Self::Error> {
-        // First check transaction or user preference
-        if let Some(fee_token) = self.user_or_tx_fee_token(tx, fee_payer)? {
-            return Ok(fee_token);
-        }
+        // // First check transaction or user preference
+        // if let Some(fee_token) = self.user_or_tx_fee_token(tx, fee_payer)? {
+        //     return Ok(fee_token);
+        // }
 
-        // Otherwise fall back to the validator fee token preference
-        let validator_slot = mapping_slot(validator, tip_fee_manager::slots::VALIDATOR_TOKENS);
-        let validator_fee_token = self
-            .sload(TIP_FEE_MANAGER_ADDRESS, validator_slot)?
-            .into_address();
+        // // Otherwise fall back to the validator fee token preference
+        // let validator_slot = mapping_slot(validator, tip_fee_manager::slots::VALIDATOR_TOKENS);
+        // let validator_fee_token = self
+        //     .sload(TIP_FEE_MANAGER_ADDRESS, validator_slot)?
+        //     .into_address();
 
-        if !validator_fee_token.is_zero() {
-            return Ok(validator_fee_token);
-        }
+        // if !validator_fee_token.is_zero() {
+        //     return Ok(validator_fee_token);
+        // }
 
         Ok(DEFAULT_FEE_TOKEN)
     }
 
     /// Checks if the given token can be used as a fee token.
     fn is_valid_fee_token(&mut self, fee_token: Address) -> Result<bool, Self::Error> {
-        // Ensure it's a TIP20
-        if !is_tip20(fee_token) || fee_token == LINKING_USD_ADDRESS {
-            return Ok(false);
-        }
+        return Ok(false);
 
-        // Ensure the currency is USD
-        // load fee token account to ensure that we can load storage for it.
-        self.basic(fee_token)?;
-        Ok(self.sload(fee_token, tip20::slots::CURRENCY)? == USD_CURRENCY_SLOT_VALUE)
+        // Ensure it's a TIP20
+        // if !is_tip20(fee_token) || fee_token == LINKING_USD_ADDRESS {
+        // return Ok(false);
+        // }
+
+        // // Ensure the currency is USD
+        // // load fee token account to ensure that we can load storage for it.
+        // self.basic(fee_token)?;
+        // Ok(self.sload(fee_token, tip20::slots::CURRENCY)? == USD_CURRENCY_SLOT_VALUE)
     }
 
     /// Returns the balance of the given token for the given account.
     fn get_token_balance(&mut self, token: Address, account: Address) -> Result<U256, Self::Error> {
-        // Query the user's balance in the determined fee token's TIP20 contract
-        let balance_slot = mapping_slot(account, tip20::slots::BALANCES);
-        // Load fee token account to ensure that we can load storage for it.
-        self.basic(token)?;
-        self.sload(token, balance_slot)
+        Ok(U256::ZERO)
+
+        // // Query the user's balance in the determined fee token's TIP20 contract
+        // let balance_slot = mapping_slot(account, tip20::slots::BALANCES);
+        // // Load fee token account to ensure that we can load storage for it.
+        // self.basic(token)?;
+        // self.sload(token, balance_slot)
     }
 }
 

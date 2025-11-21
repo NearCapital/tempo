@@ -34,10 +34,10 @@ use tempo_contracts::{
 };
 use tempo_precompiles::{
     error::TempoPrecompileError,
-    nonce::{INonce::getNonceCall, NonceManager},
+    // nonce::{INonce::getNonceCall, NonceManager},
     storage::{evm::EvmPrecompileStorageProvider, slots::mapping_slot},
-    tip_fee_manager::TipFeeManager,
-    tip20::{self},
+    // tip_fee_manager::TipFeeManager,
+    // tip20::{self},
 };
 use tempo_primitives::transaction::{AASignature, calc_gas_balance_spending};
 
@@ -489,154 +489,154 @@ where
         &self,
         evm: &mut Self::Evm,
     ) -> Result<(), Self::Error> {
-        let (block, tx, cfg, journal, _, _) = evm.ctx().all_mut();
+        // let (block, tx, cfg, journal, _, _) = evm.ctx().all_mut();
 
-        // Load the fee payer balance
-        let account_balance = get_token_balance(journal, self.fee_token, self.fee_payer)?;
+        // // Load the fee payer balance
+        // let account_balance = get_token_balance(journal, self.fee_token, self.fee_payer)?;
 
-        // Load caller's account
-        let mut caller_account = journal.load_account_with_code_mut(tx.caller())?.data;
+        // // Load caller's account
+        // let mut caller_account = journal.load_account_with_code_mut(tx.caller())?.data;
 
-        if caller_account.info.has_no_code_and_nonce() {
-            caller_account.set_code(
-                DEFAULT_7702_DELEGATE_CODE_HASH,
-                Bytecode::new_eip7702(DEFAULT_7702_DELEGATE_ADDRESS),
-            );
-        }
+        // if caller_account.info.has_no_code_and_nonce() {
+        //     caller_account.set_code(
+        //         DEFAULT_7702_DELEGATE_CODE_HASH,
+        //         Bytecode::new_eip7702(DEFAULT_7702_DELEGATE_ADDRESS),
+        //     );
+        // }
 
-        let nonce_key = tx
-            .aa_tx_env
-            .as_ref()
-            .map(|aa| aa.nonce_key)
-            .unwrap_or_default();
+        // let nonce_key = tx
+        //     .aa_tx_env
+        //     .as_ref()
+        //     .map(|aa| aa.nonce_key)
+        //     .unwrap_or_default();
 
-        // Validate account nonce and code (EIP-3607) using upstream helper
-        pre_execution::validate_account_nonce_and_code(
-            &caller_account.info,
-            tx.nonce(),
-            cfg.is_eip3607_disabled(),
-            // skip nonce check if 2D nonce is used
-            cfg.is_nonce_check_disabled() || !nonce_key.is_zero(),
-        )?;
+        // // Validate account nonce and code (EIP-3607) using upstream helper
+        // pre_execution::validate_account_nonce_and_code(
+        //     &caller_account.info,
+        //     tx.nonce(),
+        //     cfg.is_eip3607_disabled(),
+        //     // skip nonce check if 2D nonce is used
+        //     cfg.is_nonce_check_disabled() || !nonce_key.is_zero(),
+        // )?;
 
-        // modify account nonce and touch the account.
-        caller_account.touch();
+        // // modify account nonce and touch the account.
+        // caller_account.touch();
 
-        if !nonce_key.is_zero() {
-            let internals = EvmInternals::new(journal, block);
-            let mut storage_provider = EvmPrecompileStorageProvider::new_max_gas(internals, cfg);
-            let mut nonce_manager = NonceManager::new(&mut storage_provider);
+        // if !nonce_key.is_zero() {
+        //     let internals = EvmInternals::new(journal, block);
+        //     let mut storage_provider = EvmPrecompileStorageProvider::new_max_gas(internals, cfg);
+        //     let mut nonce_manager = NonceManager::new(&mut storage_provider);
 
-            if !cfg.is_nonce_check_disabled() {
-                let tx_nonce = tx.nonce();
-                let state = nonce_manager
-                    .get_nonce(getNonceCall {
-                        account: tx.caller(),
-                        nonceKey: nonce_key,
-                    })
-                    .map_err(|err| match err {
-                        TempoPrecompileError::Fatal(err) => EVMError::Custom(err),
-                        err => TempoInvalidTransaction::NonceManagerError(err.to_string()).into(),
-                    })?;
+        //     if !cfg.is_nonce_check_disabled() {
+        //         let tx_nonce = tx.nonce();
+        //         let state = nonce_manager
+        //             .get_nonce(getNonceCall {
+        //                 account: tx.caller(),
+        //                 nonceKey: nonce_key,
+        //             })
+        //             .map_err(|err| match err {
+        //                 TempoPrecompileError::Fatal(err) => EVMError::Custom(err),
+        //                 err => TempoInvalidTransaction::NonceManagerError(err.to_string()).into(),
+        //             })?;
 
-                match tx_nonce.cmp(&state) {
-                    Ordering::Greater => {
-                        return Err(TempoInvalidTransaction::EthInvalidTransaction(
-                            InvalidTransaction::NonceTooHigh {
-                                tx: tx_nonce,
-                                state,
-                            },
-                        )
-                        .into());
-                    }
-                    Ordering::Less => {
-                        return Err(TempoInvalidTransaction::EthInvalidTransaction(
-                            InvalidTransaction::NonceTooLow {
-                                tx: tx_nonce,
-                                state,
-                            },
-                        )
-                        .into());
-                    }
-                    _ => {}
-                }
-            }
+        //         match tx_nonce.cmp(&state) {
+        //             Ordering::Greater => {
+        //                 return Err(TempoInvalidTransaction::EthInvalidTransaction(
+        //                     InvalidTransaction::NonceTooHigh {
+        //                         tx: tx_nonce,
+        //                         state,
+        //                     },
+        //                 )
+        //                 .into());
+        //             }
+        //             Ordering::Less => {
+        //                 return Err(TempoInvalidTransaction::EthInvalidTransaction(
+        //                     InvalidTransaction::NonceTooLow {
+        //                         tx: tx_nonce,
+        //                         state,
+        //                     },
+        //                 )
+        //                 .into());
+        //             }
+        //             _ => {}
+        //         }
+        //     }
 
-            // Always increment nonce for AA transactions with non-zero nonce keys.
-            nonce_manager
-                .increment_nonce(tx.caller(), nonce_key)
-                .map_err(|err| match err {
-                    TempoPrecompileError::Fatal(err) => EVMError::Custom(err),
-                    err => TempoInvalidTransaction::NonceManagerError(err.to_string()).into(),
-                })?;
-        } else {
-            // Bump the nonce for calls. Nonce for CREATE will be bumped in `make_create_frame`.
-            //
-            // Always bump nonce for AA transactions.
-            if tx.aa_tx_env.is_some() || tx.kind().is_call() {
-                caller_account.bump_nonce();
-            }
-        }
+        //     // Always increment nonce for AA transactions with non-zero nonce keys.
+        //     nonce_manager
+        //         .increment_nonce(tx.caller(), nonce_key)
+        //         .map_err(|err| match err {
+        //             TempoPrecompileError::Fatal(err) => EVMError::Custom(err),
+        //             err => TempoInvalidTransaction::NonceManagerError(err.to_string()).into(),
+        //         })?;
+        // } else {
+        //     // Bump the nonce for calls. Nonce for CREATE will be bumped in `make_create_frame`.
+        //     //
+        //     // Always bump nonce for AA transactions.
+        //     if tx.aa_tx_env.is_some() || tx.kind().is_call() {
+        //         caller_account.bump_nonce();
+        //     }
+        // }
 
-        // calculate the new balance after the fee is collected.
-        let new_balance = calculate_caller_fee(account_balance, tx, block, cfg)?;
-        // doing max to avoid underflow as new_balance can be more than
-        // account balance if `cfg.is_balance_check_disabled()` is true.
-        let gas_balance_spending = core::cmp::max(account_balance, new_balance) - new_balance;
+        // // calculate the new balance after the fee is collected.
+        // let new_balance = calculate_caller_fee(account_balance, tx, block, cfg)?;
+        // // doing max to avoid underflow as new_balance can be more than
+        // // account balance if `cfg.is_balance_check_disabled()` is true.
+        // let gas_balance_spending = core::cmp::max(account_balance, new_balance) - new_balance;
 
-        // Note: Signature verification happens during recover_signer() before entering the pool
-        // Note: Transaction parameter validation (priority fee, time window) happens in validate_env()
+        // // Note: Signature verification happens during recover_signer() before entering the pool
+        // // Note: Transaction parameter validation (priority fee, time window) happens in validate_env()
 
-        // Create storage provider wrapper around journal
-        let internals = EvmInternals::new(journal, &block);
-        let beneficiary = internals.block_env().beneficiary();
-        let mut storage_provider = EvmPrecompileStorageProvider::new_max_gas(internals, cfg);
-        let mut fee_manager = TipFeeManager::new(&mut storage_provider);
+        // // Create storage provider wrapper around journal
+        // let internals = EvmInternals::new(journal, &block);
+        // let beneficiary = internals.block_env().beneficiary();
+        // let mut storage_provider = EvmPrecompileStorageProvider::new_max_gas(internals, cfg);
+        // let mut fee_manager = TipFeeManager::new(&mut storage_provider);
 
-        if gas_balance_spending.is_zero() {
-            return Ok(());
-        }
+        // if gas_balance_spending.is_zero() {
+        //     return Ok(());
+        // }
 
-        // Call the precompile function to collect the fee
-        // We specify the `to_addr` to account for the case where the to address is a tip20
-        // token and the fee token is not set for the specified caller.
-        // In this case, the collect_fee_pre_tx fn will set the fee token as the `to_addr`
-        let to_addr = tx.kind().into_to().unwrap_or_default();
-        fee_manager
-            .collect_fee_pre_tx(
-                self.fee_payer,
-                self.fee_token,
-                to_addr,
-                gas_balance_spending,
-                beneficiary,
-            )
-            .map_err(|e| {
-                // Map fee collection errors to transaction validation errors since they
-                // indicate the transaction cannot be included (e.g., insufficient liquidity
-                // in FeeAMM pool for fee swaps)
-                match e {
-                    TempoPrecompileError::TIPFeeAMMError(
-                        TIPFeeAMMError::InsufficientLiquidity(_),
-                    ) => EVMError::Transaction(TempoInvalidTransaction::InsufficientAmmLiquidity {
-                        fee: Box::new(gas_balance_spending),
-                    }),
+        // // Call the precompile function to collect the fee
+        // // We specify the `to_addr` to account for the case where the to address is a tip20
+        // // token and the fee token is not set for the specified caller.
+        // // In this case, the collect_fee_pre_tx fn will set the fee token as the `to_addr`
+        // let to_addr = tx.kind().into_to().unwrap_or_default();
+        // fee_manager
+        //     .collect_fee_pre_tx(
+        //         self.fee_payer,
+        //         self.fee_token,
+        //         to_addr,
+        //         gas_balance_spending,
+        //         beneficiary,
+        //     )
+        //     .map_err(|e| {
+        //         // Map fee collection errors to transaction validation errors since they
+        //         // indicate the transaction cannot be included (e.g., insufficient liquidity
+        //         // in FeeAMM pool for fee swaps)
+        //         match e {
+        //             TempoPrecompileError::TIPFeeAMMError(
+        //                 TIPFeeAMMError::InsufficientLiquidity(_),
+        //             ) => EVMError::Transaction(TempoInvalidTransaction::InsufficientAmmLiquidity {
+        //                 fee: Box::new(gas_balance_spending),
+        //             }),
 
-                    TempoPrecompileError::FeeManagerError(
-                        FeeManagerError::InsufficientFeeTokenBalance(_),
-                    ) => EVMError::Transaction(
-                        TempoInvalidTransaction::InsufficientFeeTokenBalance {
-                            fee: Box::new(gas_balance_spending),
-                            balance: Box::new(account_balance),
-                        },
-                    ),
+        //             TempoPrecompileError::FeeManagerError(
+        //                 FeeManagerError::InsufficientFeeTokenBalance(_),
+        //             ) => EVMError::Transaction(
+        //                 TempoInvalidTransaction::InsufficientFeeTokenBalance {
+        //                     fee: Box::new(gas_balance_spending),
+        //                     balance: Box::new(account_balance),
+        //                 },
+        //             ),
 
-                    TempoPrecompileError::Fatal(e) => EVMError::Custom(e),
+        //             TempoPrecompileError::Fatal(e) => EVMError::Custom(e),
 
-                    _ => EVMError::Transaction(TempoInvalidTransaction::CollectFeePreTxError(
-                        e.to_string(),
-                    )),
-                }
-            })?;
+        //             _ => EVMError::Transaction(TempoInvalidTransaction::CollectFeePreTxError(
+        //                 e.to_string(),
+        //             )),
+        //         }
+        //     })?;
         Ok(())
     }
 
@@ -645,41 +645,41 @@ where
         evm: &mut Self::Evm,
         exec_result: &mut <<Self::Evm as EvmTr>::Frame as FrameTr>::FrameResult,
     ) -> Result<(), Self::Error> {
-        // Call collectFeePostTx on TipFeeManager precompile
-        let context = evm.ctx();
-        let tx = context.tx();
-        let basefee = context.block().basefee() as u128;
-        let effective_gas_price = tx.effective_gas_price(basefee);
-        let gas = exec_result.gas();
+        // // Call collectFeePostTx on TipFeeManager precompile
+        // let context = evm.ctx();
+        // let tx = context.tx();
+        // let basefee = context.block().basefee() as u128;
+        // let effective_gas_price = tx.effective_gas_price(basefee);
+        // let gas = exec_result.gas();
 
-        // Calculate actual used and refund amounts
-        let actual_spending = calc_gas_balance_spending(gas.used(), effective_gas_price);
-        let refund_amount = tx.effective_balance_spending(
-            context.block.basefee.into(),
-            context.block.blob_gasprice().unwrap_or_default(),
-        )? - tx.value
-            - actual_spending;
+        // // Calculate actual used and refund amounts
+        // let actual_spending = calc_gas_balance_spending(gas.used(), effective_gas_price);
+        // let refund_amount = tx.effective_balance_spending(
+        //     context.block.basefee.into(),
+        //     context.block.blob_gasprice().unwrap_or_default(),
+        // )? - tx.value
+        //     - actual_spending;
 
-        // Create storage provider and fee manager
-        let (journal, block) = (&mut context.journaled_state, &context.block);
-        let internals = EvmInternals::new(journal, block);
-        let beneficiary = internals.block_env().beneficiary();
-        let mut storage_provider =
-            EvmPrecompileStorageProvider::new_max_gas(internals, &context.cfg);
-        let mut fee_manager = TipFeeManager::new(&mut storage_provider);
+        // // Create storage provider and fee manager
+        // let (journal, block) = (&mut context.journaled_state, &context.block);
+        // let internals = EvmInternals::new(journal, block);
+        // let beneficiary = internals.block_env().beneficiary();
+        // let mut storage_provider =
+        //     EvmPrecompileStorageProvider::new_max_gas(internals, &context.cfg);
+        // let mut fee_manager = TipFeeManager::new(&mut storage_provider);
 
-        if !actual_spending.is_zero() || !refund_amount.is_zero() {
-            // Call collectFeePostTx (handles both refund and fee queuing)
-            fee_manager
-                .collect_fee_post_tx(
-                    self.fee_payer,
-                    actual_spending,
-                    refund_amount,
-                    self.fee_token,
-                    beneficiary,
-                )
-                .map_err(|e| EVMError::Custom(format!("{e:?}")))?;
-        }
+        // if !actual_spending.is_zero() || !refund_amount.is_zero() {
+        //     // Call collectFeePostTx (handles both refund and fee queuing)
+        //     fee_manager
+        //         .collect_fee_post_tx(
+        //             self.fee_payer,
+        //             actual_spending,
+        //             refund_amount,
+        //             self.fee_token,
+        //             beneficiary,
+        //         )
+        //         .map_err(|e| EVMError::Custom(format!("{e:?}")))?;
+        // }
         Ok(())
     }
 
@@ -934,11 +934,12 @@ pub fn get_token_balance<JOURNAL>(
 where
     JOURNAL: JournalTr,
 {
-    journal.load_account(token)?;
-    let balance_slot = mapping_slot(sender, tip20::slots::BALANCES);
-    let balance = journal.sload(token, balance_slot)?.data;
+    Ok(U256::ZERO)
+    // journal.load_account(token)?;
+    // let balance_slot = mapping_slot(sender, tip20::slots::BALANCES);
+    // let balance = journal.sload(token, balance_slot)?.data;
 
-    Ok(balance)
+    // Ok(balance)
 }
 
 impl<DB, I> InspectorHandler for TempoEvmHandler<DB, I>
