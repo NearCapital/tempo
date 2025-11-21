@@ -3,7 +3,7 @@ pub mod dispatch;
 use crate::{
     STABLECOIN_EXCHANGE_ADDRESS,
     error::Result,
-    storage::PrecompileStorageProvider,
+    storage::{ContractStorage, PrecompileStorageProvider},
     tip20::{ITIP20, TIP20Token},
 };
 use alloy::primitives::{Address, B256, U256, keccak256};
@@ -78,6 +78,11 @@ impl<'a, S: PrecompileStorageProvider> LinkingUSD<'a, S> {
     }
 
     pub fn transfer(&mut self, msg_sender: Address, call: ITIP20::transferCall) -> Result<bool> {
+        // Post allegretto, use default tip20 logic
+        if self.token.storage().spec().is_allegretto() {
+            return self.token.transfer(msg_sender, call);
+        }
+
         if self.is_transfer_authorized(msg_sender)? {
             self.token.transfer(msg_sender, call)
         } else {
@@ -90,6 +95,11 @@ impl<'a, S: PrecompileStorageProvider> LinkingUSD<'a, S> {
         msg_sender: Address,
         call: ITIP20::transferFromCall,
     ) -> Result<bool> {
+        // Post allegretto, use default tip20 logic
+        if self.token.storage().spec().is_allegretto() {
+            return self.token.transfer_from(msg_sender, call);
+        }
+
         if self.is_transfer_from_authorized(msg_sender, call.from)?
             || msg_sender == STABLECOIN_EXCHANGE_ADDRESS
         {
@@ -104,6 +114,11 @@ impl<'a, S: PrecompileStorageProvider> LinkingUSD<'a, S> {
         msg_sender: Address,
         call: ITIP20::transferWithMemoCall,
     ) -> Result<()> {
+        // Post allegretto, use default tip20 logic
+        if self.token.storage().spec().is_allegretto() {
+            return self.token.transfer_with_memo(msg_sender, call);
+        }
+
         if self.is_transfer_with_memo_authorized(msg_sender, call.to)? {
             self.token.transfer_with_memo(msg_sender, call)
         } else {
@@ -116,6 +131,11 @@ impl<'a, S: PrecompileStorageProvider> LinkingUSD<'a, S> {
         msg_sender: Address,
         call: ITIP20::transferFromWithMemoCall,
     ) -> Result<bool> {
+        // Post allegretto, use default tip20 logic
+        if self.token.storage().spec().is_allegretto() {
+            return self.token.transfer_from_with_memo(msg_sender, call);
+        }
+
         if self.is_transfer_from_with_memo_authorized(msg_sender, call.from, call.to)?
             || msg_sender == STABLECOIN_EXCHANGE_ADDRESS
         {

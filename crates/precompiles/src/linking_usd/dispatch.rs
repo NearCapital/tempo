@@ -13,6 +13,11 @@ use tempo_contracts::precompiles::{ILinkingUSD, TIP20Error};
 
 impl<S: PrecompileStorageProvider> Precompile for LinkingUSD<'_, S> {
     fn call(&mut self, calldata: &[u8], msg_sender: Address) -> PrecompileResult {
+        // Post allegretto hardfork, treat linkingUSD as a default TIP20 without extra permissions
+        if self.token.storage().spec().is_allegretto() {
+            return self.token.call(calldata, msg_sender);
+        }
+
         self.token
             .storage()
             .deduct_gas(input_cost(calldata.len()))
