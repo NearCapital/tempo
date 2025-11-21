@@ -654,6 +654,15 @@ where
             // Validate that the KeyAuthorization is signed by the root account
             let root_account = &tx.caller;
 
+            // Extract root public key from keychain signature if present (for WebAuthn/P256 roots)
+            let root_public_key = if let tempo_primitives::AASignature::Keychain(keychain_sig) =
+                &aa_tx_env.signature
+            {
+                keychain_sig.root_public_key()
+            } else {
+                None
+            };
+
             // Compute the message hash for the KeyAuthorization
             // Message format: keccak256(rlp([key_type, key_id, expiry, limits]))
             let auth_message_hash = KeyAuthorization::authorization_message_hash(
@@ -683,6 +692,33 @@ where
                         ),
                     },
                 ));
+            }
+
+            // For WebAuthn/P256 key authorizations, verify the public key in the signature matches
+            // the public key in the keychain signature (if present)
+            if let tempo_primitives::AASignature::WebAuthn(webauthn_sig) = &key_auth.signature {
+                if let Some((root_pub_x, root_pub_y)) = root_public_key {
+                    // Verify the public key in the KeyAuthorization matches the root public key
+                    if webauthn_sig.pub_key_x != root_pub_x || webauthn_sig.pub_key_y != root_pub_y
+                    {
+                        return Err(EVMError::Transaction(
+                            TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                                reason: "KeyAuthorization WebAuthn public key does not match root public key in Keychain signature".to_string(),
+                            },
+                        ));
+                    }
+                }
+            } else if let tempo_primitives::AASignature::P256(p256_sig) = &key_auth.signature {
+                if let Some((root_pub_x, root_pub_y)) = root_public_key {
+                    // Verify the public key in the KeyAuthorization matches the root public key
+                    if p256_sig.pub_key_x != root_pub_x || p256_sig.pub_key_y != root_pub_y {
+                        return Err(EVMError::Transaction(
+                            TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                                reason: "KeyAuthorization P256 public key does not match root public key in Keychain signature".to_string(),
+                            },
+                        ));
+                    }
+                }
             }
 
             // Now authorize the key in the precompile
@@ -740,12 +776,11 @@ where
         // UNLESS this transaction also includes a KeyAuthorization (same-tx auth+use case)
         if let Some(aa_tx_env) = tx.aa_tx_env.as_ref() {
             if let tempo_primitives::AASignature::Keychain(keychain_sig) = &aa_tx_env.signature {
-                // The user_address is the root account this transaction is being executed for
-                // This should match tx.caller (which comes from recover_signer on the outer signature)
-                let user_address = &keychain_sig.user_address;
+                // Get the user_address (derived from root_identifier - either address directly or from P256 public key)
+                let user_address = keychain_sig.user_address();
 
                 // Sanity check: user_address should match tx.caller
-                if *user_address != tx.caller {
+                if user_address != tx.caller {
                     return Err(EVMError::Transaction(
                         TempoInvalidTransaction::AccessKeyAuthorizationFailed {
                             reason: format!(
@@ -793,7 +828,7 @@ where
                     // Validate that user_address has authorized this access key in the keychain
                     keychain
                         .validate_keychain_authorization(
-                            *user_address,
+                            user_address,
                             access_key_addr,
                             block.timestamp().to::<u64>(),
                         )

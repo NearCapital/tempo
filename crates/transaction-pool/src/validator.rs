@@ -115,7 +115,8 @@ where
 
             // Sanity check: user_address should match transaction sender
             if let tempo_primitives::AASignature::Keychain(keychain_sig) = aa_signed.signature() {
-                if keychain_sig.user_address != sender {
+                let user_address = keychain_sig.user_address();
+                if user_address != sender {
                     return ValidationResult::Reject(
                         "Keychain signature user_address does not match sender".to_string(),
                     );
@@ -134,6 +135,16 @@ where
                 // Same-tx auth+use: Validate the KeyAuthorization signature (not the keychain state)
                 // The KeyAuthorization MUST be signed by the root account
                 if let Some(key_auth) = aa_signed.tx().key_authorization.as_ref() {
+                    // Extract root public key from keychain signature if present (for WebAuthn/P256 roots)
+                    let root_public_key =
+                        if let tempo_primitives::AASignature::Keychain(keychain_sig) =
+                            aa_signed.signature()
+                        {
+                            keychain_sig.root_public_key()
+                        } else {
+                            None
+                        };
+
                     // Compute the message hash for the KeyAuthorization
                     let auth_message_hash =
                         tempo_primitives::transaction::KeyAuthorization::authorization_message_hash(
@@ -154,6 +165,34 @@ where
                                     auth_signer, sender
                                 ));
                             }
+
+                            // For WebAuthn/P256 key authorizations, verify the public key matches
+                            if let tempo_primitives::AASignature::WebAuthn(webauthn_sig) =
+                                &key_auth.signature
+                            {
+                                if let Some((root_pub_x, root_pub_y)) = root_public_key {
+                                    if webauthn_sig.pub_key_x != root_pub_x
+                                        || webauthn_sig.pub_key_y != root_pub_y
+                                    {
+                                        return ValidationResult::Reject(
+                                            "KeyAuthorization WebAuthn public key does not match root public key in Keychain signature".to_string()
+                                        );
+                                    }
+                                }
+                            } else if let tempo_primitives::AASignature::P256(p256_sig) =
+                                &key_auth.signature
+                            {
+                                if let Some((root_pub_x, root_pub_y)) = root_public_key {
+                                    if p256_sig.pub_key_x != root_pub_x
+                                        || p256_sig.pub_key_y != root_pub_y
+                                    {
+                                        return ValidationResult::Reject(
+                                            "KeyAuthorization P256 public key does not match root public key in Keychain signature".to_string()
+                                        );
+                                    }
+                                }
+                            }
+
                             // KeyAuthorization is valid - skip keychain storage check (key will be authorized during execution)
                             return ValidationResult::Skip;
                         }

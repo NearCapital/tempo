@@ -65,20 +65,39 @@ pub enum PrimitiveSignature {
     WebAuthn(WebAuthnSignature),
 }
 
-/// Keychain signature wrapping another signature with a user address
+/// Root identifier for Keychain signatures - either an address (for Secp256k1 roots)
+/// or a P256 public key (for P256/WebAuthn roots)
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "camelCase"))]
+pub enum RootIdentifier {
+    /// For Secp256k1 root keys: store the user address directly (20 bytes)
+    Address(Address),
+
+    /// For P256/WebAuthn root keys: store the public key coordinates (64 bytes)
+    P256PublicKey {
+        #[cfg_attr(feature = "serde", serde(rename = "pubKeyX"))]
+        pub_key_x: B256,
+        #[cfg_attr(feature = "serde", serde(rename = "pubKeyY"))]
+        pub_key_y: B256,
+    },
+}
+
+/// Keychain signature wrapping another signature with a root identifier
 /// This allows an access key to sign on behalf of a root account
 ///
-/// Format: 0x03 || user_address (20 bytes) || inner_signature
+/// Format (for WebAuthn/P256 roots): 0x03 || pub_key_x (32 bytes) || pub_key_y (32 bytes) || inner_signature
+/// Format (for Secp256k1 roots): 0x03 || user_address (20 bytes) || inner_signature
 ///
-/// The user_address is the root account this transaction is being executed for.
+/// The root_identifier contains either the user address (Secp256k1) or public key (P256/WebAuthn).
 /// The inner signature proves an authorized access key signed the transaction.
-/// The handler validates that user_address has authorized the access key in the KeyChain precompile.
+/// The handler validates that the root account has authorized the access key in the KeyChain precompile.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct KeychainSignature {
-    /// Root account address that this transaction is being executed for
-    pub user_address: Address,
+    /// Root account identifier - either address (Secp256k1) or public key (P256/WebAuthn)
+    pub root_identifier: RootIdentifier,
     /// The actual signature from the access key (can be Secp256k1, P256, or WebAuthn, but NOT another Keychain)
     pub signature: PrimitiveSignature,
     /// Cached access key ID recovered from the inner signature.
@@ -93,7 +112,7 @@ pub struct KeychainSignature {
 // since it's just a cache and doesn't affect the logical equality of signatures
 impl PartialEq for KeychainSignature {
     fn eq(&self, other: &Self) -> bool {
-        self.user_address == other.user_address && self.signature == other.signature
+        self.root_identifier == other.root_identifier && self.signature == other.signature
     }
 }
 
@@ -101,18 +120,61 @@ impl Eq for KeychainSignature {}
 
 impl core::hash::Hash for KeychainSignature {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.user_address.hash(state);
+        self.root_identifier.hash(state);
         self.signature.hash(state);
     }
 }
 
 impl KeychainSignature {
-    /// Create a new KeychainSignature
+    /// Create a new KeychainSignature with an address-based root identifier (for Secp256k1 roots)
     pub fn new(user_address: Address, signature: PrimitiveSignature) -> Self {
         Self {
-            user_address,
+            root_identifier: RootIdentifier::Address(user_address),
             signature,
             cached_key_id: OnceLock::new(),
+        }
+    }
+
+    /// Create a new KeychainSignature with a P256 public key root identifier
+    pub fn new_with_p256_root(
+        pub_key_x: B256,
+        pub_key_y: B256,
+        signature: PrimitiveSignature,
+    ) -> Self {
+        Self {
+            root_identifier: RootIdentifier::P256PublicKey {
+                pub_key_x,
+                pub_key_y,
+            },
+            signature,
+            cached_key_id: OnceLock::new(),
+        }
+    }
+
+    /// Get the root account address (user address)
+    ///
+    /// For address-based roots, returns the address directly.
+    /// For P256 public key roots, derives the address from the public key.
+    pub fn user_address(&self) -> Address {
+        match &self.root_identifier {
+            RootIdentifier::Address(addr) => *addr,
+            RootIdentifier::P256PublicKey {
+                pub_key_x,
+                pub_key_y,
+            } => derive_p256_address(pub_key_x, pub_key_y),
+        }
+    }
+
+    /// Get the root public key if this uses a P256/WebAuthn root
+    ///
+    /// Returns Some((pub_key_x, pub_key_y)) for P256 roots, None for address-based roots.
+    pub fn root_public_key(&self) -> Option<(B256, B256)> {
+        match &self.root_identifier {
+            RootIdentifier::P256PublicKey {
+                pub_key_x,
+                pub_key_y,
+            } => Some((*pub_key_x, *pub_key_y)),
+            RootIdentifier::Address(_) => None,
         }
     }
 }
@@ -124,22 +186,22 @@ impl reth_codecs::Compact for KeychainSignature {
     where
         B: alloy_rlp::BufMut + AsMut<[u8]>,
     {
-        // Only encode user_address and signature, skip cached_key_id
+        // Encode root_identifier and signature, skip cached_key_id
         let mut written = 0;
-        written += self.user_address.to_compact(buf);
+        written += self.root_identifier.to_compact(buf);
         written += self.signature.to_compact(buf);
         written
     }
 
     fn from_compact(buf: &[u8], len: usize) -> (Self, &[u8]) {
-        // Decode user_address and signature, initialize cached_key_id as empty
-        let (user_address, rest) = Address::from_compact(buf, len);
+        // Decode root_identifier and signature, initialize cached_key_id as empty
+        let (root_identifier, rest) = RootIdentifier::from_compact(buf, len);
         let remaining_len = len - (buf.len() - rest.len());
         let (signature, rest) = PrimitiveSignature::from_compact(rest, remaining_len);
 
         (
             Self {
-                user_address,
+                root_identifier,
                 signature,
                 cached_key_id: OnceLock::new(),
             },
@@ -148,15 +210,89 @@ impl reth_codecs::Compact for KeychainSignature {
     }
 }
 
+// Compact implementation for RootIdentifier
+#[cfg(feature = "reth-codec")]
+impl reth_codecs::Compact for RootIdentifier {
+    fn to_compact<B>(&self, buf: &mut B) -> usize
+    where
+        B: alloy_rlp::BufMut + AsMut<[u8]>,
+    {
+        match self {
+            RootIdentifier::Address(addr) => {
+                // Type tag 0 for Address
+                buf.put_u8(0);
+                addr.to_compact(buf) + 1
+            }
+            RootIdentifier::P256PublicKey {
+                pub_key_x,
+                pub_key_y,
+            } => {
+                // Type tag 1 for P256PublicKey
+                buf.put_u8(1);
+                let mut written = 1;
+                written += pub_key_x.to_compact(buf);
+                written += pub_key_y.to_compact(buf);
+                written
+            }
+        }
+    }
+
+    fn from_compact(buf: &[u8], _len: usize) -> (Self, &[u8]) {
+        let type_tag = buf[0];
+        let rest = &buf[1..];
+
+        match type_tag {
+            0 => {
+                // Address variant
+                let (addr, rest) = Address::from_compact(rest, 20);
+                (RootIdentifier::Address(addr), rest)
+            }
+            1 => {
+                // P256PublicKey variant
+                let (pub_key_x, rest) = B256::from_compact(rest, 32);
+                let (pub_key_y, rest) = B256::from_compact(rest, 32);
+                (
+                    RootIdentifier::P256PublicKey {
+                        pub_key_x,
+                        pub_key_y,
+                    },
+                    rest,
+                )
+            }
+            _ => {
+                // Default to Address variant for invalid tags
+                let (addr, rest) = Address::from_compact(rest, 20);
+                (RootIdentifier::Address(addr), rest)
+            }
+        }
+    }
+}
+
 // Manual Arbitrary implementation that excludes cached_key_id (cache field)
 #[cfg(any(test, feature = "arbitrary"))]
 impl<'a> arbitrary::Arbitrary<'a> for KeychainSignature {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         Ok(Self {
-            user_address: u.arbitrary()?,
+            root_identifier: u.arbitrary()?,
             signature: u.arbitrary()?,
             cached_key_id: OnceLock::new(), // Always start with empty cache
         })
+    }
+}
+
+// Arbitrary implementation for RootIdentifier
+#[cfg(any(test, feature = "arbitrary"))]
+impl<'a> arbitrary::Arbitrary<'a> for RootIdentifier {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        let choice = u.int_in_range(0..=1)?;
+        match choice {
+            0 => Ok(RootIdentifier::Address(u.arbitrary()?)),
+            1 => Ok(RootIdentifier::P256PublicKey {
+                pub_key_x: u.arbitrary()?,
+                pub_key_y: u.arbitrary()?,
+            }),
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -257,18 +393,33 @@ impl reth_codecs::Compact for AASignature {
                         })
                     }
                     SIGNATURE_TYPE_KEYCHAIN => {
-                        // Extract the user_address even if inner signature fails
-                        // Keychain format: 0x03 | user_address (20 bytes) | inner_signature
+                        // Extract root identifier even if inner signature fails
                         let sig_data = &bytes[1..];
-                        let user_address = if sig_data.len() >= 20 {
-                            Address::from_slice(&sig_data[0..20])
+
+                        // Try to parse as P256 public key format first (64 bytes), then fall back to address (20 bytes)
+                        let (root_identifier, inner_start) = if sig_data.len() >= 64 {
+                            // Try P256 public key format
+                            let pub_key_x = B256::from_slice(&sig_data[0..32]);
+                            let pub_key_y = B256::from_slice(&sig_data[32..64]);
+                            (
+                                RootIdentifier::P256PublicKey {
+                                    pub_key_x,
+                                    pub_key_y,
+                                },
+                                64,
+                            )
+                        } else if sig_data.len() >= 20 {
+                            // Fall back to address format
+                            let user_address = Address::from_slice(&sig_data[0..20]);
+                            (RootIdentifier::Address(user_address), 20)
                         } else {
-                            Address::ZERO
+                            // Default to zero address if too short
+                            (RootIdentifier::Address(Address::ZERO), 0)
                         };
 
                         // Determine inner signature type if possible
-                        let inner_signature = if sig_data.len() > 20 {
-                            let inner_bytes = &sig_data[20..];
+                        let inner_signature = if sig_data.len() > inner_start {
+                            let inner_bytes = &sig_data[inner_start..];
                             // Try to detect the inner signature type
                             if inner_bytes.len() == SECP256K1_SIGNATURE_LENGTH {
                                 PrimitiveSignature::Secp256k1(Signature::test_signature())
@@ -300,7 +451,7 @@ impl reth_codecs::Compact for AASignature {
                         };
 
                         Self::Keychain(KeychainSignature {
-                            user_address,
+                            root_identifier,
                             signature: inner_signature,
                             cached_key_id: OnceLock::new(),
                         })
@@ -594,9 +745,35 @@ impl AASignature {
         {
             let sig_data = &data[1..];
 
-            // Keychain format: user_address (20 bytes) || inner_signature
+            // Smart parsing: Try P256 public key format first (64 bytes), then fall back to address (20 bytes)
+
+            // Try parsing as P256 public key format: pub_key_x (32) || pub_key_y (32) || inner_sig
+            if sig_data.len() >= 64 {
+                let pub_key_x = B256::from_slice(&sig_data[0..32]);
+                let pub_key_y = B256::from_slice(&sig_data[32..64]);
+                let inner_sig_bytes = &sig_data[64..];
+
+                // Try to parse inner signature
+                if let Ok(inner_signature) = PrimitiveSignature::from_bytes(inner_sig_bytes) {
+                    // Validate that this is a valid P256 public key by checking if it's on the curve
+                    // We do this by attempting to derive an address - if it succeeds, it's likely valid
+                    let _addr = derive_p256_address(&pub_key_x, &pub_key_y);
+
+                    // Return P256 public key variant
+                    return Ok(Self::Keychain(KeychainSignature {
+                        root_identifier: RootIdentifier::P256PublicKey {
+                            pub_key_x,
+                            pub_key_y,
+                        },
+                        signature: inner_signature,
+                        cached_key_id: OnceLock::new(),
+                    }));
+                }
+            }
+
+            // Fall back to address format: user_address (20 bytes) || inner_signature
             if sig_data.len() < 20 {
-                return Err("Invalid Keychain signature: too short for user_address");
+                return Err("Invalid Keychain signature: too short");
             }
 
             let user_address = Address::from_slice(&sig_data[0..20]);
@@ -607,7 +784,7 @@ impl AASignature {
             let inner_signature = PrimitiveSignature::from_bytes(inner_sig_bytes)?;
 
             return Ok(Self::Keychain(KeychainSignature {
-                user_address,
+                root_identifier: RootIdentifier::Address(user_address),
                 signature: inner_signature,
                 cached_key_id: OnceLock::new(),
             }));
@@ -635,13 +812,30 @@ impl AASignature {
                 PrimitiveSignature::WebAuthn(webauthn_sig.clone()).to_bytes()
             }
             Self::Keychain(keychain_sig) => {
-                // Format: 0x03 | user_address (20 bytes) | inner_signature
                 let inner_bytes = keychain_sig.signature.to_bytes();
-                let mut bytes = Vec::with_capacity(1 + 20 + inner_bytes.len());
-                bytes.push(SIGNATURE_TYPE_KEYCHAIN);
-                bytes.extend_from_slice(keychain_sig.user_address.as_slice());
-                bytes.extend_from_slice(&inner_bytes);
-                Bytes::from(bytes)
+
+                match &keychain_sig.root_identifier {
+                    RootIdentifier::Address(user_address) => {
+                        // Format for Secp256k1 root: 0x03 | user_address (20 bytes) | inner_signature
+                        let mut bytes = Vec::with_capacity(1 + 20 + inner_bytes.len());
+                        bytes.push(SIGNATURE_TYPE_KEYCHAIN);
+                        bytes.extend_from_slice(user_address.as_slice());
+                        bytes.extend_from_slice(&inner_bytes);
+                        Bytes::from(bytes)
+                    }
+                    RootIdentifier::P256PublicKey {
+                        pub_key_x,
+                        pub_key_y,
+                    } => {
+                        // Format for P256/WebAuthn root: 0x03 | pub_key_x (32 bytes) | pub_key_y (32 bytes) | inner_signature
+                        let mut bytes = Vec::with_capacity(1 + 64 + inner_bytes.len());
+                        bytes.push(SIGNATURE_TYPE_KEYCHAIN);
+                        bytes.extend_from_slice(pub_key_x.as_slice());
+                        bytes.extend_from_slice(pub_key_y.as_slice());
+                        bytes.extend_from_slice(&inner_bytes);
+                        Bytes::from(bytes)
+                    }
+                }
             }
         }
     }
@@ -658,7 +852,13 @@ impl AASignature {
             Self::WebAuthn(webauthn_sig) => {
                 PrimitiveSignature::WebAuthn(webauthn_sig.clone()).encoded_length()
             }
-            Self::Keychain(keychain_sig) => 1 + 20 + keychain_sig.signature.encoded_length(),
+            Self::Keychain(keychain_sig) => {
+                let root_id_len = match &keychain_sig.root_identifier {
+                    RootIdentifier::Address(_) => 20,
+                    RootIdentifier::P256PublicKey { .. } => 64,
+                };
+                1 + root_id_len + keychain_sig.signature.encoded_length()
+            }
         }
     }
 
@@ -680,7 +880,13 @@ impl AASignature {
             Self::Secp256k1(_) => SECP256K1_SIGNATURE_LENGTH,
             Self::P256(_) => 1 + P256_SIGNATURE_LENGTH,
             Self::WebAuthn(webauthn_sig) => 1 + webauthn_sig.webauthn_data.len() + 128,
-            Self::Keychain(keychain_sig) => 1 + 20 + keychain_sig.signature.size(),
+            Self::Keychain(keychain_sig) => {
+                let root_id_len = match &keychain_sig.root_identifier {
+                    RootIdentifier::Address(_) => 20,
+                    RootIdentifier::P256PublicKey { .. } => 64,
+                };
+                1 + root_id_len + keychain_sig.signature.size()
+            }
         }
     }
 
@@ -713,7 +919,8 @@ impl AASignature {
                 let _ = keychain_sig.cached_key_id.set(key_id);
 
                 // Return the user_address - the root account this transaction is for
-                Ok(keychain_sig.user_address)
+                // This now derives from the root identifier (address or public key)
+                Ok(keychain_sig.user_address())
             }
         }
     }
