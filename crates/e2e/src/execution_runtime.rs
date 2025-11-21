@@ -128,6 +128,28 @@ impl ExecutionRuntime {
                                 .unwrap();
                             let _ = response.send(receipt);
                         }
+                        Message::ChangeValidatorStatus(change_validator_status) => {
+                            let ChangeValidatorStatus {
+                                http_url,
+                                active,
+                                address,
+                                response,
+                            } = *change_validator_status;
+                            let provider = ProviderBuilder::new()
+                                .wallet(wallet.clone())
+                                .connect_http(http_url);
+                            let validator_config =
+                                IValidatorConfig::new(VALIDATOR_CONFIG_ADDRESS, provider);
+                            let receipt = validator_config
+                                .changeValidatorStatus(address, active)
+                                .send()
+                                .await
+                                .unwrap()
+                                .get_receipt()
+                                .await
+                                .unwrap();
+                            let _ = response.send(receipt);
+                        }
                         Message::SpawnNode(spawn_node) => {
                             let SpawnNode {
                                 name,
@@ -170,6 +192,52 @@ impl ExecutionRuntime {
     }
 
     pub async fn add_validator(
+        &self,
+        http_url: Url,
+        address: Address,
+        public_key: PublicKey,
+        addr: SocketAddr,
+    ) -> eyre::Result<TransactionReceipt> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.to_runtime
+            .send(
+                AddValidator {
+                    http_url,
+                    address,
+                    public_key,
+                    addr,
+                    response: tx,
+                }
+                .into(),
+            )
+            .wrap_err("the execution runtime went away")?;
+        rx.await
+            .wrap_err("the execution runtime dropped the response channel before sending a receipt")
+    }
+
+    pub async fn change_validator_status(
+        &self,
+        http_url: Url,
+        address: Address,
+        active: bool,
+    ) -> eyre::Result<TransactionReceipt> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.to_runtime
+            .send(
+                ChangeValidatorStatus {
+                    address,
+                    active,
+                    http_url,
+                    response: tx,
+                }
+                .into(),
+            )
+            .wrap_err("the execution runtime went away")?;
+        rx.await
+            .wrap_err("the execution runtime dropped the response channel before sending a receipt")
+    }
+
+    pub async fn remove_validator(
         &self,
         http_url: Url,
         address: Address,
@@ -412,6 +480,7 @@ pub async fn launch_execution_node<P: AsRef<Path>>(
 #[derive(Debug)]
 enum Message {
     AddValidator(Box<AddValidator>),
+    ChangeValidatorStatus(Box<ChangeValidatorStatus>),
     SpawnNode(Box<SpawnNode>),
     Stop,
 }
@@ -419,6 +488,12 @@ enum Message {
 impl From<AddValidator> for Message {
     fn from(value: AddValidator) -> Self {
         Self::AddValidator(value.into())
+    }
+}
+
+impl From<ChangeValidatorStatus> for Message {
+    fn from(value: ChangeValidatorStatus) -> Self {
+        Self::ChangeValidatorStatus(value.into())
     }
 }
 
@@ -442,6 +517,15 @@ struct AddValidator {
     address: Address,
     public_key: PublicKey,
     addr: SocketAddr,
+    response: tokio::sync::oneshot::Sender<TransactionReceipt>,
+}
+
+#[derive(Debug)]
+struct ChangeValidatorStatus {
+    /// URL of the node to send this to.
+    http_url: Url,
+    address: Address,
+    active: bool,
     response: tokio::sync::oneshot::Sender<TransactionReceipt>,
 }
 

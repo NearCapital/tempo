@@ -373,6 +373,150 @@ fn validator_is_added() {
     });
 }
 
+#[test_traced]
+fn validator_is_removed() {
+    let _ = tempo_eyre::install();
+
+    let seed = 0;
+
+    let cfg = Config::default().with_seed(seed);
+    let executor = Runner::from(cfg);
+
+    executor.start(|context| async move {
+        let execution_runtime = ExecutionRuntime::new();
+
+        let linkage = Link {
+            latency: Duration::from_millis(10),
+            jitter: Duration::from_millis(1),
+            success_rate: 1.0,
+        };
+
+        let epoch_length = 30;
+        let setup = Setup {
+            how_many_signers: 4,
+            how_many_verifiers: 0,
+            seed,
+            linkage: linkage.clone(),
+            epoch_length,
+            connect_execution_layer_nodes: false,
+        };
+
+        let (nodes, mut oracle) =
+            setup_validators(context.clone(), &execution_runtime, setup).await;
+
+        assert!(
+            nodes
+                .iter()
+                .all(|node| node.consensus_config.share.is_some()),
+            "all nodes must be signers",
+        );
+
+        let running = join_all(nodes.into_iter().map(|node| node.start())).await;
+
+        link_validators(&mut oracle, &running, linkage.clone(), None).await;
+
+        // We will send an arbitrary node of the initial validator set the smart
+        // contract call.
+        let http_url = running[0]
+            .execution_node
+            .node
+            .rpc_server_handle()
+            .http_url()
+            .unwrap()
+            .parse()
+            .unwrap();
+
+        let receipt = execution_runtime
+            .change_validator_status(
+                http_url,
+                validator(3),
+                false,
+            )
+            .await
+            .unwrap();
+
+        tracing::debug!(
+            block.number = receipt.block_number,
+            "chanegValiidatorStatus call returned receipt"
+        );
+
+        let pat = format!("{}-", crate::CONSENSUS_NODE_PREFIX);
+
+        let mut success = false;
+
+        let mut observed_4_dealers_3_players = false;
+        while !success {
+            context.sleep(Duration::from_secs(1)).await;
+
+            let metrics = context.encode();
+
+            
+            // This exists to ensure that a single validator starts a ceremony
+            // with 3 dealers and 4 players. We can't just check for `_ceremony_dealers`
+            // and `_ceremony_players` without accounting for the validator uid, because
+            // at the moment we read all metrics, there could be one validator that
+            // has not yet started a new ceremony (so we read its old metrics), while
+            // another validator has already started a new ceremony.
+            #[derive(Default)]
+            struct CeremonyParticipants {
+                dealers: u64,
+                players: u64,
+            }
+            #[derive(Default)]
+            struct Observations(HashMap::<String, CeremonyParticipants>);
+            impl Observations {
+                fn observe(&mut self, metric: &str, value: &str) {
+                    if let Some(metric) = metric.strip_suffix("_dkg_manager_ceremony_dealers") {
+                        let value = value.parse::<u64>().unwrap();
+                        self.0.entry(metric.to_string()).or_default().dealers = value;
+                    }
+                    if let Some(metric) = metric.strip_suffix("_dkg_manager_ceremony_players") {
+                        let value = value.parse::<u64>().unwrap();
+                        self.0.entry(metric.to_string()).or_default().players = value;
+                    }
+                }
+                fn had_expected(&self) -> bool {
+                    self.0.values().any(|participants| participants.dealers == 4 && participants.players == 3)
+                }
+            }
+
+            let mut observations = Observations::default();
+            
+            'metrics: for line in metrics.lines() {
+                if !line.starts_with(&pat) {
+                    continue 'metrics;
+                }
+
+                let mut parts = line.split_whitespace();
+                let metric = parts.next().unwrap();
+                let value = parts.next().unwrap();
+
+                if metrics.ends_with("_peers_blocked") {
+                    let value = value.parse::<u64>().unwrap();
+                    assert_eq!(value, 0);
+                }
+
+                observations.observe(metric, value);
+
+                if metric.ends_with("_epoch_manager_latest_epoch") {
+                    let value = value.parse::<u64>().unwrap();
+                    assert!(value < 4, "the validator should have joined before epoch 4");
+                }
+
+                if metric.ends_with("_epoch_manager_latest_participants") {
+                    let value = value.parse::<u64>().unwrap();
+                    if value < 4 && observed_4_dealers_3_players {
+                        success = true
+                    } else if value < 4 {
+                        panic!("got less than 4 participants, but never observed a ceremony with 4 dealers and 3 players");
+                    }
+                }
+            }
+            observed_4_dealers_3_players |= observations.had_expected();
+        }
+    });
+}
+
 // #[test_traced]
 // fn transitions_with_fallible_links() {
 //     let _ = tempo_eyre::install();
