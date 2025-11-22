@@ -1653,8 +1653,8 @@ mod tests {
     fn test_key_authorization_rlp_encoding() {
         use alloy_primitives::{Address, U256};
         use tempo_primitives::transaction::{
-            SignatureType,
-            account_abstraction::{KeyAuthorization, TokenLimit},
+            SignatureType, TokenLimit,
+            key_authorization::KeyAuthorization,
         };
 
         // Create test data
