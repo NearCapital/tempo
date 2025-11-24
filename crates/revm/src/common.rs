@@ -220,7 +220,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_fee_token_stablecoin_exchange() {
+    fn test_get_fee_token_stablecoin_exchange() -> eyre::Result<()> {
         let caller = Address::random();
         let token_in = Address::random();
         let token_out = Address::random();
@@ -245,8 +245,8 @@ mod tests {
         };
 
         let mut db = EmptyDB::default();
-        let result = db.user_or_tx_fee_token(tx, caller);
-        assert_eq!(result.unwrap(), Some(token_in));
+        let token = db.user_or_tx_fee_token(tx, caller)?;
+        assert_eq!(token, token_in);
 
         // Test swapExactAmountOut
         let call = IStablecoinExchange::swapExactAmountOutCall {
@@ -268,7 +268,9 @@ mod tests {
             ..Default::default()
         };
 
-        let result = db.user_or_tx_fee_token(tx, caller);
-        assert_eq!(result.unwrap(), Some(token_in));
+        let token = db.user_or_tx_fee_token(tx, caller)?;
+        assert_eq!(token, token_in);
+
+        Ok(())
     }
 }
