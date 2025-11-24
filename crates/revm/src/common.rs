@@ -94,7 +94,7 @@ pub trait TempoStateAccess<T> {
     fn sload(&mut self, address: Address, key: U256) -> Result<U256, Self::Error>;
 
     /// Resolves user-level of transaction-level fee token preference.
-    fn user_or_tx_fee_token(
+    fn get_fee_token(
         &mut self,
         tx: impl TempoTx,
         validator: Address,
@@ -259,7 +259,7 @@ mod tests {
         };
 
         let mut db = EmptyDB::default();
-        let token = db.user_or_tx_fee_token(tx, Address::ZERO, caller, TempoHardfork::default())?;
+        let token = db.get_fee_token(tx, Address::ZERO, caller, TempoHardfork::default())?;
         assert_eq!(token, fee_token);
         Ok(())
     }
@@ -283,7 +283,7 @@ mod tests {
 
         let mut db = EmptyDB::default();
         let result_token =
-            db.user_or_tx_fee_token(tx, Address::ZERO, caller, TempoHardfork::Allegretto)?;
+            db.get_fee_token(tx, Address::ZERO, caller, TempoHardfork::Allegretto)?;
         assert_eq!(result_token, token);
         Ok(())
     }
@@ -306,7 +306,7 @@ mod tests {
 
         let mut db = EmptyDB::default();
         let result_token =
-            db.user_or_tx_fee_token(tx, Address::ZERO, caller, TempoHardfork::Allegretto)?;
+            db.get_fee_token(tx, Address::ZERO, caller, TempoHardfork::Allegretto)?;
         assert_eq!(result_token, DEFAULT_FEE_TOKEN_POST_ALLEGRETTO);
         Ok(())
     }
@@ -325,7 +325,7 @@ mod tests {
 
         let mut db = EmptyDB::default();
         let result_token =
-            db.user_or_tx_fee_token(tx, Address::ZERO, caller, TempoHardfork::Allegretto)?;
+            db.get_fee_token(tx, Address::ZERO, caller, TempoHardfork::Allegretto)?;
         // Should fallback to DEFAULT_FEE_TOKEN when no preferences are found
         assert_eq!(result_token, DEFAULT_FEE_TOKEN_POST_ALLEGRETTO);
         Ok(())
@@ -357,7 +357,7 @@ mod tests {
         };
 
         let mut db = EmptyDB::default();
-        let token = db.user_or_tx_fee_token(tx, Address::ZERO, caller, TempoHardfork::default())?;
+        let token = db.get_fee_token(tx, Address::ZERO, caller, TempoHardfork::default())?;
         assert_eq!(token, token_in);
 
         // Test swapExactAmountOut
@@ -380,7 +380,7 @@ mod tests {
             ..Default::default()
         };
 
-        let token = db.user_or_tx_fee_token(tx, Address::ZERO, caller, TempoHardfork::default())?;
+        let token = db.get_fee_token(tx, Address::ZERO, caller, TempoHardfork::default())?;
         assert_eq!(token, token_in);
 
         Ok(())

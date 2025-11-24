@@ -10,8 +10,8 @@ use alloy_primitives::TxKind;
 use p256::ecdsa::signature::hazmat::PrehashSigner;
 use tempo_chainspec::spec::TEMPO_BASE_FEE;
 use tempo_precompiles::{
-    DEFAULT_FEE_TOKEN,
-    tip20::{ITIP20, ITIP20::transferCall},
+    DEFAULT_FEE_TOKEN_POST_ALLEGRETTO,
+    tip20::ITIP20::{self, transferCall},
 };
 use tempo_primitives::{
     TempoTxEnvelope,
@@ -45,7 +45,7 @@ async fn fund_address_with_fee_tokens(
         max_fee_per_gas: TEMPO_BASE_FEE as u128,
         gas_limit: 100_000,
         calls: vec![Call {
-            to: DEFAULT_FEE_TOKEN.into(),
+            to: DEFAULT_FEE_TOKEN_POST_ALLEGRETTO.into(),
             value: U256::ZERO,
             input: transfer_calldata.into(),
         }],
@@ -756,9 +756,9 @@ async fn test_aa_webauthn_signature_flow() -> eyre::Result<()> {
             value: U256::ZERO,
             input: Bytes::new(),
         }],
-        nonce_key: U256::ZERO,              // Protocol nonce
-        nonce: 0,                           // First transaction
-        fee_token: Some(DEFAULT_FEE_TOKEN), // Will use DEFAULT_FEE_TOKEN from genesis
+        nonce_key: U256::ZERO,                              // Protocol nonce
+        nonce: 0,                                           // First transaction
+        fee_token: Some(DEFAULT_FEE_TOKEN_POST_ALLEGRETTO), // Will use DEFAULT_FEE_TOKEN from genesis
         fee_payer_signature: None,
         valid_before: Some(u64::MAX),
         ..Default::default()
@@ -1285,7 +1285,7 @@ async fn test_aa_p256_call_batching() -> eyre::Result<()> {
         .abi_encode();
 
         calls.push(Call {
-            to: DEFAULT_FEE_TOKEN.into(),
+            to: DEFAULT_FEE_TOKEN_POST_ALLEGRETTO.into(),
             value: U256::ZERO,
             input: calldata.into(),
         });
@@ -1357,7 +1357,7 @@ async fn test_aa_p256_call_batching() -> eyre::Result<()> {
     );
 
     // Get initial balances of all recipients (should be 0)
-    let token = ITIP20::new(DEFAULT_FEE_TOKEN, provider.clone());
+    let token = ITIP20::new(DEFAULT_FEE_TOKEN_POST_ALLEGRETTO, provider.clone());
     let mut initial_balances = Vec::new();
 
     println!("\nChecking initial recipient balances:");
@@ -1496,8 +1496,8 @@ async fn test_aa_fee_payer_tx() -> eyre::Result<()> {
     println!("Fee payer address: {fee_payer_addr}");
     println!("User address: {user_addr} (unfunded)");
 
-    // Verify user has ZERO balance in DEFAULT_FEE_TOKEN
-    let user_token_balance = ITIP20::new(DEFAULT_FEE_TOKEN, &provider)
+    // Verify user has ZERO balance
+    let user_token_balance = ITIP20::new(DEFAULT_FEE_TOKEN_POST_ALLEGRETTO, &provider)
         .balanceOf(user_addr)
         .call()
         .await?;
@@ -1509,7 +1509,7 @@ async fn test_aa_fee_payer_tx() -> eyre::Result<()> {
     println!("User token balance: {user_token_balance} (expected: 0)");
 
     // Get fee payer's balance before transaction
-    let fee_payer_balance_before = ITIP20::new(DEFAULT_FEE_TOKEN, &provider)
+    let fee_payer_balance_before = ITIP20::new(DEFAULT_FEE_TOKEN_POST_ALLEGRETTO, &provider)
         .balanceOf(fee_payer_addr)
         .call()
         .await?;
@@ -1602,7 +1602,7 @@ async fn test_aa_fee_payer_tx() -> eyre::Result<()> {
     );
 
     // Verify user still has ZERO balance (fee payer paid)
-    let user_token_balance_after = ITIP20::new(DEFAULT_FEE_TOKEN, &provider)
+    let user_token_balance_after = ITIP20::new(DEFAULT_FEE_TOKEN_POST_ALLEGRETTO, &provider)
         .balanceOf(user_addr)
         .call()
         .await?;
@@ -1613,7 +1613,7 @@ async fn test_aa_fee_payer_tx() -> eyre::Result<()> {
     );
 
     // Verify fee payer's balance decreased
-    let fee_payer_balance_after = ITIP20::new(DEFAULT_FEE_TOKEN, &provider)
+    let fee_payer_balance_after = ITIP20::new(DEFAULT_FEE_TOKEN_POST_ALLEGRETTO, &provider)
         .balanceOf(fee_payer_addr)
         .call()
         .await?;

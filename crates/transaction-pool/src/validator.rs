@@ -71,7 +71,7 @@ where
         };
 
         let spec = TempoHardfork::Allegretto;
-        let fee_token = match state_provider.user_or_tx_fee_token(
+        let fee_token = match state_provider.get_fee_token(
             transaction.inner(),
             Address::ZERO,
             fee_payer,

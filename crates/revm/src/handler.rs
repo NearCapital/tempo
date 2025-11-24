@@ -101,7 +101,7 @@ impl<DB: alloy_evm::Database, I> TempoEvmHandler<DB, I> {
         let ctx = evm.ctx_mut();
 
         self.fee_payer = ctx.tx.fee_payer()?;
-        self.fee_token = ctx.journaled_state.user_or_tx_fee_token(
+        self.fee_token = ctx.journaled_state.get_fee_token(
             &ctx.tx,
             ctx.block.beneficiary,
             self.fee_payer,
@@ -1091,7 +1091,7 @@ mod tests {
             )
             .unwrap();
 
-        let fee_token = ctx.journaled_state.user_or_tx_fee_token(
+        let fee_token = ctx.journaled_state.get_fee_token(
             &ctx.tx,
             validator,
             user,
@@ -1109,7 +1109,7 @@ mod tests {
             )
             .unwrap();
 
-        let fee_token = ctx.journaled_state.user_or_tx_fee_token(
+        let fee_token = ctx.journaled_state.get_fee_token(
             &ctx.tx,
             validator,
             user,
@@ -1119,7 +1119,7 @@ mod tests {
 
         // Set tx fee token
         ctx.tx.fee_token = Some(tx_fee_token);
-        let fee_token = ctx.journaled_state.user_or_tx_fee_token(
+        let fee_token = ctx.journaled_state.get_fee_token(
             &ctx.tx,
             validator,
             user,
