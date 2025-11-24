@@ -348,7 +348,7 @@ mod tests {
         PATH_USD_ADDRESS, TIP_FEE_MANAGER_ADDRESS,
         error::TempoPrecompileError,
         storage::hashmap::HashMapStorageProvider,
-        tip20::{ISSUER_ROLE, ITIP20, TIP20Token, token_id_to_address},
+        tip20::{ISSUER_ROLE, ITIP20, TIP20Token, tests::initialize_path_usd, token_id_to_address},
     };
 
     fn setup_token_with_balance(
