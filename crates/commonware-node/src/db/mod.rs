@@ -14,7 +14,7 @@ use std::{
 use alloy_primitives::keccak256;
 use bytes::Bytes;
 use commonware_codec::{EncodeSize, Read, Write as CodecWrite};
-use commonware_runtime::{Clock, ContextCell, Metrics, Storage};
+use commonware_runtime::{Clock, Metrics, Storage};
 use commonware_storage::metadata::Metadata;
 use commonware_utils::sequence::FixedBytes;
 use parking_lot::RwLock;
@@ -30,7 +30,7 @@ where
     TContext: Clock + Metrics + Storage,
 {
     /// The underlying metadata store.
-    inner: Arc<RwLock<Metadata<ContextCell<TContext>, B256, Bytes>>>,
+    inner: Arc<RwLock<Metadata<TContext, B256, Bytes>>>,
     /// Atomic flag to ensure only one read-write transaction is active at a time.
     tx_active: Arc<AtomicBool>,
 }
@@ -40,7 +40,7 @@ where
     TContext: Clock + Metrics + Storage,
 {
     /// Create a new database wrapping the given metadata store.
-    pub fn new(inner: Metadata<ContextCell<TContext>, B256, Bytes>) -> Self {
+    pub fn new(inner: Metadata<TContext, B256, Bytes>) -> Self {
         Self {
             inner: Arc::new(RwLock::new(inner)),
             tx_active: Arc::new(AtomicBool::new(false)),
@@ -101,7 +101,7 @@ where
 {
     /// Arc to the underlying metadata store.
     /// The lock is acquired only during `commit()` to apply all buffered changes.
-    store: Arc<RwLock<Metadata<ContextCell<TContext>, B256, Bytes>>>,
+    store: Arc<RwLock<Metadata<TContext, B256, Bytes>>>,
 
     /// Flag indicating whether a read-write transaction is active.
     /// This is `Some` for read-write transactions and `None` for read-only transactions.
@@ -123,7 +123,7 @@ where
 {
     /// Create a new transaction over the given store.
     fn new(
-        store: Arc<RwLock<Metadata<ContextCell<TContext>, B256, Bytes>>>,
+        store: Arc<RwLock<Metadata<TContext, B256, Bytes>>>,
         tx_active: Option<Arc<AtomicBool>>,
     ) -> Self {
         Self {
