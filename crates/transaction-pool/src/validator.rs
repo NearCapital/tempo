@@ -69,16 +69,7 @@ where
         };
 
         let fee_token = match state_provider.user_or_tx_fee_token(transaction.inner(), fee_payer) {
-            Ok(Some(fee_token)) => fee_token,
-            Ok(None) => {
-                // If no fee token preference was specified at transaction or user level, this means that we will
-                // fallback to validator token. On Andantino testnet, all validators use LINKING_USD as their fee token,
-                // which will cause the transaction to be rejected because it can't be used to pay fees.
-                return TransactionValidationOutcome::Invalid(
-                    transaction,
-                    InvalidPoolTransactionError::other(TempoPoolTransactionError::MissingFeeToken),
-                );
-            }
+            Ok(fee_token) => fee_token,
             Err(err) => {
                 return TransactionValidationOutcome::Error(*transaction.hash(), Box::new(err));
             }
