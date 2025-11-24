@@ -1,9 +1,6 @@
-pub mod dispatch;
-
 use crate::{
-    Precompile, input_cost,
-    linking_usd::{LinkingUSD, NAME},
-    metadata, mutate, mutate_void,
+    Precompile, input_cost, metadata, mutate, mutate_void,
+    path_usd::PathUSD,
     storage::{ContractStorage, PrecompileStorageProvider},
     tip20::{IRolesAuth, ITIP20},
     view,
@@ -13,10 +10,7 @@ use alloy::{primitives::Address, sol_types::SolCall};
 use revm::precompile::{PrecompileError, PrecompileResult};
 use tempo_contracts::precompiles::{ILinkingUSD, TIP20Error};
 
-const PATH_USD_NAME: &str = "pathUSD";
-const PATH_USD_SYMBOL: &str = "pathUSD";
-
-impl<S: PrecompileStorageProvider> Precompile for LinkingUSD<'_, S> {
+impl<S: PrecompileStorageProvider> Precompile for PathUSD<'_, S> {
     fn call(&mut self, calldata: &[u8], msg_sender: Address) -> PrecompileResult {
         // Post allegretto hardfork, treat linkingUSD as a default TIP20 without extra permissions
         if self.token.storage().spec().is_allegretto() {
@@ -234,21 +228,21 @@ mod tests {
     };
 
     #[test]
-    fn linking_usd_test_selector_coverage() {
+    fn path_usd_test_selector_coverage() {
         use crate::test_util::assert_full_coverage;
 
         let mut storage = HashMapStorageProvider::new(1);
-        let mut linking_usd = LinkingUSD::new(&mut storage);
+        let mut path_usd = PathUSD::new(&mut storage);
 
-        linking_usd.initialize(Address::ZERO).unwrap();
+        path_usd.initialize(Address::ZERO).unwrap();
 
         let itip20_unsupported =
-            check_selector_coverage(&mut linking_usd, ITIP20Calls::SELECTORS, "ITIP20", |s| {
+            check_selector_coverage(&mut path_usd, ITIP20Calls::SELECTORS, "ITIP20", |s| {
                 ITIP20Calls::name_by_selector(s)
             });
 
         let roles_unsupported = check_selector_coverage(
-            &mut linking_usd,
+            &mut path_usd,
             IRolesAuthCalls::SELECTORS,
             "IRolesAuth",
             IRolesAuthCalls::name_by_selector,
@@ -260,7 +254,7 @@ mod tests {
     #[test]
     fn test_start_reward_disabled() -> eyre::Result<()> {
         let mut storage = HashMapStorageProvider::new(1);
-        let mut token = LinkingUSD::new(&mut storage);
+        let mut token = PathUSD::new(&mut storage);
         let sender = Address::from([1u8; 20]);
 
         token
@@ -284,7 +278,7 @@ mod tests {
     #[test]
     fn test_set_reward_recipient_disabled() -> eyre::Result<()> {
         let mut storage = HashMapStorageProvider::new(1);
-        let mut token = LinkingUSD::new(&mut storage);
+        let mut token = PathUSD::new(&mut storage);
         let sender = Address::from([1u8; 20]);
         let recipient = Address::from([2u8; 20]);
 
@@ -305,7 +299,7 @@ mod tests {
     #[test]
     fn test_cancel_reward_disabled() -> eyre::Result<()> {
         let mut storage = HashMapStorageProvider::new(1);
-        let mut token = LinkingUSD::new(&mut storage);
+        let mut token = PathUSD::new(&mut storage);
         let sender = Address::from([1u8; 20]);
 
         token
@@ -325,7 +319,7 @@ mod tests {
     #[test]
     fn test_claim_rewards_disabled() -> eyre::Result<()> {
         let mut storage = HashMapStorageProvider::new(1);
-        let mut token = LinkingUSD::new(&mut storage);
+        let mut token = PathUSD::new(&mut storage);
         let sender = Address::from([1u8; 20]);
 
         token

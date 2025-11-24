@@ -77,7 +77,7 @@ pub fn extend_tempo_precompiles(precompiles: &mut PrecompilesMap, cfg: &CfgEnv<T
         if is_tip20(*address) {
             let token_id = address_to_token_id_unchecked(*address);
             if token_id == 0 {
-                Some(PathUSD::create(chain_id, spec))
+                Some(PathUSDPrecompile::create(chain_id, spec))
             } else {
                 Some(TIP20Precompile::create(*address, chain_id, spec))
             }
