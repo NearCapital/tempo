@@ -1,19 +1,18 @@
 use super::{AASignature, SignatureType};
-use alloy_primitives::{Address, B256, Bytes, U256, keccak256};
-use alloy_rlp::{BufMut, Decodable, Encodable, encode_list, list_length};
+use alloy_primitives::{Address, B256, U256, keccak256};
+use alloy_rlp::{Encodable, encode_list, list_length};
 use core::mem;
 
 /// Token spending limit for access keys
 ///
 /// Defines a per-token spending limit for an access key provisioned via key_authorization.
 /// This limit is enforced by the AccountKeychain precompile when the key is used.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, alloy_rlp::RlpEncodable, alloy_rlp::RlpDecodable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(any(test, feature = "arbitrary"), derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "reth-codec", derive(reth_codecs::Compact))]
 #[cfg_attr(test, reth_codecs::add_arbitrary_tests(compact, rlp))]
-#[derive(alloy_rlp::RlpEncodable, alloy_rlp::RlpDecodable)]
 pub struct TokenLimit {
     /// TIP20 token address
     pub token: Address,
@@ -26,7 +25,7 @@ pub struct TokenLimit {
 ///
 /// Used in TxAA to add a new key to the AccountKeychain precompile.
 /// The transaction must be signed by the root key to authorize adding this access key.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, alloy_rlp::RlpEncodable, alloy_rlp::RlpDecodable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(test, reth_codecs::add_arbitrary_tests(compact, rlp))]
@@ -48,30 +47,12 @@ pub struct KeyAuthorization {
 }
 
 impl KeyAuthorization {
-    /// Returns the RLP header for this key authorization
-    #[inline]
-    fn rlp_header(&self) -> alloy_rlp::Header {
-        let payload_length = 1 // key_type as u8
-            + self.expiry.length()
-            + self.limits.length()
-            + self.key_id.length()
-            + self.signature.length();
-        alloy_rlp::Header {
-            list: true,
-            payload_length,
-        }
-    }
     /// Computes the authorization message hash for this key authorization.
     ///
     /// This is a convenience method that calls [`Self::authorization_message_hash`]
     /// with this instance's fields.
     pub fn sig_hash(&self) -> B256 {
-        Self::authorization_message_hash(
-            self.key_type.clone(),
-            self.key_id,
-            self.expiry,
-            &self.limits,
-        )
+        Self::authorization_message_hash(self.key_type, self.key_id, self.expiry, &self.limits)
     }
 
     /// Computes the authorization message hash to be signed by the root key.
@@ -106,67 +87,6 @@ impl KeyAuthorization {
         encode_list(limits, &mut auth_message);
 
         keccak256(&auth_message)
-    }
-}
-
-impl Encodable for KeyAuthorization {
-    fn encode(&self, out: &mut dyn BufMut) {
-        self.rlp_header().encode(out);
-        // Encode key_type as u8
-        let sig_type_byte: u8 = self.key_type.clone().into();
-        sig_type_byte.encode(out);
-        self.expiry.encode(out);
-        self.limits.encode(out);
-        self.key_id.encode(out);
-        self.signature.encode(out);
-    }
-
-    fn length(&self) -> usize {
-        self.rlp_header().length_with_payload()
-    }
-}
-
-impl Decodable for KeyAuthorization {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        let header = alloy_rlp::Header::decode(buf)?;
-        if !header.list {
-            return Err(alloy_rlp::Error::UnexpectedString);
-        }
-        let remaining = buf.len();
-
-        if header.payload_length > remaining {
-            return Err(alloy_rlp::Error::InputTooShort);
-        }
-
-        // Decode key_type from u8
-        let sig_type_byte: u8 = Decodable::decode(buf)?;
-        let key_type = match sig_type_byte {
-            0 => SignatureType::Secp256k1,
-            1 => SignatureType::P256,
-            2 => SignatureType::WebAuthn,
-            _ => return Err(alloy_rlp::Error::Custom("Invalid signature type")),
-        };
-
-        let expiry: u64 = Decodable::decode(buf)?;
-        let limits: Vec<TokenLimit> = Decodable::decode(buf)?;
-        let key_id: Address = Decodable::decode(buf)?;
-        let signature_bytes: Bytes = Decodable::decode(buf)?;
-        let signature =
-            AASignature::from_bytes(&signature_bytes).map_err(alloy_rlp::Error::Custom)?;
-
-        let this = Self {
-            key_type,
-            expiry,
-            limits,
-            key_id,
-            signature,
-        };
-
-        if buf.len() + header.payload_length != remaining {
-            return Err(alloy_rlp::Error::UnexpectedLength);
-        }
-
-        Ok(this)
     }
 }
 

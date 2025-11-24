@@ -22,15 +22,16 @@ pub const P256_SIGNATURE_LENGTH: usize = 129;
 pub const MAX_WEBAUTHN_SIGNATURE_LENGTH: usize = 2048; // 2KB max
 
 /// Signature type enumeration
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "reth-codec", derive(reth_codecs::Compact))]
 #[cfg_attr(any(test, feature = "arbitrary"), derive(arbitrary::Arbitrary))]
+#[repr(u8)]
 pub enum SignatureType {
-    Secp256k1,
-    P256,
-    WebAuthn,
+    Secp256k1 = 0,
+    P256 = 1,
+    WebAuthn = 2,
 }
 
 impl From<SignatureType> for u8 {
@@ -39,6 +40,28 @@ impl From<SignatureType> for u8 {
             SignatureType::Secp256k1 => 0,
             SignatureType::P256 => 1,
             SignatureType::WebAuthn => 2,
+        }
+    }
+}
+
+impl alloy_rlp::Encodable for SignatureType {
+    fn encode(&self, out: &mut dyn alloy_rlp::BufMut) {
+        (*self as u8).encode(out);
+    }
+
+    fn length(&self) -> usize {
+        1
+    }
+}
+
+impl alloy_rlp::Decodable for SignatureType {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let byte: u8 = alloy_rlp::Decodable::decode(buf)?;
+        match byte {
+            0 => Ok(SignatureType::Secp256k1),
+            1 => Ok(SignatureType::P256),
+            2 => Ok(SignatureType::WebAuthn),
+            _ => Err(alloy_rlp::Error::Custom("Invalid signature type")),
         }
     }
 }

@@ -22,6 +22,7 @@ pub const SIGNATURE_TYPE_KEYCHAIN: u8 = 0x03;
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "reth-codec", derive(reth_codecs::Compact))]
 #[cfg_attr(any(test, feature = "arbitrary"), derive(arbitrary::Arbitrary))]
+#[cfg_attr(test, reth_codecs::add_arbitrary_tests(compact))]
 pub struct P256SignatureWithPreHash {
     pub r: B256,
     pub s: B256,
@@ -36,6 +37,7 @@ pub struct P256SignatureWithPreHash {
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "reth-codec", derive(reth_codecs::Compact))]
 #[cfg_attr(any(test, feature = "arbitrary"), derive(arbitrary::Arbitrary))]
+#[cfg_attr(test, reth_codecs::add_arbitrary_tests(compact))]
 pub struct WebAuthnSignature {
     pub r: B256,
     pub s: B256,
@@ -54,6 +56,10 @@ pub struct WebAuthnSignature {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "camelCase"))]
+#[cfg_attr(
+    all(test, feature = "reth-codec"),
+    reth_codecs::add_arbitrary_tests(compact, rlp)
+)]
 pub enum PrimitiveSignature {
     /// Standard secp256k1 ECDSA signature (65 bytes: r, s, v)
     Secp256k1(Signature),
@@ -76,6 +82,10 @@ pub enum PrimitiveSignature {
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(
+    all(test, feature = "reth-codec"),
+    reth_codecs::add_arbitrary_tests(compact, rlp)
+)]
 pub struct KeychainSignature {
     /// Root account address that this transaction is being executed for
     pub user_address: Address,
@@ -148,6 +158,48 @@ impl reth_codecs::Compact for KeychainSignature {
     }
 }
 
+// Manual RLP implementations that exclude cached_key_id (cache field)
+impl alloy_rlp::Encodable for KeychainSignature {
+    fn encode(&self, out: &mut dyn alloy_rlp::BufMut) {
+        // Encode as a list: [user_address, signature]
+        let payload_length = self.user_address.length() + self.signature.length();
+        alloy_rlp::Header {
+            list: true,
+            payload_length,
+        }
+        .encode(out);
+        self.user_address.encode(out);
+        self.signature.encode(out);
+    }
+
+    fn length(&self) -> usize {
+        let payload_length = self.user_address.length() + self.signature.length();
+        alloy_rlp::Header {
+            list: true,
+            payload_length,
+        }
+        .length_with_payload()
+    }
+}
+
+impl alloy_rlp::Decodable for KeychainSignature {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let header = alloy_rlp::Header::decode(buf)?;
+        if !header.list {
+            return Err(alloy_rlp::Error::UnexpectedString);
+        }
+
+        let user_address = alloy_rlp::Decodable::decode(buf)?;
+        let signature = alloy_rlp::Decodable::decode(buf)?;
+
+        Ok(Self {
+            user_address,
+            signature,
+            cached_key_id: OnceLock::new(),
+        })
+    }
+}
+
 // Manual Arbitrary implementation that excludes cached_key_id (cache field)
 #[cfg(any(test, feature = "arbitrary"))]
 impl<'a> arbitrary::Arbitrary<'a> for KeychainSignature {
@@ -166,6 +218,10 @@ impl<'a> arbitrary::Arbitrary<'a> for KeychainSignature {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(untagged, rename_all = "camelCase"))]
+#[cfg_attr(
+    all(test, feature = "reth-codec"),
+    reth_codecs::add_arbitrary_tests(compact, rlp)
+)]
 pub enum AASignature {
     /// Primitive signature types: Secp256k1, P256, or WebAuthn
     Primitive(PrimitiveSignature),
@@ -235,6 +291,13 @@ impl alloy_rlp::Encodable for PrimitiveSignature {
 
     fn length(&self) -> usize {
         self.to_bytes().length()
+    }
+}
+
+impl alloy_rlp::Decodable for PrimitiveSignature {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let bytes: Bytes = alloy_rlp::Decodable::decode(buf)?;
+        Self::from_bytes(&bytes).map_err(alloy_rlp::Error::Custom)
     }
 }
 
