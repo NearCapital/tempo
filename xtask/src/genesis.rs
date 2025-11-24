@@ -127,8 +127,6 @@ impl GenesisArgs {
         // system contracts/precompiles must be initialized bottom up, if an init function (e.g. mint_pairwise_liquidity) uses another system contract/precompiles internally (tip403 registry), the registry must be initialized first.
 
         // Deploy TestUSD fee token
-        // TODO: admin should be updated to be a cli arg so we can specify that
-        // linkingUSD admin for persistent testnet deployments
         let admin = addresses[0];
         let mut evm = setup_tempo_evm();
 
