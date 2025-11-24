@@ -23,16 +23,15 @@ type B256 = FixedBytes<32>;
 
 /// A database wrapper around `Metadata<B256, Bytes>` that provides transactional operations.
 ///
-/// This allows you to write different types to the same store with a unified API.
-/// Keys are hashed to B256 using Keccak256, and values are serialized to Bytes.
-///
 /// The underlying [`Metadata`] storage always keeps all data in memory and persists
-/// it to disk during commit/sync operations. This means:
+/// it to disk during commit/sync operations.
 pub struct MetadataDatabase<TContext>
 where
     TContext: Clock + Metrics + Storage,
 {
+    /// The underlying metadata store.
     inner: Arc<RwLock<Metadata<ContextCell<TContext>, B256, Bytes>>>,
+    /// Atomic flag to ensure only one read-write transaction is active at a time.
     tx_active: Arc<AtomicBool>,
 }
 
@@ -110,7 +109,7 @@ where
     write_lock: Option<Arc<AtomicBool>>,
 
     /// In-memory write buffer that accumulates all operations before commit.
-    /// - Key: `B256` hash of the original key (computed via Keccak256)
+    /// - Key: `B256`
     /// - Value: `Some(Bytes)` for insert/update, `None` for delete
     ///
     /// This map provides both write buffering and serves as a read cache,
@@ -153,13 +152,11 @@ where
 
         // Check pending writes first
         let Some(value_bytes_opt) = self.writes.get(&key_hash) else {
-            // Fall back to store - acquire read lock briefly
             let store = self.store.read();
             let Some(value_bytes) = store.get(&key_hash) else {
                 return Ok(None);
             };
-            let value = deserialize_from_bytes::<V>(value_bytes)?;
-            return Ok(Some(value));
+            return Ok(Some(deserialize_from_bytes::<V>(value_bytes)?));
         };
 
         // If it's Some, deserialize the value; if None, this key was deleted
@@ -167,8 +164,7 @@ where
             return Ok(None);
         };
 
-        let value = deserialize_from_bytes::<V>(value_bytes)?;
-        Ok(Some(value))
+        Ok(Some(deserialize_from_bytes::<V>(value_bytes)?))
     }
 
     /// Insert a key-value pair into the transaction's write buffer.

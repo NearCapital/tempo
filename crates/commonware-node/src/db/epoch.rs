@@ -22,7 +22,7 @@ where
     TContext: Clock + Metrics + Storage,
 {
     fn get_epoch(&mut self) -> Result<Option<EpochState>> {
-        self.get(&EPOCH_KEY)
+        self.get(EPOCH_KEY)
     }
 
     fn set_epoch(&mut self, state: EpochState) -> Result<()> {

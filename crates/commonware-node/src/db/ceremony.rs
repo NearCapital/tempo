@@ -27,7 +27,7 @@ where
     TContext: Clock + Metrics + Storage,
 {
     fn get_ceremony(&mut self, epoch: u64) -> Result<Option<CeremonyState>> {
-        self.get(&ceremony_key(epoch))
+        self.get(ceremony_key(epoch))
     }
 
     fn set_ceremony(&mut self, epoch: u64, state: CeremonyState) -> Result<()> {
