@@ -6,7 +6,7 @@ use revm::{
     Database, context::JournalTr, interpreter::instructions::utility::IntoAddress,
     state::AccountInfo,
 };
-use tempo_contracts::precompiles::IFeeManager;
+use tempo_contracts::precompiles::{IFeeManager, IStablecoinExchange, STABLECOIN_EXCHANGE_ADDRESS};
 use tempo_precompiles::{
     DEFAULT_FEE_TOKEN, PATH_USD_ADDRESS, TIP_FEE_MANAGER_ADDRESS,
     storage::slots::mapping_slot,
@@ -100,16 +100,30 @@ pub trait TempoStateAccess<T> {
             return Ok(Some(fee_token));
         }
 
-        // If the fee payer is also the msg.sender and the transaction is calling FeeManager to set a
-        // new preference, the newly set preference should be used immediately instead of the
-        // previously stored one
+        // If the fee payer is also the msg.sender and the transaction is a direct call (not AA),
+        // check for special contract calls that should override fee token preference
         if !tx.is_aa()
             && fee_payer == tx.caller()
             && let Some((kind, input)) = tx.calls().next()
-            && kind.to() == Some(&TIP_FEE_MANAGER_ADDRESS)
-            && let Ok(call) = IFeeManager::setUserTokenCall::abi_decode(input)
         {
-            return Ok(Some(call.token));
+            // If calling FeeManager to set a new preference, use the newly set preference immediately
+            if kind.to() == Some(&TIP_FEE_MANAGER_ADDRESS)
+                && let Ok(call) = IFeeManager::setUserTokenCall::abi_decode(input)
+            {
+                return Ok(Some(call.token));
+            }
+
+            // If calling swapExactAmountOut() or swapExactAmountIn() on the Stablecoin Exchange,
+            // use the input token as the fee token (the token that will be pulled from the user)
+            if kind.to() == Some(&STABLECOIN_EXCHANGE_ADDRESS) {
+                if let Ok(call) = IStablecoinExchange::swapExactAmountInCall::abi_decode(input) {
+                    return Ok(Some(call.tokenIn));
+                } else if let Ok(call) =
+                    IStablecoinExchange::swapExactAmountOutCall::abi_decode(input)
+                {
+                    return Ok(Some(call.tokenIn));
+                }
+            }
         }
 
         let user_slot = mapping_slot(fee_payer, tip_fee_manager::slots::USER_TOKENS);
