@@ -3778,5 +3778,292 @@ async fn test_aa_keychain_rpc_validation() -> eyre::Result<()> {
 
     println!("✓ Transaction with wrong chain_id correctly rejected at pool level");
 
+    // STEP 6: POSITIVE TEST - KeyAuthorization with protocol nonce (nonce_key = 0)
+    println!(
+        "\n=== STEP 6: POSITIVE TEST - KeyAuthorization with protocol nonce (nonce_key = 0) ==="
+    );
+
+    let (protocol_nonce_key, pub_x_5, pub_y_5, addr_5) = generate_p256_access_key();
+
+    // Get current protocol nonce for root account
+    let current_protocol_nonce = provider.get_transaction_count(root_key_addr).await?;
+    println!("Current protocol nonce: {}", current_protocol_nonce);
+
+    // Create KeyAuthorization with protocol nonce (nonce_key = 0)
+    let protocol_nonce_auth_hash = KeyAuthorization::authorization_message_hash(
+        tempo_primitives::transaction::SignatureType::P256,
+        addr_5,
+        u64::MAX,
+        &spending_limits,
+        chain_id,
+        U256::ZERO, // nonce_key = 0 (protocol nonce)
+        current_protocol_nonce,
+    );
+
+    let root_sig_protocol = root_key_signer.sign_hash_sync(&protocol_nonce_auth_hash)?;
+
+    let protocol_nonce_key_auth = KeyAuthorization {
+        key_type: tempo_primitives::transaction::SignatureType::P256,
+        expiry: u64::MAX,
+        limits: spending_limits.clone(),
+        key_id: addr_5,
+        chain_id,
+        nonce_key: U256::ZERO, // Protocol nonce
+        nonce: current_protocol_nonce,
+        signature: AASignature::Primitive(PrimitiveSignature::Secp256k1(root_sig_protocol)),
+    };
+
+    let protocol_nonce_tx = TxAA {
+        chain_id,
+        max_priority_fee_per_gas: TEMPO_BASE_FEE as u128,
+        max_fee_per_gas: TEMPO_BASE_FEE as u128,
+        gas_limit: 500_000,
+        calls: vec![Call {
+            to: DEFAULT_FEE_TOKEN.into(),
+            value: U256::ZERO,
+            input: Bytes::new(),
+        }],
+        nonce_key: U256::ZERO, // Use protocol nonce for transaction
+        nonce: current_protocol_nonce,
+        fee_token: None,
+        fee_payer_signature: None,
+        valid_before: Some(u64::MAX),
+        valid_after: None,
+        access_list: Default::default(),
+        key_authorization: Some(protocol_nonce_key_auth),
+        aa_authorization_list: vec![],
+    };
+
+    // Sign with the new key and submit
+    let protocol_nonce_sig = sign_aa_tx_with_p256_access_key(
+        &protocol_nonce_tx,
+        &protocol_nonce_key,
+        &pub_x_5,
+        &pub_y_5,
+        root_key_addr,
+    )?;
+
+    let _tx_hash_protocol =
+        submit_and_mine_aa_tx(&mut setup, protocol_nonce_tx, protocol_nonce_sig).await?;
+
+    // Verify protocol nonce was incremented (which proves the transaction executed successfully)
+    let new_protocol_nonce = provider.get_transaction_count(root_key_addr).await?;
+    assert_eq!(
+        new_protocol_nonce,
+        current_protocol_nonce + 1,
+        "Protocol nonce should be incremented"
+    );
+
+    println!("✓ KeyAuthorization with protocol nonce (nonce_key = 0) works correctly");
+    println!(
+        "✓ Protocol nonce incremented from {} to {}",
+        current_protocol_nonce, new_protocol_nonce
+    );
+
+    // STEP 7: NEGATIVE TEST - KeyAuthorization with wrong 2D nonce (too high)
+    println!("\n=== STEP 7: NEGATIVE TEST - KeyAuthorization with wrong 2D nonce (too high) ===");
+
+    let (wrong_nonce_key_high, pub_x_6, pub_y_6, addr_6) = generate_p256_access_key();
+
+    // Current 2D nonce for nonce_key=1 should be 2 (we authorized 2 keys with it already)
+    let wrong_nonce_high = 999u64; // Way too high!
+
+    let auth_hash_wrong_nonce_high = KeyAuthorization::authorization_message_hash(
+        tempo_primitives::transaction::SignatureType::P256,
+        addr_6,
+        u64::MAX,
+        &spending_limits,
+        chain_id,
+        U256::from(1),    // Use 2D nonce
+        wrong_nonce_high, // Wrong nonce!
+    );
+
+    let root_sig_wrong_nonce_high = root_key_signer.sign_hash_sync(&auth_hash_wrong_nonce_high)?;
+
+    let wrong_nonce_high_key_auth = KeyAuthorization {
+        key_type: tempo_primitives::transaction::SignatureType::P256,
+        expiry: u64::MAX,
+        limits: spending_limits.clone(),
+        key_id: addr_6,
+        chain_id,
+        nonce_key: U256::from(1),
+        nonce: wrong_nonce_high,
+        signature: AASignature::Primitive(PrimitiveSignature::Secp256k1(root_sig_wrong_nonce_high)),
+    };
+
+    // Get current protocol nonce for the transaction
+    let current_tx_nonce = provider.get_transaction_count(root_key_addr).await?;
+
+    let wrong_nonce_high_tx = TxAA {
+        chain_id,
+        max_priority_fee_per_gas: TEMPO_BASE_FEE as u128,
+        max_fee_per_gas: TEMPO_BASE_FEE as u128,
+        gas_limit: 500_000,
+        calls: vec![Call {
+            to: DEFAULT_FEE_TOKEN.into(),
+            value: U256::ZERO,
+            input: Bytes::new(),
+        }],
+        nonce_key: U256::ZERO,
+        nonce: current_tx_nonce,
+        fee_token: None,
+        fee_payer_signature: None,
+        valid_before: Some(u64::MAX),
+        valid_after: None,
+        access_list: Default::default(),
+        key_authorization: Some(wrong_nonce_high_key_auth),
+        aa_authorization_list: vec![],
+    };
+
+    let wrong_nonce_high_sig = sign_aa_tx_with_p256_access_key(
+        &wrong_nonce_high_tx,
+        &wrong_nonce_key_high,
+        &pub_x_6,
+        &pub_y_6,
+        root_key_addr,
+    )?;
+
+    let signed_wrong_nonce_high_tx =
+        AASigned::new_unhashed(wrong_nonce_high_tx, wrong_nonce_high_sig);
+    let wrong_nonce_high_envelope: TempoTxEnvelope = signed_wrong_nonce_high_tx.into();
+    let mut wrong_nonce_high_encoded = Vec::new();
+    wrong_nonce_high_envelope.encode_2718(&mut wrong_nonce_high_encoded);
+
+    println!("Attempting to inject transaction with wrong 2D nonce (too high)...");
+
+    let tx_hash_wrong_nonce_high = setup
+        .node
+        .rpc
+        .inject_tx(wrong_nonce_high_encoded.into())
+        .await
+        .expect("Transaction should be accepted into pool (signature is valid)");
+
+    println!("Transaction accepted into pool: {tx_hash_wrong_nonce_high}");
+
+    // Try to mine - should fail during execution
+    let _mine_result = setup.node.advance_block().await;
+
+    // Check if the transaction failed
+    let receipt_wrong_nonce_high = provider
+        .get_transaction_receipt(tx_hash_wrong_nonce_high)
+        .await?;
+
+    if let Some(receipt) = receipt_wrong_nonce_high {
+        assert!(
+            !receipt.status(),
+            "Transaction with wrong 2D nonce (too high) should fail execution"
+        );
+        println!("✓ Transaction with wrong 2D nonce (too high) failed execution as expected");
+    } else {
+        println!("✓ Transaction with wrong 2D nonce (too high) prevented block from being created");
+        // Block wasn't created, so we need to mine an empty block to clear the failed transaction
+        setup.node.advance_block().await?;
+    }
+
+    // STEP 8: NEGATIVE TEST - KeyAuthorization with wrong protocol nonce (too low)
+    println!(
+        "\n=== STEP 8: NEGATIVE TEST - KeyAuthorization with wrong protocol nonce (too low) ==="
+    );
+
+    let (wrong_protocol_nonce_key, pub_x_7, pub_y_7, addr_7) = generate_p256_access_key();
+
+    // Get current protocol nonce (refresh after STEP 7 potentially mined a block)
+    let current_protocol_nonce_2 = provider.get_transaction_count(root_key_addr).await?;
+    println!(
+        "Current protocol nonce for STEP 8: {}",
+        current_protocol_nonce_2
+    );
+    let wrong_protocol_nonce_low = current_protocol_nonce_2.saturating_sub(1); // One less than current
+
+    let auth_hash_wrong_protocol = KeyAuthorization::authorization_message_hash(
+        tempo_primitives::transaction::SignatureType::P256,
+        addr_7,
+        u64::MAX,
+        &spending_limits,
+        chain_id,
+        U256::ZERO,               // Protocol nonce
+        wrong_protocol_nonce_low, // Wrong nonce (too low)!
+    );
+
+    let root_sig_wrong_protocol = root_key_signer.sign_hash_sync(&auth_hash_wrong_protocol)?;
+
+    let wrong_protocol_nonce_key_auth = KeyAuthorization {
+        key_type: tempo_primitives::transaction::SignatureType::P256,
+        expiry: u64::MAX,
+        limits: spending_limits.clone(),
+        key_id: addr_7,
+        chain_id,
+        nonce_key: U256::ZERO,           // Protocol nonce
+        nonce: wrong_protocol_nonce_low, // Wrong nonce!
+        signature: AASignature::Primitive(PrimitiveSignature::Secp256k1(root_sig_wrong_protocol)),
+    };
+
+    // Use next protocol nonce for this transaction (STEP 7 is still in mempool with current nonce)
+    let wrong_protocol_nonce_tx = TxAA {
+        chain_id,
+        max_priority_fee_per_gas: TEMPO_BASE_FEE as u128,
+        max_fee_per_gas: TEMPO_BASE_FEE as u128,
+        gas_limit: 500_000,
+        calls: vec![Call {
+            to: DEFAULT_FEE_TOKEN.into(),
+            value: U256::ZERO,
+            input: Bytes::new(),
+        }],
+        nonce_key: U256::ZERO,
+        nonce: current_protocol_nonce_2 + 1, // Use next nonce (STEP 7 has current nonce in mempool)
+        fee_token: None,
+        fee_payer_signature: None,
+        valid_before: Some(u64::MAX),
+        valid_after: None,
+        access_list: Default::default(),
+        key_authorization: Some(wrong_protocol_nonce_key_auth),
+        aa_authorization_list: vec![],
+    };
+
+    let wrong_protocol_nonce_sig = sign_aa_tx_with_p256_access_key(
+        &wrong_protocol_nonce_tx,
+        &wrong_protocol_nonce_key,
+        &pub_x_7,
+        &pub_y_7,
+        root_key_addr,
+    )?;
+
+    let signed_wrong_protocol_nonce_tx =
+        AASigned::new_unhashed(wrong_protocol_nonce_tx, wrong_protocol_nonce_sig);
+    let wrong_protocol_nonce_envelope: TempoTxEnvelope = signed_wrong_protocol_nonce_tx.into();
+    let mut wrong_protocol_nonce_encoded = Vec::new();
+    wrong_protocol_nonce_envelope.encode_2718(&mut wrong_protocol_nonce_encoded);
+
+    println!("Attempting to inject transaction with wrong protocol nonce (too low)...");
+
+    let tx_hash_wrong_protocol_nonce = setup
+        .node
+        .rpc
+        .inject_tx(wrong_protocol_nonce_encoded.into())
+        .await
+        .expect("Transaction should be accepted into pool (signature is valid)");
+
+    println!("Transaction accepted into pool: {tx_hash_wrong_protocol_nonce}");
+
+    // Try to mine - should fail during execution
+    let _mine_result2 = setup.node.advance_block().await;
+
+    // Check if the transaction failed
+    let receipt_wrong_protocol = provider
+        .get_transaction_receipt(tx_hash_wrong_protocol_nonce)
+        .await?;
+
+    if let Some(receipt) = receipt_wrong_protocol {
+        assert!(
+            !receipt.status(),
+            "Transaction with wrong protocol nonce should fail execution"
+        );
+        println!("✓ Transaction with wrong protocol nonce failed execution as expected");
+    } else {
+        println!("✓ Transaction with wrong protocol nonce prevented block from being created");
+    }
+
+    println!("\n✓ All nonce validation tests passed");
+
     Ok(())
 }

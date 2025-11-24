@@ -530,6 +530,141 @@ where
             .map(|aa| aa.nonce_key)
             .unwrap_or_default();
 
+        // If the transaction includes a KeyAuthorization, validate it BEFORE bumping nonces
+        // This matches the authorization list pattern where nonce is checked BEFORE bumping
+        if let Some(aa_tx_env) = tx.aa_tx_env.as_ref()
+            && let Some(key_auth) = &aa_tx_env.key_authorization
+        {
+            // Validate chain ID first
+            let current_chain_id = cfg.chain_id();
+            if key_auth.chain_id != current_chain_id {
+                return Err(EVMError::Transaction(
+                    TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                        reason: format!(
+                            "KeyAuthorization chain_id {} does not match current chain_id {}",
+                            key_auth.chain_id, current_chain_id
+                        ),
+                    },
+                ));
+            }
+
+            // Validate KeyAuthorization signature
+            let root_account = &tx.caller;
+            let auth_message_hash = key_auth.sig_hash();
+
+            let auth_signer = key_auth
+                .signature
+                .recover_signer(&auth_message_hash)
+                .map_err(|_| {
+                    EVMError::Transaction(TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                        reason: "Failed to recover signer from KeyAuthorization signature"
+                            .to_string(),
+                    })
+                })?;
+
+            if auth_signer != *root_account {
+                return Err(EVMError::Transaction(
+                    TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                        reason: format!(
+                            "KeyAuthorization must be signed by root account {root_account}, but was signed by {auth_signer}",
+                        ),
+                    },
+                ));
+            }
+
+            // Check if this TX is using a Keychain signature (access key)
+            // Access keys cannot authorize new keys UNLESS it's the same key being authorized (same-tx auth+use)
+            if let tempo_primitives::AASignature::Keychain(keychain_sig) = &aa_tx_env.signature {
+                let access_key_addr =
+                    keychain_sig
+                        .key_id(&aa_tx_env.signature_hash)
+                        .map_err(|_| {
+                            EVMError::Transaction(
+                            TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                                reason:
+                                    "Failed to recover access key address from Keychain signature"
+                                        .to_string(),
+                            },
+                        )
+                        })?;
+
+                // Only allow if authorizing the same key that's being used (same-tx auth+use)
+                if access_key_addr != key_auth.key_id {
+                    return Err(EVMError::Transaction(
+                            TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                                reason: "Access keys cannot authorize other keys. Only the root key can authorize new keys.".to_string(),
+                            },
+                        ));
+                }
+            }
+
+            // Validate nonce BEFORE it gets bumped (matching authorization list pattern)
+            // Extract the protocol nonce value before borrowing journal for 2D nonce checks
+            let current_protocol_nonce = caller_account.info.nonce;
+
+            // Drop caller_account to release the journal borrow before 2D nonce operations
+            drop(caller_account);
+
+            if key_auth.nonce_key.is_zero() {
+                // nonce_key = 0 means use protocol nonce
+                if key_auth.nonce != current_protocol_nonce {
+                    return Err(EVMError::Transaction(
+                        TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                            reason: format!(
+                                "KeyAuthorization nonce {} does not match current protocol nonce {}",
+                                key_auth.nonce, current_protocol_nonce
+                            ),
+                        },
+                    ));
+                }
+                // Protocol nonce will be bumped below (after reloading caller_account)
+            } else {
+                // nonce_key != 0 means use 2D nonce system
+                let internals = EvmInternals::new(journal, block);
+                let mut storage_provider =
+                    EvmPrecompileStorageProvider::new_max_gas(internals, cfg);
+                let mut nonce_manager = NonceManager::new(&mut storage_provider);
+
+                let current_nonce = nonce_manager
+                    .get_nonce(getNonceCall {
+                        account: *root_account,
+                        nonceKey: key_auth.nonce_key,
+                    })
+                    .map_err(|err| match err {
+                        TempoPrecompileError::Fatal(err) => EVMError::Custom(err),
+                        err => TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                            reason: format!("Failed to get nonce: {}", err),
+                        }
+                        .into(),
+                    })?;
+
+                if key_auth.nonce != current_nonce {
+                    return Err(EVMError::Transaction(
+                        TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                            reason: format!(
+                                "KeyAuthorization nonce {} does not match current nonce {} for nonce_key {}",
+                                key_auth.nonce, current_nonce, key_auth.nonce_key
+                            ),
+                        },
+                    ));
+                }
+
+                // Increment 2D nonce after successful validation
+                nonce_manager
+                    .increment_nonce(*root_account, key_auth.nonce_key)
+                    .map_err(|err| match err {
+                        TempoPrecompileError::Fatal(err) => EVMError::Custom(err),
+                        err => TempoInvalidTransaction::AccessKeyAuthorizationFailed {
+                            reason: format!("Failed to increment nonce: {}", err),
+                        }
+                        .into(),
+                    })?;
+            }
+
+            // Reload caller_account after KeyAuthorization validation
+            caller_account = journal.load_account_with_code_mut(tx.caller())?.data;
+        }
+
         // Validate account nonce and code (EIP-3607) using upstream helper
         pre_execution::validate_account_nonce_and_code(
             &caller_account.info,
@@ -606,125 +741,15 @@ where
 
         // Note: Signature verification happens during recover_signer() before entering the pool
         // Note: Transaction parameter validation (priority fee, time window) happens in validate_env()
+        // Note: KeyAuthorization validation happens above (before nonce bumping)
 
-        // If the transaction includes a KeyAuthorization, validate and authorize the key
+        // If the transaction includes a KeyAuthorization, authorize the key in the precompile
         if let Some(aa_tx_env) = tx.aa_tx_env.as_ref()
             && let Some(key_auth) = &aa_tx_env.key_authorization
         {
-            // Check if this TX is using a Keychain signature (access key)
-            // Access keys cannot authorize new keys UNLESS it's the same key being authorized (same-tx auth+use)
-            if let Some(keychain_sig) = aa_tx_env.signature.as_keychain() {
-                // Get the access key address (recovered during Tx->TxEnv conversion and cached)
-                let access_key_addr =
-                    keychain_sig
-                        .key_id(&aa_tx_env.signature_hash)
-                        .map_err(|_| {
-                            EVMError::Transaction(
-                            TempoInvalidTransaction::AccessKeyAuthorizationFailed {
-                                reason:
-                                    "Failed to recover access key address from Keychain signature"
-                                        .to_string(),
-                            },
-                        )
-                        })?;
-
-                // Only allow if authorizing the same key that's being used (same-tx auth+use)
-                if access_key_addr != key_auth.key_id {
-                    return Err(EVMError::Transaction(
-                            TempoInvalidTransaction::AccessKeyAuthorizationFailed {
-                                reason: "Access keys cannot authorize other keys. Only the root key can authorize new keys.".to_string(),
-                            },
-                        ));
-                }
-            }
-
-            // Validate that the KeyAuthorization is signed by the root account
             let root_account = &tx.caller;
 
-            // Compute the message hash for the KeyAuthorization
-            // Message format: keccak256(rlp([key_type, key_id, expiry, limits]))
-            let auth_message_hash = key_auth.sig_hash();
-
-            // Recover the signer of the KeyAuthorization
-            let auth_signer = key_auth
-                .signature
-                .recover_signer(&auth_message_hash)
-                .map_err(|_| {
-                    EVMError::Transaction(TempoInvalidTransaction::AccessKeyAuthorizationFailed {
-                        reason: "Failed to recover signer from KeyAuthorization signature"
-                            .to_string(),
-                    })
-                })?;
-
-            // Verify the KeyAuthorization is signed by the root account
-            if auth_signer != *root_account {
-                return Err(EVMError::Transaction(
-                    TempoInvalidTransaction::AccessKeyAuthorizationFailed {
-                        reason: format!(
-                            "KeyAuthorization must be signed by root account {root_account}, but was signed by {auth_signer}",
-                        ),
-                    },
-                ));
-            }
-
-            // Validate chain ID
-            let current_chain_id = cfg.chain_id();
-            if key_auth.chain_id != current_chain_id {
-                return Err(EVMError::Transaction(
-                    TempoInvalidTransaction::AccessKeyAuthorizationFailed {
-                        reason: format!(
-                            "KeyAuthorization chain_id {} does not match current chain_id {}",
-                            key_auth.chain_id, current_chain_id
-                        ),
-                    },
-                ));
-            }
-
-            // Validate nonce using the 2D nonce system
-            {
-                let internals = EvmInternals::new(journal, block);
-                let mut storage_provider = EvmPrecompileStorageProvider::new_max_gas(internals, cfg);
-                let mut nonce_manager = NonceManager::new(&mut storage_provider);
-
-                // Get the current nonce for this account and nonce_key
-                let current_nonce = nonce_manager
-                    .get_nonce(getNonceCall {
-                        account: *root_account,
-                        nonceKey: key_auth.nonce_key,
-                    })
-                    .map_err(|err| match err {
-                        TempoPrecompileError::Fatal(err) => EVMError::Custom(err),
-                        err => TempoInvalidTransaction::AccessKeyAuthorizationFailed {
-                            reason: format!("Failed to get nonce: {}", err),
-                        }
-                        .into(),
-                    })?;
-
-                // Verify the nonce matches
-                if key_auth.nonce != current_nonce {
-                    return Err(EVMError::Transaction(
-                        TempoInvalidTransaction::AccessKeyAuthorizationFailed {
-                            reason: format!(
-                                "KeyAuthorization nonce {} does not match current nonce {} for nonce_key {}",
-                                key_auth.nonce, current_nonce, key_auth.nonce_key
-                            ),
-                        },
-                    ));
-                }
-
-                // Increment the nonce after successful validation
-                nonce_manager
-                    .increment_nonce(*root_account, key_auth.nonce_key)
-                    .map_err(|err| match err {
-                        TempoPrecompileError::Fatal(err) => EVMError::Custom(err),
-                        err => TempoInvalidTransaction::AccessKeyAuthorizationFailed {
-                            reason: format!("Failed to increment nonce: {}", err),
-                        }
-                        .into(),
-                    })?;
-            } // storage_provider dropped here, releasing the borrow on journal
-
-            // Now authorize the key in the precompile
+            // Authorize the key in the precompile
             let internals = EvmInternals::new(journal, block);
             let mut storage_provider = EvmPrecompileStorageProvider::new_max_gas(internals, cfg);
 
@@ -1714,24 +1739,12 @@ mod tests {
 
         // Compute hash using the helper function
         let hash1 = KeyAuthorization::authorization_message_hash(
-            key_type,
-            key_id,
-            expiry,
-            &limits,
-            chain_id,
-            nonce_key,
-            nonce,
+            key_type, key_id, expiry, &limits, chain_id, nonce_key, nonce,
         );
 
         // Compute again to verify consistency
         let hash2 = KeyAuthorization::authorization_message_hash(
-            key_type,
-            key_id,
-            expiry,
-            &limits,
-            chain_id,
-            nonce_key,
-            nonce,
+            key_type, key_id, expiry, &limits, chain_id, nonce_key, nonce,
         );
 
         assert_eq!(hash1, hash2, "Hash computation should be deterministic");
