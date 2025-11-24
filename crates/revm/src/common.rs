@@ -145,9 +145,11 @@ pub trait TempoStateAccess<T> {
             return Ok(Some(to));
         }
 
+        // TODO: return DEFAULT_FEE_TOKEN
         Ok(None)
     }
 
+    // FIXME: remove this fucntion and call the above function directly
     /// Resolves fee token for the given transaction. Same as `user_or_tx_fee_token`, but also
     /// falls back to the validator fee token preference.
     fn get_fee_token(
@@ -234,5 +236,67 @@ impl<T: reth_storage_api::StateProvider> TempoStateAccess<((), (), ())> for T {
     fn sload(&mut self, address: Address, key: U256) -> Result<U256, Self::Error> {
         self.storage(address, key.into())
             .map(Option::unwrap_or_default)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy_consensus::TxLegacy;
+    use revm::{context::TxEnv, database::EmptyDB};
+    use tempo_primitives::transaction::TempoTypedTransaction;
+
+    use super::*;
+
+    #[test]
+    fn test_get_fee_token_stablecoin_exchange() {
+        let caller = Address::random();
+        let token_in = Address::random();
+        let token_out = Address::random();
+
+        // Test swapExactAmountIn
+        let call = IStablecoinExchange::swapExactAmountInCall {
+            tokenIn: token_in,
+            tokenOut: token_out,
+            amountIn: 1000,
+            minAmountOut: 900,
+        };
+
+        let tx_env = TxEnv {
+            data: call.abi_encode().into(),
+            kind: TxKind::Call(STABLECOIN_EXCHANGE_ADDRESS),
+            caller,
+            ..Default::default()
+        };
+        let tx = TempoTxEnv {
+            inner: tx_env,
+            ..Default::default()
+        };
+
+        let mut db = EmptyDB::default();
+        let result = db.user_or_tx_fee_token(tx, caller);
+        assert_eq!(result.unwrap(), Some(token_in));
+
+        // Test swapExactAmountOut
+        let call = IStablecoinExchange::swapExactAmountOutCall {
+            tokenIn: token_in,
+            tokenOut: token_out,
+            amountOut: 900,
+            maxAmountIn: 1000,
+        };
+
+        let tx_env = TxEnv {
+            data: call.abi_encode().into(),
+            kind: TxKind::Call(STABLECOIN_EXCHANGE_ADDRESS),
+            caller,
+            ..Default::default()
+        };
+
+        let tx = TempoTxEnv {
+            inner: tx_env,
+            ..Default::default()
+        };
+
+        let result = db.user_or_tx_fee_token(tx, caller);
+        assert_eq!(result.unwrap(), Some(token_in));
     }
 }
