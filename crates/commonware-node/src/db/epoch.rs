@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use super::Tx;
 use crate::dkg::EpochState;
 use commonware_runtime::{Clock, Metrics, Storage};
@@ -11,7 +13,7 @@ where
     TContext: Clock + Metrics + Storage,
 {
     /// Get the current epoch state.
-    fn get_epoch(&mut self) -> Result<Option<EpochState>>;
+    fn get_epoch(&mut self) -> impl Future<Output = Result<Option<EpochState>>> + Send;
 
     /// Set the current epoch state.
     fn set_epoch(&mut self, state: EpochState) -> Result<()>;
@@ -21,8 +23,8 @@ impl<TContext> DkgEpochStore<TContext> for Tx<TContext>
 where
     TContext: Clock + Metrics + Storage,
 {
-    fn get_epoch(&mut self) -> Result<Option<EpochState>> {
-        self.get(EPOCH_KEY)
+    async fn get_epoch(&mut self) -> Result<Option<EpochState>> {
+        self.get(EPOCH_KEY).await
     }
 
     fn set_epoch(&mut self, state: EpochState) -> Result<()> {

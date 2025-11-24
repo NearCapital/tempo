@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use super::Tx;
 use crate::dkg::CeremonyState;
 use commonware_runtime::{Clock, Metrics, Storage};
@@ -13,7 +15,10 @@ where
     TContext: Clock + Metrics + Storage,
 {
     /// Get ceremony state for a specific epoch.
-    fn get_ceremony(&mut self, epoch: u64) -> Result<Option<CeremonyState>>;
+    fn get_ceremony(
+        &mut self,
+        epoch: u64,
+    ) -> impl Future<Output = Result<Option<CeremonyState>>> + Send;
 
     /// Set ceremony state for a specific epoch.
     fn set_ceremony(&mut self, epoch: u64, state: CeremonyState) -> Result<()>;
@@ -26,8 +31,8 @@ impl<TContext> CeremonyStore<TContext> for Tx<TContext>
 where
     TContext: Clock + Metrics + Storage,
 {
-    fn get_ceremony(&mut self, epoch: u64) -> Result<Option<CeremonyState>> {
-        self.get(ceremony_key(epoch))
+    async fn get_ceremony(&mut self, epoch: u64) -> Result<Option<CeremonyState>> {
+        self.get(ceremony_key(epoch)).await
     }
 
     fn set_ceremony(&mut self, epoch: u64, state: CeremonyState) -> Result<()> {
