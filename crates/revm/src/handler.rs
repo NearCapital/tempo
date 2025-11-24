@@ -101,9 +101,12 @@ impl<DB: alloy_evm::Database, I> TempoEvmHandler<DB, I> {
         let ctx = evm.ctx_mut();
 
         self.fee_payer = ctx.tx.fee_payer()?;
-        self.fee_token = ctx
-            .journaled_state
-            .user_or_tx_fee_token(&ctx.tx, ctx.block.beneficiary, self.fee_payer, ctx.cfg.spec)?;
+        self.fee_token = ctx.journaled_state.user_or_tx_fee_token(
+            &ctx.tx,
+            ctx.block.beneficiary,
+            self.fee_payer,
+            ctx.cfg.spec,
+        )?;
 
         // Skip fee token validity check for cases when the transaction is free and is not a part of a subblock.
         if (!ctx.tx.max_balance_spending()?.is_zero() || ctx.tx.is_subblock_transaction())
@@ -1032,6 +1035,7 @@ mod tests {
         primitives::hardfork::SpecId,
         state::Account,
     };
+    use tempo_chainspec::hardfork::TempoHardfork;
     use tempo_precompiles::{TIP_FEE_MANAGER_ADDRESS, tip_fee_manager};
 
     fn create_test_journal() -> Journal<CacheDB<EmptyDB>> {
@@ -1087,7 +1091,12 @@ mod tests {
             )
             .unwrap();
 
-        let fee_token = ctx.journaled_state.user_or_tx_fee_token(&ctx.tx, user)?;
+        let fee_token = ctx.journaled_state.user_or_tx_fee_token(
+            &ctx.tx,
+            validator,
+            user,
+            TempoHardfork::default(),
+        )?;
         assert_eq!(validator_fee_token, fee_token);
 
         // Set user token
@@ -1100,12 +1109,22 @@ mod tests {
             )
             .unwrap();
 
-        let fee_token = ctx.journaled_state.user_or_tx_fee_token(&ctx.tx, user)?;
+        let fee_token = ctx.journaled_state.user_or_tx_fee_token(
+            &ctx.tx,
+            validator,
+            user,
+            TempoHardfork::Allegretto,
+        )?;
         assert_eq!(user_fee_token, fee_token);
 
         // Set tx fee token
         ctx.tx.fee_token = Some(tx_fee_token);
-        let fee_token = ctx.journaled_state.user_or_tx_fee_token(&ctx.tx, user)?;
+        let fee_token = ctx.journaled_state.user_or_tx_fee_token(
+            &ctx.tx,
+            validator,
+            user,
+            TempoHardfork::Allegretto,
+        )?;
         assert_eq!(tx_fee_token, fee_token);
 
         Ok(())

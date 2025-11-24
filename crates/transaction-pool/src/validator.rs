@@ -70,7 +70,13 @@ where
             }
         };
 
-        let fee_token = match state_provider.user_or_tx_fee_token(transaction.inner(), fee_payer) {
+        let spec = TempoHardfork::Allegretto;
+        let fee_token = match state_provider.user_or_tx_fee_token(
+            transaction.inner(),
+            Address::ZERO,
+            fee_payer,
+            spec,
+        ) {
             Ok(fee_token) => fee_token,
             Err(err) => {
                 return TransactionValidationOutcome::Error(*transaction.hash(), Box::new(err));

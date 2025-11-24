@@ -169,7 +169,7 @@ pub trait TempoStateAccess<T> {
             if validator_fee_token.is_zero() {
                 Ok(DEFAULT_FEE_TOKEN_PRE_ALLEGRETTO)
             } else {
-                return Ok(validator_fee_token);
+                Ok(validator_fee_token)
             }
         }
     }
