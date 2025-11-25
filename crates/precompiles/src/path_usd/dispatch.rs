@@ -239,12 +239,11 @@ mod tests {
     };
 
     #[test]
-    fn path_usd_test_selector_coverage() {
+    fn path_usd_test_selector_coverage_pre_allegretto() {
         use crate::test_util::assert_full_coverage;
 
-        let mut storage = HashMapStorageProvider::new(1);
+        let mut storage = HashMapStorageProvider::new(1).with_spec(TempoHardfork::Moderato);
         let mut path_usd = PathUSD::new(&mut storage);
-
         path_usd.initialize(Address::ZERO).unwrap();
 
         let itip20_unsupported =
