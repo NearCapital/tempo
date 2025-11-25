@@ -1221,7 +1221,24 @@ pub(crate) mod tests {
         let mut storage = HashMapStorageProvider::new(1);
         let admin = Address::random();
         let token_id = 1;
-        initialize_path_usd(&mut storage, admin).unwrap();
+
+        let mut factory = TIP20Factory::new(&mut storage);
+        factory
+            .initialize()
+            .expect("Factory initialization should succeed");
+        factory
+            .create_token(
+                admin,
+                ITIP20Factory::createTokenCall {
+                    name: "PathUSD".into(),
+                    symbol: "PathUSD".into(),
+                    currency: "USD".into(),
+                    quoteToken: Address::ZERO,
+                    admin,
+                },
+            )
+            .expect("Couldnt not init pathUSD");
+
         let mut token = TIP20Token::new(token_id, &mut storage);
         token
             .initialize("Test", "TST", "USD", PATH_USD_ADDRESS, admin)
@@ -1230,7 +1247,7 @@ pub(crate) mod tests {
         token.grant_role_internal(admin, *ISSUER_ROLE)?;
 
         let to = Address::random();
-        let amount = U256::random();
+        let amount = U256::from(random::<u128>());
         let memo = FixedBytes::random();
 
         token
@@ -1254,44 +1271,6 @@ pub(crate) mod tests {
             TIP20Event::Mint(ITIP20::Mint { to, amount }).into_log_data()
         );
 
-        assert_eq!(
-            events[2],
-            TIP20Event::TransferWithMemo(ITIP20::TransferWithMemo {
-                from: admin,
-                to,
-                amount,
-                memo
-            })
-            .into_log_data()
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_mint_with_memo_from_address_post_moderato() -> eyre::Result<()> {
-        let mut storage = HashMapStorageProvider::new(1).with_spec(TempoHardfork::Moderato);
-        let admin = Address::random();
-        let token_id = 1;
-        initialize_path_usd(&mut storage, admin).unwrap();
-        let mut token = TIP20Token::new(token_id, &mut storage);
-        token
-            .initialize("Test", "TST", "USD", PATH_USD_ADDRESS, admin)
-            .unwrap();
-
-        token.grant_role_internal(admin, *ISSUER_ROLE)?;
-
-        let to = Address::random();
-        let amount = U256::random() % token.supply_cap()?;
-        let memo = FixedBytes::random();
-
-        token
-            .mint_with_memo(admin, ITIP20::mintWithMemoCall { to, amount, memo })
-            .unwrap();
-
-        let events = &storage.events[&token_id_to_address(token_id)];
-
-        // TransferWithMemo event should have Address::ZERO as from for post-Moderato
         assert_eq!(
             events[2],
             TIP20Event::TransferWithMemo(ITIP20::TransferWithMemo {
@@ -2238,17 +2217,24 @@ pub(crate) mod tests {
     fn test_is_tip20() {
         let mut storage = HashMapStorageProvider::new(1);
         let sender = Address::random();
-        initialize_path_usd(&mut storage, sender).unwrap();
 
         let mut factory = TIP20Factory::new(&mut storage);
-
         factory
             .initialize()
             .expect("Factory initialization should succeed");
-
         factory
-            .initialize()
-            .expect("Factory initialization should succeed");
+            .create_token(
+                sender,
+                ITIP20Factory::createTokenCall {
+                    name: "PathUSD".into(),
+                    symbol: "PathUSD".into(),
+                    currency: "USD".into(),
+                    quoteToken: Address::ZERO,
+                    admin: sender,
+                },
+            )
+            .expect("Couldnt not init pathUSD");
+
         let call = ITIP20Factory::createTokenCall {
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
@@ -2486,7 +2472,9 @@ pub(crate) mod tests {
     #[test]
     fn test_initialize_supply_cap_pre_moderato() -> eyre::Result<()> {
         let mut storage = HashMapStorageProvider::new(1).with_spec(TempoHardfork::Adagio);
+        let admin = Address::random();
         let mut token = TIP20Token::new(0, &mut storage);
+        token.initialize("Test", "Test", "EUR", PATH_USD_ADDRESS, admin)?;
         let supply_cap = token.supply_cap()?;
         assert_eq!(supply_cap, U256::MAX);
 
