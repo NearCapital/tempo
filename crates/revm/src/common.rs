@@ -246,6 +246,7 @@ impl<T: reth_storage_api::StateProvider> TempoStateAccess<((), (), ())> for T {
 mod tests {
     use super::*;
     use revm::{context::TxEnv, database::EmptyDB};
+    use tempo_precompiles::tip20_factory::TIP20Factory;
 
     #[test]
     fn test_get_fee_token_fee_token_set() -> eyre::Result<()> {
@@ -341,6 +342,9 @@ mod tests {
         let caller = Address::random();
         let token_in = Address::random();
         let token_out = Address::random();
+
+        // FIXME: deploy token in and token out from the factory so is_tip20_token checks clear
+        // when getting fee token
 
         // Test swapExactAmountIn
         let call = IStablecoinExchange::swapExactAmountInCall {
