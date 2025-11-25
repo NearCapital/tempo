@@ -63,28 +63,19 @@ where
             ));
         }
 
-        Ok(Tx::new(self.inner.clone(), Some(self.tx_active.clone())))
-    }
-
-    /// Begin a new read-only transaction.
-    ///
-    /// Multiple read-only transactions can be active concurrently.
-    /// Read-only transactions cannot call `insert()` or `remove()`.
-    pub fn read_only(&self) -> Tx<TContext> {
-        Tx::new(self.inner.clone(), None)
+        Ok(Tx::new(self.inner.clone(), self.tx_active.clone()))
     }
 }
 
-/// A transaction that buffers writes to a `Metadata<B256, Bytes>` store.
+/// A read-write transaction that buffers writes to a `Metadata<B256, Bytes>` store.
 ///
 /// This transaction provides ACID-like semantics by buffering all operations in memory
 /// and applying them atomically when `commit()` is called.
 ///
 /// # Features
 /// - **Multiple value types**: Serialize different types to the same store
-/// - **String keys**: Use strings or any `Hash` type as keys (hashed to `B256`)
 /// - **Read-through cache**: Reads check buffered writes before hitting storage
-/// - **Deletions**: Support for removing keys via `remove()`
+/// - **Deletions**: Support for removing entries via `remove()`
 /// - **Atomic commit**: Single `commit()` call applies all changes
 ///
 /// # Example
@@ -104,9 +95,8 @@ where
     store: Arc<RwLock<Metadata<TContext, B256, Bytes>>>,
 
     /// Flag indicating whether a read-write transaction is active.
-    /// This is `Some` for read-write transactions and `None` for read-only transactions.
     /// The flag is set to false when the transaction is committed or dropped.
-    write_lock: Option<Arc<AtomicBool>>,
+    write_lock: Arc<AtomicBool>,
 
     /// In-memory write buffer that accumulates all operations before commit.
     /// - Key: `B256`
@@ -124,18 +114,13 @@ where
     /// Create a new transaction over the given store.
     fn new(
         store: Arc<RwLock<Metadata<TContext, B256, Bytes>>>,
-        tx_active: Option<Arc<AtomicBool>>,
+        write_lock: Arc<AtomicBool>,
     ) -> Self {
         Self {
             store,
-            write_lock: tx_active,
+            write_lock,
             writes: HashMap::new(),
         }
-    }
-
-    /// Returns true if this is a read-write transaction.
-    pub fn is_read_write(&self) -> bool {
-        self.write_lock.is_some()
     }
 
     /// Get a value from the store, deserializing it.
@@ -172,17 +157,11 @@ where
     /// This does not immediately write to the store.
     /// Call `commit()` to apply all buffered writes.
     /// Keys can be any type that can be converted to bytes.
-    ///
-    /// Returns an error if called on a read-only transaction.
     pub fn insert<K, V>(&mut self, key: K, value: V) -> Result<(), eyre::Error>
     where
         K: AsRef<[u8]>,
         V: CodecWrite + EncodeSize,
     {
-        if !self.is_read_write() {
-            return Err(eyre::eyre!("cannot insert in read-only transaction"));
-        }
-
         let key_hash = key_to_b256(key.as_ref());
         let value_bytes = serialize_to_bytes(&value)?;
         self.writes.insert(key_hash, Some(value_bytes));
@@ -193,19 +172,12 @@ where
     ///
     /// This marks the key for deletion. The actual removal happens when `commit()` is called.
     /// Keys can be any type that can be converted to bytes.
-    ///
-    /// Returns an error if called on a read-only transaction.
-    pub fn remove<K>(&mut self, key: K) -> Result<(), eyre::Error>
+    pub fn remove<K>(&mut self, key: K)
     where
         K: AsRef<[u8]>,
     {
-        if !self.is_read_write() {
-            return Err(eyre::eyre!("cannot remove in read-only transaction"));
-        }
-
         let key_hash = key_to_b256(key.as_ref());
         self.writes.insert(key_hash, None);
-        Ok(())
     }
 
     /// Commit all buffered writes to the store and sync.
@@ -242,9 +214,7 @@ where
     TContext: Clock + Metrics + Storage,
 {
     fn drop(&mut self) {
-        if let Some(write_lock) = &self.write_lock {
-            write_lock.store(false, Ordering::SeqCst);
-        }
+        self.write_lock.store(false, Ordering::SeqCst);
     }
 }
 
@@ -330,7 +300,7 @@ mod tests {
                 assert_eq!(tx.get::<_, u64>(&"key2").await.unwrap(), Some(200));
 
                 // Remove and verify in transaction buffer before commit
-                tx.remove("key1").unwrap();
+                tx.remove("key1");
                 assert_eq!(tx.get::<_, u64>(&"key1").await.unwrap(), None);
                 assert_eq!(tx.get::<_, u64>(&"key2").await.unwrap(), Some(200));
                 tx.commit().await.unwrap();
@@ -348,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn test_transaction_exclusivity_and_readonly() {
+    fn test_transaction_exclusivity() {
         let runtime_config = tokio::Config::default();
         let runner = tokio::Runner::new(runtime_config);
 
@@ -375,16 +345,6 @@ mod tests {
                 assert!(tx2.is_err());
                 drop(tx1);
                 assert!(db.read_write().is_ok());
-
-                // Multiple read-only transactions allowed
-                let _tx1 = db.read_only();
-                let _tx2 = db.read_only();
-                assert!(!_tx1.is_read_write());
-
-                // Read-only cannot write
-                let mut tx = db.read_only();
-                assert!(tx.insert("key", 1u64).is_err());
-                assert!(tx.remove("key").is_err());
 
                 Ok::<(), eyre::Error>(())
             })

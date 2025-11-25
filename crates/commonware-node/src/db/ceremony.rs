@@ -24,7 +24,7 @@ where
     fn set_ceremony(&mut self, epoch: u64, state: CeremonyState) -> Result<()>;
 
     /// Remove ceremony state for a specific epoch.
-    fn remove_ceremony(&mut self, epoch: u64) -> Result<()>;
+    fn remove_ceremony(&mut self, epoch: u64);
 }
 
 impl<TContext> CeremonyStore<TContext> for Tx<TContext>
@@ -39,7 +39,7 @@ where
         self.insert(ceremony_key(epoch), state)
     }
 
-    fn remove_ceremony(&mut self, epoch: u64) -> Result<()> {
+    fn remove_ceremony(&mut self, epoch: u64) {
         self.remove(ceremony_key(epoch))
     }
 }
