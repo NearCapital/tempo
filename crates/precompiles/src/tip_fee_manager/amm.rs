@@ -499,7 +499,6 @@ impl<'a, S: PrecompileStorageProvider> TipFeeManager<'a, S> {
         // Check user has sufficient liquidity
         let balance = self.get_liquidity_balances(pool_id, msg_sender)?;
         if balance < liquidity {
-            dbg!("Here");
             return Err(TIPFeeAMMError::insufficient_liquidity().into());
         }
 

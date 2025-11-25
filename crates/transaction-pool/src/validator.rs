@@ -70,7 +70,8 @@ where
             }
         };
 
-        let spec = TempoHardfork::Allegretto;
+        // Get the latest hardfork
+        let spec = TempoHardfork::default();
         let fee_token =
             match state_provider.get_fee_token(transaction.inner(), Address::ZERO, fee_payer, spec)
             {
@@ -81,7 +82,7 @@ where
             };
 
         // Ensure that fee token is valid.
-        match state_provider.is_valid_fee_token(fee_token) {
+        match state_provider.is_valid_fee_token(fee_token, spec) {
             Ok(valid) => {
                 if !valid {
                     return TransactionValidationOutcome::Invalid(
