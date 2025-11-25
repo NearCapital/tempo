@@ -943,6 +943,7 @@ pub(crate) mod tests {
         storage: &mut HashMapStorageProvider,
         admin: Address,
     ) -> Result<()> {
+        // TODO: deploy from the factory
         let mut path_usd = TIP20Token::from_address(PATH_USD_ADDRESS, storage);
         path_usd.initialize("PathUSD", "PUSD", "USD", Address::ZERO, admin)
     }

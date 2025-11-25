@@ -18,6 +18,7 @@ use tempo_contracts::precompiles::{
 };
 use tempo_precompiles::{
     DEFAULT_FEE_TOKEN_POST_ALLEGRETTO, PATH_USD_ADDRESS, TIP_FEE_MANAGER_ADDRESS,
+    tip20::token_id_to_address,
 };
 use tempo_primitives::{TxFeeToken, transaction::calc_gas_balance_spending};
 
@@ -28,9 +29,7 @@ async fn test_set_user_token() -> eyre::Result<()> {
     let source = if let Ok(rpc_url) = env::var("RPC_URL") {
         crate::utils::NodeSource::ExternalRpc(rpc_url.parse()?)
     } else {
-        crate::utils::NodeSource::LocalNode(
-            include_str!("../assets/test-genesis-moderato.json").to_string(),
-        )
+        crate::utils::NodeSource::LocalNode(include_str!("../assets/test-genesis.json").to_string())
     };
     let (http_url, _local_node) = setup_test_node(source).await?;
 
@@ -52,7 +51,7 @@ async fn test_set_user_token() -> eyre::Result<()> {
     // Initial token should be predeployed token
     assert_eq!(
         fee_manager.userTokens(user_address).call().await?,
-        DEFAULT_FEE_TOKEN_POST_ALLEGRETTO
+        token_id_to_address(1)
     );
 
     let validator = provider

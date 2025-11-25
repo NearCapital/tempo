@@ -19,7 +19,7 @@ use reth_evm::{
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::PathBuf};
-use tempo_chainspec::spec::TEMPO_BASE_FEE;
+use tempo_chainspec::{hardfork::TempoHardfork, spec::TEMPO_BASE_FEE};
 use tempo_contracts::{
     ARACHNID_CREATE2_FACTORY_ADDRESS, CREATEX_ADDRESS, DEFAULT_7702_DELEGATE_ADDRESS,
     MULTICALL_ADDRESS, PERMIT2_ADDRESS, SAFE_DEPLOYER_ADDRESS,
@@ -134,12 +134,23 @@ impl GenesisArgs {
         initialize_registry(&mut evm)?;
 
         println!("Initializing PathUSD");
-        initialize_path_usd(admin, &addresses, &mut evm)?;
+        create_and_mint_token(
+            "PathUSD",
+            "PathUSD",
+            "USD",
+            Address::ZERO,
+            admin,
+            &addresses,
+            U256::from(u64::MAX),
+            &mut evm,
+        )?;
 
+        println!("Initializing TIP20 tokens");
         let (_, alpha_token_address) = create_and_mint_token(
             "AlphaUSD",
             "AlphaUSD",
             "USD",
+            PATH_USD_ADDRESS,
             admin,
             &addresses,
             U256::from(u64::MAX),
@@ -150,6 +161,7 @@ impl GenesisArgs {
             "BetaUSD",
             "BetaUSD",
             "USD",
+            PATH_USD_ADDRESS,
             admin,
             &addresses,
             U256::from(u64::MAX),
@@ -160,6 +172,7 @@ impl GenesisArgs {
             "ThetaUSD",
             "ThetaUSD",
             "USD",
+            PATH_USD_ADDRESS,
             admin,
             &addresses,
             U256::from(u64::MAX),
@@ -321,16 +334,19 @@ impl GenesisArgs {
 
 fn setup_tempo_evm() -> TempoEvm<CacheDB<EmptyDB>> {
     let db = CacheDB::default();
-    let env = EvmEnv::default();
+    let mut env = EvmEnv::default();
+    env.cfg_env.spec = TempoHardfork::Allegretto;
     let factory = TempoEvmFactory::default();
     factory.create_evm(db, env)
 }
 
 /// Initializes the TIP20 factory contract and creates a token
+#[expect(clippy::too_many_arguments)]
 fn create_and_mint_token(
     symbol: &str,
     name: &str,
     currency: &str,
+    quote_token: Address,
     admin: Address,
     recipients: &[Address],
     mint_amount: U256,
@@ -352,7 +368,7 @@ fn create_and_mint_token(
                     name: name.into(),
                     symbol: symbol.into(),
                     currency: currency.into(),
-                    quoteToken: PATH_USD_ADDRESS,
+                    quoteToken: quote_token,
                     admin,
                 },
             )
@@ -397,37 +413,6 @@ fn create_and_mint_token(
     Ok((token_id, token.address()))
 }
 
-fn initialize_path_usd(
-    admin: Address,
-    recipients: &[Address],
-    evm: &mut TempoEvm<CacheDB<EmptyDB>>,
-) -> eyre::Result<()> {
-    let ctx = evm.ctx_mut();
-    let evm_internals = EvmInternals::new(&mut ctx.journaled_state, &ctx.block);
-    let mut provider = EvmPrecompileStorageProvider::new_max_gas(evm_internals, &ctx.cfg);
-
-    let mut path_usd = PathUSD::new(&mut provider);
-    path_usd
-        .initialize(admin)
-        .expect("PathUSD initialization should succeed");
-
-    path_usd.token.grant_role_internal(admin, *ISSUER_ROLE)?;
-
-    for recipient in recipients.iter().progress() {
-        path_usd
-            .mint(
-                admin,
-                ITIP20::mintCall {
-                    to: *recipient,
-                    amount: U256::from(u64::MAX),
-                },
-            )
-            .expect("Could not mint pathUSD");
-    }
-
-    Ok(())
-}
-
 fn initialize_tip20_rewards_registry(evm: &mut TempoEvm<CacheDB<EmptyDB>>) -> eyre::Result<()> {
     let ctx = evm.ctx_mut();
     let evm_internals = EvmInternals::new(&mut ctx.journaled_state, &ctx.block);
@@ -463,7 +448,7 @@ fn initialize_fee_manager(
             .expect("Could not set fee token");
     }
 
-    // Set validator fee tokens to path USD
+    // Set validator fee tokens to pathUSD
     for validator in validators {
         fee_manager
             .set_validator_token(
