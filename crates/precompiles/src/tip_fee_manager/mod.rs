@@ -445,9 +445,6 @@ mod tests {
 
         fee_manager.storage.set_spec(TempoHardfork::Allegretto);
         // Try to set PathUSD as user token - should succeed pre-Moderato
-        let call = IFeeManager::setUserTokenCall {
-            token: PATH_USD_ADDRESS,
-        };
         let result = fee_manager.set_user_token(user, call);
 
         // Pre-Moderato: should be allowed to set PathUSD as user token
