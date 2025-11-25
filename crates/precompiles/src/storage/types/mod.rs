@@ -178,6 +178,18 @@ pub trait StorableOps: StorableType + Sized {
 
     /// Delete this type from storage (set to zero).
     fn s_delete<S: StorageOps>(storage: &mut S, slot: U256, ctx: LayoutCtx) -> Result<()>;
+
+    /// Encode this value to a single U256 word for packing.
+    ///
+    /// Only valid for single-slot primitive types (`SLOTS == 1`).
+    /// Multi-slot types will panic in debug builds and produce garbage in release.
+    fn to_word(&self) -> Result<U256>;
+
+    /// Decode this type from a single U256 word.
+    ///
+    /// Only valid for single-slot primitive types (`SLOTS == 1`).
+    /// Multi-slot types will panic in debug builds and produce garbage in release.
+    fn from_word(word: U256) -> Result<Self>;
 }
 
 /// Trait for types that can be stored/loaded from EVM storage.

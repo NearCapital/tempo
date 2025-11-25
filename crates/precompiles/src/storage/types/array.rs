@@ -143,7 +143,7 @@ where
             return None;
         }
 
-        // Pack elements if they fit
+        // Pack small elements into shared slots, use T::SLOTS for multi-slot types
         let (base_slot, layout_ctx) = if T::BYTES <= 16 {
             let location = packing::calc_element_loc(index, T::BYTES);
             (
@@ -151,7 +151,7 @@ where
                 LayoutCtx::packed(location.offset_bytes),
             )
         } else {
-            (self.base_slot + U256::from(index), LayoutCtx::FULL)
+            (self.base_slot + U256::from(index * T::SLOTS), LayoutCtx::FULL)
         };
 
         Some(T::handle(base_slot, layout_ctx, Rc::clone(&self.address)))

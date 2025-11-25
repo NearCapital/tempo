@@ -89,6 +89,16 @@ fn gen_storable_ops_impl(type_path: &TokenStream) -> TokenStream {
             fn s_delete<S: StorageOps>(storage: &mut S, slot: U256, ctx: LayoutCtx) -> Result<()> {
                 <Self as Storable<1>>::delete(storage, slot, ctx)
             }
+
+            #[inline]
+            fn to_word(&self) -> Result<U256> {
+                Ok(<Self as Storable<1>>::to_evm_words(self)?[0])
+            }
+
+            #[inline]
+            fn from_word(word: U256) -> Result<Self> {
+                <Self as Storable<1>>::from_evm_words([word])
+            }
         }
     }
 }
@@ -588,6 +598,28 @@ fn gen_array_impl(config: &ArrayConfig) -> TokenStream {
             fn s_delete<S: crate::storage::StorageOps>(storage: &mut S, slot: ::alloy::primitives::U256, ctx: crate::storage::LayoutCtx) -> crate::error::Result<()> {
                 <Self as crate::storage::Storable<{ #slot_count }>>::delete(storage, slot, ctx)
             }
+
+            #[inline]
+            fn to_word(&self) -> crate::error::Result<::alloy::primitives::U256> {
+                if #slot_count != 1 {
+                    return Err(crate::error::TempoPrecompileError::Fatal(
+                        "to_word called on multi-slot array".into()
+                    ));
+                }
+                Ok(<Self as crate::storage::Storable<{ #slot_count }>>::to_evm_words(self)?[0])
+            }
+
+            #[inline]
+            fn from_word(word: ::alloy::primitives::U256) -> crate::error::Result<Self> {
+                if #slot_count != 1 {
+                    return Err(crate::error::TempoPrecompileError::Fatal(
+                        "from_word called on multi-slot array".into()
+                    ));
+                }
+                <Self as crate::storage::Storable<{ #slot_count }>>::from_evm_words(
+                    ::std::array::from_fn(|_| word)
+                )
+            }
         }
 
         // Implement StorageKey for use as mapping keys
@@ -966,6 +998,28 @@ fn gen_struct_array_impl(struct_type: &TokenStream, array_size: usize) -> TokenS
             #[inline]
             fn s_delete<S: crate::storage::StorageOps>(storage: &mut S, slot: ::alloy::primitives::U256, ctx: crate::storage::LayoutCtx) -> crate::error::Result<()> {
                 <Self as crate::storage::Storable<{ #mod_ident::SLOT_COUNT }>>::delete(storage, slot, ctx)
+            }
+
+            #[inline]
+            fn to_word(&self) -> crate::error::Result<::alloy::primitives::U256> {
+                if #mod_ident::SLOT_COUNT != 1 {
+                    return Err(crate::error::TempoPrecompileError::Fatal(
+                        "to_word called on multi-slot struct array".into()
+                    ));
+                }
+                Ok(<Self as crate::storage::Storable<{ #mod_ident::SLOT_COUNT }>>::to_evm_words(self)?[0])
+            }
+
+            #[inline]
+            fn from_word(word: ::alloy::primitives::U256) -> crate::error::Result<Self> {
+                if #mod_ident::SLOT_COUNT != 1 {
+                    return Err(crate::error::TempoPrecompileError::Fatal(
+                        "from_word called on multi-slot struct array".into()
+                    ));
+                }
+                <Self as crate::storage::Storable<{ #mod_ident::SLOT_COUNT }>>::from_evm_words(
+                    ::std::array::from_fn(|_| word)
+                )
             }
         }
 

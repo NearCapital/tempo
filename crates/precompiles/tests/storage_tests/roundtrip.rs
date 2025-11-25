@@ -134,4 +134,72 @@ proptest! {
         prop_assert_eq!(layout.profile.active.read()?, bool::default());
         prop_assert_eq!(layout.profile.balance.read()?, expected_balance);
     }
+
+    /// Roundtrip test for Vec<MultiSlotStruct> with inner packing using push/pop
+    #[test]
+    fn proptest_vec_multi_slot_roundtrip(
+        two_slots in prop::collection::vec(arb_packed_two_slot(), 1..5),
+        three_slots in prop::collection::vec(arb_packed_three_slot(), 1..5),
+    ) {
+        #[contract]
+        pub struct Layout {
+            #[slot(100)]
+            pub vec_two: Vec<PackedTwoSlot>,
+            #[slot(200)]
+            pub vec_three: Vec<PackedThreeSlot>,
+        }
+
+        let (mut storage, address) = setup_storage();
+        let mut layout = Layout::_new(*address);
+        let _guard = storage.enter().unwrap();
+
+        // Round 1: Write proptest values
+        layout.vec_two.write(two_slots.clone())?;
+        layout.vec_three.write(three_slots.clone())?;
+
+        prop_assert_eq!(layout.vec_two.len()?, two_slots.len());
+        prop_assert_eq!(layout.vec_three.len()?, three_slots.len());
+        prop_assert_eq!(layout.vec_two.read()?, two_slots.clone());
+        prop_assert_eq!(layout.vec_three.read()?, three_slots.clone());
+
+        // Round 2: Push hardcoded values
+        let extra_two = PackedTwoSlot {
+            value: U256::random(),
+            timestamp: 1234,
+            nonce: 56,
+            owner: Address::random(),
+        };
+        let extra_three = PackedThreeSlot {
+            value: U256::random(),
+            timestamp: 111,
+            start_time: 222,
+            end_time: 333,
+            nonce: 444,
+            owner: Address::random(),
+            active: (U256::random() % U256::from(2)).is_zero(),
+        };
+
+        let two_len_pre_push = layout.vec_two.len()?;
+        let three_len_pre_push = layout.vec_three.len()?;
+        layout.vec_two.push(extra_two.clone())?;
+        layout.vec_three.push(extra_three.clone())?;
+
+        // Verify pushed values
+        prop_assert_eq!(layout.vec_two.len()?, two_slots.len() + 1);
+        prop_assert_eq!(layout.vec_three.len()?, three_slots.len() + 1);
+        prop_assert_eq!(layout.vec_two.at(two_len_pre_push).read()?, extra_two.clone());
+        prop_assert_eq!(layout.vec_three.at(three_len_pre_push).read()?, extra_three.clone());
+
+        // Round 3: Pop hardcoded values (delete last element, decrement length)
+        let pop_two = layout.vec_two.pop()?;
+        let pop_three = layout.vec_three.pop()?;
+        prop_assert_eq!(pop_two, Some(extra_two));
+        prop_assert_eq!(pop_three, Some(extra_three));
+
+        // Verify we're back to proptest values
+        prop_assert_eq!(layout.vec_two.len()?, two_slots.len());
+        prop_assert_eq!(layout.vec_three.len()?, three_slots.len());
+        prop_assert_eq!(layout.vec_two.read()?, two_slots);
+        prop_assert_eq!(layout.vec_three.read()?, three_slots);
+    }
 }

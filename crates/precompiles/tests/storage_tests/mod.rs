@@ -15,7 +15,7 @@ mod layouts;
 mod mappings;
 mod packing;
 mod roundtrip;
-// mod solidity;
+mod solidity;
 mod strings;
 mod structs;
 
@@ -39,6 +39,29 @@ pub(crate) struct UserProfile {
     pub(crate) owner: Address,
     pub(crate) active: bool,
     pub(crate) balance: U256,
+}
+
+/// Test struct for multi-slot array tests (2 slots with inner packing)
+/// Layout: slot 0 = [U256], slot 1 = [u64, u32, address]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Storable)]
+pub(crate) struct PackedTwoSlot {
+    pub(crate) value: U256,
+    pub(crate) timestamp: u64,
+    pub(crate) nonce: u32,
+    pub(crate) owner: Address,
+}
+
+/// Test struct for multi-slot array tests (3 slots with inner packing)
+/// Layout: slot 0 = [U256], slot 1 = [u64, u64, u64, u64], slot 2 = [address, bool]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Storable)]
+pub(crate) struct PackedThreeSlot {
+    pub(crate) value: U256,
+    pub(crate) timestamp: u64,
+    pub(crate) start_time: u64,
+    pub(crate) end_time: u64,
+    pub(crate) nonce: u64,
+    pub(crate) owner: Address,
+    pub(crate) active: bool,
 }
 
 /// Helper to generate test addresses
@@ -93,11 +116,7 @@ where
 }
 
 /// Helper to test delete operation
-pub(crate) fn test_delete<T>(
-    address: &Rc<Address>,
-    base_slot: U256,
-    data: &T,
-) -> error::Result<()>
+pub(crate) fn test_delete<T>(address: &Rc<Address>, base_slot: U256, data: &T) -> error::Result<()>
 where
     T: StorableOps + Clone + PartialEq + Default + std::fmt::Debug,
 {
@@ -173,4 +192,40 @@ pub(crate) fn arb_test_block() -> impl Strategy<Value = TestBlock> {
         field2,
         field3,
     })
+}
+
+/// Generate arbitrary PackedTwoSlot structs
+pub(crate) fn arb_packed_two_slot() -> impl Strategy<Value = PackedTwoSlot> {
+    (arb_u256(), any::<u64>(), any::<u32>(), arb_address()).prop_map(
+        |(value, timestamp, nonce, owner)| PackedTwoSlot {
+            value,
+            timestamp,
+            nonce,
+            owner,
+        },
+    )
+}
+
+/// Generate arbitrary PackedThreeSlot structs
+pub(crate) fn arb_packed_three_slot() -> impl Strategy<Value = PackedThreeSlot> {
+    (
+        arb_u256(),
+        any::<u64>(),
+        any::<u64>(),
+        any::<u64>(),
+        any::<u64>(),
+        arb_address(),
+        any::<bool>(),
+    )
+        .prop_map(
+            |(value, timestamp, start_time, end_time, nonce, owner, active)| PackedThreeSlot {
+                value,
+                timestamp,
+                start_time,
+                end_time,
+                nonce,
+                owner,
+                active,
+            },
+        )
 }

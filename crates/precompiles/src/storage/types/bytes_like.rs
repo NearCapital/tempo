@@ -122,6 +122,22 @@ impl StorableOps for Bytes {
     fn s_delete<S: StorageOps>(storage: &mut S, slot: U256, ctx: LayoutCtx) -> Result<()> {
         <Self as Storable<1>>::delete(storage, slot, ctx)
     }
+
+    #[inline]
+    fn to_word(&self) -> Result<U256> {
+        // Bytes is a dynamic type - cannot be packed into a single word
+        Err(TempoPrecompileError::Fatal(
+            "to_word called on dynamic Bytes type".into(),
+        ))
+    }
+
+    #[inline]
+    fn from_word(_word: U256) -> Result<Self> {
+        // Bytes is a dynamic type - cannot be unpacked from a single word
+        Err(TempoPrecompileError::Fatal(
+            "from_word called on dynamic Bytes type".into(),
+        ))
+    }
 }
 
 impl StorableOps for String {
@@ -138,6 +154,22 @@ impl StorableOps for String {
     #[inline]
     fn s_delete<S: StorageOps>(storage: &mut S, slot: U256, ctx: LayoutCtx) -> Result<()> {
         <Self as Storable<1>>::delete(storage, slot, ctx)
+    }
+
+    #[inline]
+    fn to_word(&self) -> Result<U256> {
+        // String is a dynamic type - cannot be packed into a single word
+        Err(TempoPrecompileError::Fatal(
+            "to_word called on dynamic String type".into(),
+        ))
+    }
+
+    #[inline]
+    fn from_word(_word: U256) -> Result<Self> {
+        // String is a dynamic type - cannot be unpacked from a single word
+        Err(TempoPrecompileError::Fatal(
+            "from_word called on dynamic String type".into(),
+        ))
     }
 }
 

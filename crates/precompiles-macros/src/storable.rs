@@ -187,6 +187,28 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
             ) -> crate::error::Result<()> {
                 <Self as crate::storage::Storable<{ #mod_ident::SLOT_COUNT }>>::delete(storage, slot, ctx)
             }
+
+            #[inline]
+            fn to_word(&self) -> crate::error::Result<::alloy::primitives::U256> {
+                if #mod_ident::SLOT_COUNT != 1 {
+                    return Err(crate::error::TempoPrecompileError::Fatal(
+                        "to_word called on multi-slot struct".into()
+                    ));
+                }
+                Ok(<Self as crate::storage::Storable<{ #mod_ident::SLOT_COUNT }>>::to_evm_words(self)?[0])
+            }
+
+            #[inline]
+            fn from_word(word: ::alloy::primitives::U256) -> crate::error::Result<Self> {
+                if #mod_ident::SLOT_COUNT != 1 {
+                    return Err(crate::error::TempoPrecompileError::Fatal(
+                        "from_word called on multi-slot struct".into()
+                    ));
+                }
+                <Self as crate::storage::Storable<{ #mod_ident::SLOT_COUNT }>>::from_evm_words(
+                    ::std::array::from_fn(|_| word)
+                )
+            }
         }
     };
 
@@ -276,34 +298,30 @@ fn gen_handler_struct(
                 self.base_slot
             }
 
-            /// Reads the entire struct from storage.
+            /// Returns a `Slot<T>` for whole-struct storage operations.
             #[inline]
-            pub fn read(&self) -> crate::error::Result<#struct_name> {
-                let mut slot = crate::storage::Slot::<#struct_name>::new(
+            fn as_slot(&self) -> crate::storage::Slot<#struct_name> {
+                crate::storage::Slot::<#struct_name>::new(
                     self.base_slot,
                     ::std::rc::Rc::clone(&self.address)
-                );
-                slot.read()
+                )
+            }
+        }
+
+        impl crate::storage::Handler<#struct_name> for #handler_name {
+            #[inline]
+            fn read(&self) -> crate::error::Result<#struct_name> {
+                self.as_slot().read()
             }
 
-            /// Writes the entire struct to storage.
             #[inline]
-            pub fn write(&mut self, value: #struct_name) -> crate::error::Result<()> {
-                let mut slot = crate::storage::Slot::<#struct_name>::new(
-                    self.base_slot,
-                    ::std::rc::Rc::clone(&self.address)
-                );
-                slot.write(value)
+            fn write(&mut self, value: #struct_name) -> crate::error::Result<()> {
+                self.as_slot().write(value)
             }
 
-            /// Deletes the entire struct from storage (sets all slots to zero).
             #[inline]
-            pub fn delete(&mut self) -> crate::error::Result<()> {
-                let mut slot = crate::storage::Slot::<#struct_name>::new(
-                    self.base_slot,
-                    ::std::rc::Rc::clone(&self.address)
-                );
-                slot.delete()
+            fn delete(&mut self) -> crate::error::Result<()> {
+                self.as_slot().delete()
             }
         }
     }

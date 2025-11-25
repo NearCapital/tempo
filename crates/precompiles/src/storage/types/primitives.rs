@@ -136,6 +136,16 @@ impl StorableOps for bool {
     fn s_delete<S: StorageOps>(storage: &mut S, slot: U256, ctx: LayoutCtx) -> Result<()> {
         <Self as Storable<1>>::delete(storage, slot, ctx)
     }
+
+    #[inline]
+    fn to_word(&self) -> Result<U256> {
+        Ok(<Self as Storable<1>>::to_evm_words(self)?[0])
+    }
+
+    #[inline]
+    fn from_word(word: U256) -> Result<Self> {
+        <Self as Storable<1>>::from_evm_words([word])
+    }
 }
 
 impl StorableOps for Address {
@@ -152,6 +162,16 @@ impl StorableOps for Address {
     #[inline]
     fn s_delete<S: StorageOps>(storage: &mut S, slot: U256, ctx: LayoutCtx) -> Result<()> {
         <Self as Storable<1>>::delete(storage, slot, ctx)
+    }
+
+    #[inline]
+    fn to_word(&self) -> Result<U256> {
+        Ok(<Self as Storable<1>>::to_evm_words(self)?[0])
+    }
+
+    #[inline]
+    fn from_word(word: U256) -> Result<Self> {
+        <Self as Storable<1>>::from_evm_words([word])
     }
 }
 

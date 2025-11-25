@@ -6,10 +6,10 @@
 //! - **Base slot**: Stores the array length (number of elements)
 //! - **Data slots**: Start at `keccak256(len_slot)`, elements packed efficiently
 //!
-//! ## Limitations
+//! ## Multi-Slot Support
 //!
-//! - Only supports `Storable<1>` element types (single-slot types)
-//! - Multi-slot structs are not currently supported in Vec
+//! - Supports both single-slot primitives and multi-slot types (structs, arrays)
+//! - Element at index `i` starts at slot `data_start + i * T::SLOTS`
 
 use alloy::primitives::{Address, U256};
 use std::{marker::PhantomData, rc::Rc};
@@ -27,7 +27,7 @@ use crate::{
 
 impl<T> StorableType for Vec<T>
 where
-    T: Storable<1> + StorableType,
+    T: StorableOps,
 {
     /// Vec base slot occupies one full storage slot (stores length).
     const LAYOUT: Layout = Layout::Slots(1);
@@ -40,7 +40,7 @@ where
 
 impl<T> Storable<1> for Vec<T>
 where
-    T: Storable<1> + StorableType,
+    T: StorableOps,
 {
     fn load<S: StorageOps>(
         storage: &S,
@@ -112,10 +112,10 @@ where
                 storage.sstore(data_start + U256::from(slot_idx), U256::ZERO)?;
             }
         } else {
-            // Clear unpacked element slots
+            // Clear unpacked element slots (multi-slot aware)
             for elem_idx in 0..length {
-                let elem_slot = data_start + U256::from(elem_idx);
-                T::delete(storage, elem_slot, LayoutCtx::FULL)?;
+                let elem_slot = data_start + U256::from(elem_idx * T::SLOTS);
+                T::s_delete(storage, elem_slot, LayoutCtx::FULL)?;
             }
         }
 
@@ -137,7 +137,7 @@ where
 
 impl<T> StorableOps for Vec<T>
 where
-    T: Storable<1> + StorableType,
+    T: StorableOps,
 {
     #[inline]
     fn s_load<S: StorageOps>(storage: &S, slot: U256, ctx: LayoutCtx) -> Result<Self> {
@@ -152,6 +152,16 @@ where
     #[inline]
     fn s_delete<S: StorageOps>(storage: &mut S, slot: U256, ctx: LayoutCtx) -> Result<()> {
         <Self as Storable<1>>::delete(storage, slot, ctx)
+    }
+
+    #[inline]
+    fn to_word(&self) -> Result<U256> {
+        Ok(<Self as Storable<1>>::to_evm_words(self)?[0])
+    }
+
+    #[inline]
+    fn from_word(word: U256) -> Result<Self> {
+        <Self as Storable<1>>::from_evm_words([word])
     }
 }
 
@@ -183,7 +193,7 @@ where
 /// ```
 pub struct VecHandler<T>
 where
-    T: Storable<1> + StorableType,
+    T: StorableOps,
 {
     len_slot: U256,
     address: Rc<Address>,
@@ -192,8 +202,7 @@ where
 
 impl<T> Handler<Vec<T>> for VecHandler<T>
 where
-    T: Storable<1> + StorableType,
-    Vec<T>: StorableOps,
+    T: StorableOps,
 {
     /// Reads the entire vector from storage.
     #[inline]
@@ -216,7 +225,7 @@ where
 
 impl<T> VecHandler<T>
 where
-    T: Storable<1> + StorableType,
+    T: StorableOps,
 {
     /// Creates a new handler for the vector at the given base slot and address.
     #[inline]
@@ -269,7 +278,7 @@ where
     pub fn at(&self, index: usize) -> T::Handler {
         let data_start = self.data_slot();
 
-        // Pack elements if necessary. Vec elements can't be split across slots.
+        // Pack small elements into shared slots, use T::SLOTS for multi-slot types
         let (base_slot, layout_ctx) = if T::BYTES <= 16 {
             let location = calc_element_loc(index, T::BYTES);
             (
@@ -277,7 +286,7 @@ where
                 LayoutCtx::packed(location.offset_bytes),
             )
         } else {
-            (data_start + U256::from(index), LayoutCtx::FULL)
+            (data_start + U256::from(index * T::SLOTS), LayoutCtx::FULL)
         };
 
         T::handle(base_slot, layout_ctx, Rc::clone(&self.address))
@@ -346,7 +355,7 @@ pub(crate) fn calc_data_slot(len_slot: U256) -> U256 {
 
 /// Load packed elements from storage.
 ///
-/// Used when `T::BYTES < 32` and evenly divides 32, allowing multiple elements per slot.
+/// Used when `T::BYTES <= 16`, allowing multiple elements per slot.
 fn load_packed_elements<T, S>(
     storage: &S,
     data_start: U256,
@@ -354,9 +363,10 @@ fn load_packed_elements<T, S>(
     byte_count: usize,
 ) -> Result<Vec<T>>
 where
-    T: Storable<1> + StorableType,
+    T: StorableOps,
     S: StorageOps,
 {
+    debug_assert!(T::BYTES <= 16, "load_packed_elements requires T::BYTES <= 16");
     let elements_per_slot = 32 / byte_count;
     let slot_count = calc_packed_slot_count(length, byte_count);
 
@@ -377,7 +387,8 @@ where
 
         // Extract each element from this slot
         for _ in 0..elements_in_this_slot {
-            let elem = extract_packed_value::<1, T>(slot_value, current_offset, byte_count)?;
+            let word = extract_packed_value::<1, U256>(slot_value, current_offset, byte_count)?;
+            let elem = T::from_word(word)?;
             result.push(elem);
 
             // Move to next element position
@@ -404,9 +415,10 @@ fn store_packed_elements<T, S>(
     byte_count: usize,
 ) -> Result<()>
 where
-    T: Storable<1> + StorableType,
+    T: StorableOps,
     S: StorageOps,
 {
+    debug_assert!(T::BYTES <= 16, "store_packed_elements requires T::BYTES <= 16");
     let elements_per_slot = 32 / byte_count;
     let slot_count = calc_packed_slot_count(elements.len(), byte_count);
 
@@ -427,13 +439,15 @@ where
 /// Takes a slice of elements and packs them into a single U256 word.
 fn build_packed_slot<T>(elements: &[T], byte_count: usize) -> Result<U256>
 where
-    T: Storable<1> + StorableType,
+    T: StorableOps,
 {
+    debug_assert!(T::BYTES <= 16, "build_packed_slot requires T::BYTES <= 16");
     let mut slot_value = U256::ZERO;
     let mut current_offset = 0;
 
     for elem in elements {
-        slot_value = insert_packed_value(slot_value, elem, current_offset, byte_count)?;
+        let word = elem.to_word()?;
+        slot_value = insert_packed_value::<1, U256>(slot_value, &word, current_offset, byte_count)?;
         current_offset += byte_count;
     }
 
@@ -443,15 +457,17 @@ where
 /// Load unpacked elements from storage.
 ///
 /// Used when elements don't pack efficiently (32 bytes or multi-slot types).
-/// Each element occupies `T: Storable<SLOTS>` consecutive slots.
+/// Each element occupies `T::SLOTS` consecutive slots.
 fn load_unpacked_elements<T, S>(storage: &S, data_start: U256, length: usize) -> Result<Vec<T>>
 where
-    T: Storable<1>,
+    T: StorableOps,
     S: StorageOps,
 {
     let mut result = Vec::with_capacity(length);
     for index in 0..length {
-        let elem = T::load(storage, data_start + U256::from(index), LayoutCtx::FULL)?;
+        // Use T::SLOTS for proper multi-slot element addressing
+        let elem_slot = data_start + U256::from(index * T::SLOTS);
+        let elem = T::s_load(storage, elem_slot, LayoutCtx::FULL)?;
         result.push(elem);
     }
     Ok(result)
@@ -459,14 +475,16 @@ where
 
 /// Store unpacked elements to storage.
 ///
-/// Each element uses its full `T: Storable<SLOTS>` consecutive slots.
+/// Each element uses `T::SLOTS` consecutive slots.
 fn store_unpacked_elements<T, S>(elements: &[T], storage: &mut S, data_start: U256) -> Result<()>
 where
-    T: Storable<1>,
+    T: StorableOps,
     S: StorageOps,
 {
     for (elem_idx, elem) in elements.iter().enumerate() {
-        elem.store(storage, data_start + U256::from(elem_idx), LayoutCtx::FULL)?;
+        // Use T::SLOTS for proper multi-slot element addressing
+        let elem_slot = data_start + U256::from(elem_idx * T::SLOTS);
+        elem.s_store(storage, elem_slot, LayoutCtx::FULL)?;
     }
 
     Ok(())
@@ -1108,85 +1126,11 @@ mod tests {
     #[test]
     fn test_vec_small_struct_storage() {
         // Test that single-slot structs are stored correctly in Vec
-        #[derive(Debug, Clone, PartialEq, Eq)]
+        #[derive(Debug, Clone, PartialEq, Eq, Storable)]
         struct SmallStruct {
             flag1: bool, // offset 0 (1 byte)
             flag2: bool, // offset 1 (1 byte)
             value: u16,  // offset 2 (2 bytes)
-        }
-
-        impl StorableType for SmallStruct {
-            const LAYOUT: Layout = Layout::Slots(1);
-            type Handler = Slot<Self>;
-
-            fn handle(slot: U256, ctx: LayoutCtx, address: Rc<Address>) -> Self::Handler {
-                Slot::new_with_ctx(slot, ctx, address)
-            }
-        }
-
-        impl Storable<1> for SmallStruct {
-            fn load<S: StorageOps>(storage: &S, len_slot: U256, _ctx: LayoutCtx) -> Result<Self> {
-                let slot_value = storage.sload(len_slot)?;
-                // Solidity packs: flag1 (byte 0), flag2 (byte 1), value (bytes 2-3)
-                let flag1 = (slot_value & U256::from(0xFF)) != U256::ZERO;
-                let flag2 = ((slot_value >> 8) & U256::from(0xFF)) != U256::ZERO;
-                let value = u16::try_from((slot_value >> 16) & U256::from(0xFFFF)).unwrap();
-                Ok(Self {
-                    flag1,
-                    flag2,
-                    value,
-                })
-            }
-
-            fn store<S: StorageOps>(
-                &self,
-                storage: &mut S,
-                len_slot: U256,
-                _ctx: LayoutCtx,
-            ) -> Result<()> {
-                // Solidity packs: flag1 (byte 0), flag2 (byte 1), value (bytes 2-3)
-                let mut slot_value = U256::ZERO;
-                if self.flag1 {
-                    slot_value |= U256::from(1);
-                }
-                if self.flag2 {
-                    slot_value |= U256::from(1) << 8;
-                }
-                slot_value |= U256::from(self.value) << 16;
-                storage.sstore(len_slot, slot_value)
-            }
-
-            fn delete<S: StorageOps>(
-                storage: &mut S,
-                len_slot: U256,
-                _ctx: LayoutCtx,
-            ) -> Result<()> {
-                storage.sstore(len_slot, U256::ZERO)
-            }
-
-            fn to_evm_words(&self) -> Result<[U256; 1]> {
-                let mut slot_value = U256::ZERO;
-                if self.flag1 {
-                    slot_value |= U256::from(1);
-                }
-                if self.flag2 {
-                    slot_value |= U256::from(1) << 8;
-                }
-                slot_value |= U256::from(self.value) << 16;
-                Ok([slot_value])
-            }
-
-            fn from_evm_words(words: [U256; 1]) -> Result<Self> {
-                let slot_value = words[0];
-                let flag1 = (slot_value & U256::from(0xFF)) != U256::ZERO;
-                let flag2 = ((slot_value >> 8) & U256::from(0xFF)) != U256::ZERO;
-                let value = u16::try_from((slot_value >> 16) & U256::from(0xFFFF)).unwrap();
-                Ok(Self {
-                    flag1,
-                    flag2,
-                    value,
-                })
-            }
         }
 
         let (mut storage, address) = setup_storage();
