@@ -139,18 +139,19 @@ impl<'a, S: PrecompileStorageProvider> TIP20RewardsRegistry<'a, S> {
 mod tests {
     use super::*;
     use crate::{
-        PATH_USD_ADDRESS,
         error::TempoPrecompileError,
         storage::{ContractStorage, hashmap::HashMapStorageProvider},
         tip20::{ISSUER_ROLE, TIP20Token, tests::initialize_path_usd},
         tip20_rewards_registry::TIP20RewardsRegistry,
     };
-    use tempo_contracts::precompiles::ITIP20;
+    use tempo_chainspec::hardfork::TempoHardfork;
+    use tempo_contracts::precompiles::{ITIP20, PATH_USD_ADDRESS};
 
     fn setup_registry(timestamp: u64) -> (HashMapStorageProvider, Address) {
         let mut storage = HashMapStorageProvider::new(timestamp);
         let admin = Address::random();
         initialize_path_usd(&mut storage, admin).unwrap();
+
         (storage, admin)
     }
 
@@ -311,6 +312,8 @@ mod tests {
             },
         )?;
 
+        // Update spec since scheduled rewards are disabled post adagio
+        token.storage().set_spec(TempoHardfork::Adagio);
         // Start a reward stream that lasts 5 seconds from current time (1500)
         let current_time = token.storage().timestamp().to::<u128>();
         let stream_id = token.start_reward(

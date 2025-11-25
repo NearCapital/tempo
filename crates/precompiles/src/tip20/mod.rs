@@ -938,14 +938,25 @@ pub(crate) mod tests {
     };
     use rand::{Rng, distributions::Alphanumeric, random, thread_rng};
 
-    /// Initialize PathUSD token
+    /// Initialize the TIP20 factory and deploy PathUSD as the first token
     pub(crate) fn initialize_path_usd(
         storage: &mut HashMapStorageProvider,
         admin: Address,
     ) -> Result<()> {
-        // TODO: deploy from the factory
-        let mut path_usd = TIP20Token::from_address(PATH_USD_ADDRESS, storage);
-        path_usd.initialize("PathUSD", "PUSD", "USD", Address::ZERO, admin)
+        let mut factory = TIP20Factory::new(storage);
+        factory.initialize()?;
+        factory.create_token(
+            admin,
+            ITIP20Factory::createTokenCall {
+                name: "PathUSD".into(),
+                symbol: "PathUSD".into(),
+                currency: "USD".into(),
+                quoteToken: Address::ZERO,
+                admin,
+            },
+        )?;
+
+        Ok(())
     }
 
     /// Helper to setup a token with rewards for testing fee transfer functions
@@ -1218,25 +1229,9 @@ pub(crate) mod tests {
     fn test_mint_with_memo() -> eyre::Result<()> {
         let mut storage = HashMapStorageProvider::new(1);
         let admin = Address::random();
+        initialize_path_usd(&mut storage, admin)?;
+
         let token_id = 1;
-
-        let mut factory = TIP20Factory::new(&mut storage);
-        factory
-            .initialize()
-            .expect("Factory initialization should succeed");
-        factory
-            .create_token(
-                admin,
-                ITIP20Factory::createTokenCall {
-                    name: "PathUSD".into(),
-                    symbol: "PathUSD".into(),
-                    currency: "USD".into(),
-                    quoteToken: Address::ZERO,
-                    admin,
-                },
-            )
-            .expect("Couldnt not init pathUSD");
-
         let mut token = TIP20Token::new(token_id, &mut storage);
         token
             .initialize("Test", "TST", "USD", PATH_USD_ADDRESS, admin)
@@ -1326,22 +1321,10 @@ pub(crate) mod tests {
         let mut storage = HashMapStorageProvider::new(1);
         let admin = Address::random();
         let token_id = 1;
-
-        // Create factory and deploy pathUSD
-        let mut factory = TIP20Factory::new(&mut storage);
-        factory.initialize()?;
-        factory.create_token(
-            admin,
-            ITIP20Factory::createTokenCall {
-                name: "PathUSD".into(),
-                symbol: "PathUSD".into(),
-                currency: "USD".into(),
-                quoteToken: Address::ZERO,
-                admin,
-            },
-        )?;
+        initialize_path_usd(&mut storage, admin)?;
 
         // Deploy test token
+        let mut factory = TIP20Factory::new(&mut storage);
         let token_addr = factory.create_token(
             admin,
             ITIP20Factory::createTokenCall {
@@ -1916,21 +1899,8 @@ pub(crate) mod tests {
     fn test_finalize_quote_token_update_detects_loop() -> eyre::Result<()> {
         let mut storage = HashMapStorageProvider::new(1);
         let admin = Address::random();
-
+        initialize_path_usd(&mut storage, admin)?;
         let mut factory = TIP20Factory::new(&mut storage);
-        factory.initialize().unwrap();
-        factory
-            .create_token(
-                admin,
-                ITIP20Factory::createTokenCall {
-                    name: "PathUSD".into(),
-                    symbol: "PathUSD".into(),
-                    currency: "USD".into(),
-                    quoteToken: Address::ZERO,
-                    admin,
-                },
-            )
-            .expect("Couldnt not init pathUSD");
 
         // Create token_b first (links to LINKING_USD)
         let token_b_id =

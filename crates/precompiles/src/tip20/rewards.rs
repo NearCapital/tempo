@@ -928,7 +928,7 @@ mod tests {
 
     #[test]
     fn test_finalize_streams_pre_moderato() -> eyre::Result<()> {
-        let mut storage = HashMapStorageProvider::new_with_spec(1, TempoHardfork::Adagio);
+        let mut storage = HashMapStorageProvider::new(1);
         let current_time = storage.timestamp().to::<u128>();
         let admin = Address::random();
         let alice = Address::random();
@@ -959,6 +959,7 @@ mod tests {
             },
         )?;
 
+        token.storage.set_spec(TempoHardfork::Adagio);
         let stream_duration = 10u32;
         token.start_reward(
             admin,
