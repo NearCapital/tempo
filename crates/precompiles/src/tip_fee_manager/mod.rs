@@ -109,8 +109,11 @@ impl<'a, S: PrecompileStorageProvider> TipFeeManager<'a, S> {
             return Err(FeeManagerError::invalid_token().into());
         }
 
-        // Forbid setting PathUSD as the user's fee token (only after Moderato hardfork)
-        if self.storage.spec().is_moderato() && call.token == PATH_USD_ADDRESS {
+        // Forbid setting PathUSD as the user's fee token after moderato and before allegretto
+        if self.storage.spec().is_moderato()
+            && !self.storage.spec().is_allegretto()
+            && call.token == PATH_USD_ADDRESS
+        {
             return Err(FeeManagerError::invalid_token().into());
         }
 
