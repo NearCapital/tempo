@@ -136,23 +136,36 @@ mod tests {
         tip20::tests::initialize_path_usd,
     };
     use tempo_chainspec::hardfork::TempoHardfork;
+    use tempo_contracts::precompiles::PATH_USD_ADDRESS;
 
     #[test]
     fn test_create_token() {
         let mut storage = HashMapStorageProvider::new(1);
         let sender = Address::random();
-        initialize_path_usd(&mut storage, sender).unwrap();
 
         let mut factory = TIP20Factory::new(&mut storage);
 
         factory
             .initialize()
             .expect("Factory initialization should succeed");
+        factory
+            .create_token(
+                sender,
+                ITIP20Factory::createTokenCall {
+                    name: "PathUSD".into(),
+                    symbol: "PathUSD".into(),
+                    currency: "USD".into(),
+                    quoteToken: Address::ZERO,
+                    admin: sender,
+                },
+            )
+            .expect("Couldnt not init pathUSD");
+
         let call = ITIP20Factory::createTokenCall {
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
             currency: "USD".to_string(),
-            quoteToken: crate::PATH_USD_ADDRESS,
+            quoteToken: PATH_USD_ADDRESS,
             admin: sender,
         };
 
@@ -165,7 +178,7 @@ mod tests {
             .expect("Token creation should succeed");
 
         let factory_events = storage.events.get(&TIP20_FACTORY_ADDRESS).unwrap();
-        assert_eq!(factory_events.len(), 2);
+        assert_eq!(factory_events.len(), 3);
 
         let token_id_0 = address_to_token_id_unchecked(token_addr_0);
         let expected_event_0 = TIP20FactoryEvent::TokenCreated(ITIP20Factory::TokenCreated {
@@ -174,10 +187,10 @@ mod tests {
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
             currency: "USD".to_string(),
-            quoteToken: crate::PATH_USD_ADDRESS,
+            quoteToken: PATH_USD_ADDRESS,
             admin: sender,
         });
-        assert_eq!(factory_events[0], expected_event_0.into_log_data());
+        assert_eq!(factory_events[1], expected_event_0.into_log_data());
 
         let token_id_1 = address_to_token_id_unchecked(token_addr_1);
         let expected_event_1 = TIP20FactoryEvent::TokenCreated(ITIP20Factory::TokenCreated {
@@ -186,11 +199,11 @@ mod tests {
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
             currency: "USD".to_string(),
-            quoteToken: crate::PATH_USD_ADDRESS,
+            quoteToken: PATH_USD_ADDRESS,
             admin: sender,
         });
 
-        assert_eq!(factory_events[1], expected_event_1.into_log_data());
+        assert_eq!(factory_events[2], expected_event_1.into_log_data());
     }
 
     #[test]
