@@ -10,7 +10,10 @@ pub mod vec;
 mod bytes_like;
 mod primitives;
 
-use crate::{error::Result, storage::StorageOps};
+use crate::{
+    error::{Result, TempoPrecompileError},
+    storage::StorageOps,
+};
 use alloy::primitives::{Address, U256};
 use std::rc::Rc;
 
@@ -200,18 +203,47 @@ pub trait Storable: StorableType + Sized {
             }
         }
     }
+}
 
+/// Trait for single-word encoding/decoding, required for packed storage in `Vec<T>`.
+///
+/// When storing elements in [`Vec<T>`], packed storage requires casting values to/from a
+/// U256 word. However, not all [`Storable`] types can be packed based on EVM storage rules.
+///
+/// By separating this into its own trait with default error implementations, we can:
+/// 1. Require the trait bound on `Vec<T>` to enable packed storage
+/// 2. Allow non-packable types to satisfy the bound while failing at runtime if
+///    packing is actually attempted (which would be a bug in the storage logic)
+///
+/// # Implementations
+///
+/// - **Primitives** (`bool`, `Address`, integers, `FixedBytes`): Implement meaningful
+///   conversions via [`Encodable<1>`].
+/// - **Non-packable types** (`Bytes`, `String`, `Vec<T>`, structs, arrays): Use the
+///   default implementation which returns an error.
+///
+/// # Relationship to `IS_PACKABLE`
+///
+/// - Types where [`StorableType::IS_PACKABLE`] is `true` provide working implementations.
+/// - Types where [`StorableType::IS_PACKABLE`] is `false` use the default error.
+pub trait MaybePackable: StorableType + Sized {
     /// Encode this value to a single U256 word for packing.
     ///
-    /// Only valid for single-slot primitive types (`SLOTS == 1`).
-    /// Multi-slot types will panic in debug builds and produce garbage in release.
-    fn to_word(&self) -> Result<U256>;
+    /// Returns an error for non-packable types.
+    fn to_word(&self) -> Result<U256> {
+        Err(TempoPrecompileError::Fatal(
+            "to_word called on non-packable type".to_string(),
+        ))
+    }
 
     /// Decode this type from a single U256 word.
     ///
-    /// Only valid for single-slot primitive types (`SLOTS == 1`).
-    /// Multi-slot types will panic in debug builds and produce garbage in release.
-    fn from_word(word: U256) -> Result<Self>;
+    /// Returns an error for non-packable types.
+    fn from_word(_word: U256) -> Result<Self> {
+        Err(TempoPrecompileError::Fatal(
+            "from_word called on non-packable type".to_string(),
+        ))
+    }
 }
 
 /// Trait for encoding/decoding Rust types to/from EVM storage words.

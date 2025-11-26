@@ -17,7 +17,7 @@ use std::{marker::PhantomData, rc::Rc};
 use crate::{
     error::{Result, TempoPrecompileError},
     storage::{
-        Encodable, Handler, Layout, LayoutCtx, Storable, StorableType, StorageOps,
+        Encodable, Handler, Layout, LayoutCtx, MaybePackable, Storable, StorableType, StorageOps,
         packing::{
             calc_element_loc, calc_packed_slot_count, extract_packed_value, insert_packed_value,
         },
@@ -27,7 +27,7 @@ use crate::{
 
 impl<T> StorableType for Vec<T>
 where
-    T: Storable,
+    T: Storable + MaybePackable,
 {
     /// Vec base slot occupies one full storage slot (stores length).
     const LAYOUT: Layout = Layout::Slots(1);
@@ -40,7 +40,7 @@ where
 
 impl<T> Encodable<1> for Vec<T>
 where
-    T: Storable,
+    T: Storable + MaybePackable,
 {
     fn to_evm_words(&self) -> Result<[U256; 1]> {
         // Vec base slot representation: just the length
@@ -56,7 +56,7 @@ where
 
 impl<T> Storable for Vec<T>
 where
-    T: Storable,
+    T: Storable + MaybePackable,
 {
     fn load<S: StorageOps>(storage: &S, len_slot: U256, ctx: LayoutCtx) -> Result<Self> {
         debug_assert_eq!(ctx, LayoutCtx::FULL, "Dynamic arrays cannot be packed");
@@ -129,17 +129,10 @@ where
 
         Ok(())
     }
-
-    #[inline]
-    fn to_word(&self) -> Result<U256> {
-        Ok(<Self as Encodable<1>>::to_evm_words(self)?[0])
-    }
-
-    #[inline]
-    fn from_word(word: U256) -> Result<Self> {
-        <Self as Encodable<1>>::from_evm_words([word])
-    }
 }
+
+// Vec uses the default MaybePackable implementation (returns error)
+impl<T: Storable + MaybePackable> MaybePackable for Vec<T> {}
 
 /// Type-safe handler for accessing `Vec<T>` in storage.
 ///
@@ -169,7 +162,7 @@ where
 /// ```
 pub struct VecHandler<T>
 where
-    T: Storable,
+    T: Storable + MaybePackable,
 {
     len_slot: U256,
     address: Rc<Address>,
@@ -178,7 +171,7 @@ where
 
 impl<T> Handler<Vec<T>> for VecHandler<T>
 where
-    T: Storable,
+    T: Storable + MaybePackable,
 {
     /// Reads the entire vector from storage.
     #[inline]
@@ -201,7 +194,7 @@ where
 
 impl<T> VecHandler<T>
 where
-    T: Storable,
+    T: Storable + MaybePackable,
 {
     /// Creates a new handler for the vector at the given base slot and address.
     #[inline]
@@ -339,7 +332,7 @@ fn load_packed_elements<T, S>(
     byte_count: usize,
 ) -> Result<Vec<T>>
 where
-    T: Storable,
+    T: Storable + MaybePackable,
     S: StorageOps,
 {
     debug_assert!(
@@ -394,7 +387,7 @@ fn store_packed_elements<T, S>(
     byte_count: usize,
 ) -> Result<()>
 where
-    T: Storable,
+    T: Storable + MaybePackable,
     S: StorageOps,
 {
     debug_assert!(
@@ -421,7 +414,7 @@ where
 /// Takes a slice of elements and packs them into a single U256 word.
 fn build_packed_slot<T>(elements: &[T], byte_count: usize) -> Result<U256>
 where
-    T: Storable,
+    T: Storable + MaybePackable,
 {
     debug_assert!(T::BYTES <= 16, "build_packed_slot requires T::BYTES <= 16");
     let mut slot_value = U256::ZERO;
@@ -476,8 +469,7 @@ where
 mod tests {
     use super::*;
     use crate::storage::{
-        Handler, PrecompileStorageProvider, StorageOps, hashmap::HashMapStorageProvider,
-        packing::gen_word_from,
+        Handler, PrecompileStorageProvider, hashmap::HashMapStorageProvider, packing::gen_word_from,
     };
     use alloy::primitives::Address;
     use proptest::prelude::*;

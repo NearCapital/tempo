@@ -161,29 +161,10 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
             }
 
             // delete uses default implementation from trait
-
-            #[inline]
-            fn to_word(&self) -> crate::error::Result<::alloy::primitives::U256> {
-                if #mod_ident::SLOT_COUNT != 1 {
-                    return Err(crate::error::TempoPrecompileError::Fatal(
-                        "to_word called on multi-slot struct".into()
-                    ));
-                }
-                Ok(<Self as crate::storage::Encodable<{ #mod_ident::SLOT_COUNT }>>::to_evm_words(self)?[0])
-            }
-
-            #[inline]
-            fn from_word(word: ::alloy::primitives::U256) -> crate::error::Result<Self> {
-                if #mod_ident::SLOT_COUNT != 1 {
-                    return Err(crate::error::TempoPrecompileError::Fatal(
-                        "from_word called on multi-slot struct".into()
-                    ));
-                }
-                <Self as crate::storage::Encodable<{ #mod_ident::SLOT_COUNT }>>::from_evm_words(
-                    ::std::array::from_fn(|_| word)
-                )
-            }
         }
+
+        // Structs use the default MaybePackable implementation (returns error)
+        impl #impl_generics crate::storage::MaybePackable for #strukt #ty_generics #where_clause {}
     };
 
     // Generate array implementations if requested
@@ -353,7 +334,7 @@ fn gen_to_evm_words_impl(fields: &[(&Ident, &Type)], packing: &Ident) -> TokenSt
         quote! {{
             const SLOT_COUNT: usize = <#ty as crate::storage::StorableType>::SLOTS;
             if <#ty as crate::storage::StorableType>::IS_PACKABLE {
-                // Packable primitive: use packing module (handles both packed and unpacked)
+                // MaybePackable primitive: use packing module (handles both packed and unpacked)
                 result[#packing::#loc_const.offset_slots] = crate::storage::packing::insert_packed_value::<SLOT_COUNT, #ty>(
                     result[#packing::#loc_const.offset_slots],
                     &self.#name,
@@ -385,7 +366,7 @@ fn gen_from_evm_words_impl(fields: &[(&Ident, &Type)], packing: &Ident) -> Token
             let #name = {
                 const SLOT_COUNT: usize = <#ty as crate::storage::StorableType>::SLOTS;
                 if <#ty as crate::storage::StorableType>::IS_PACKABLE {
-                    // Packable primitive: use packing module (handles both packed and unpacked)
+                    // MaybePackable primitive: use packing module (handles both packed and unpacked)
                     let word = words[#packing::#loc_const.offset_slots];
                     crate::storage::packing::extract_packed_value::<SLOT_COUNT, #ty>(
                         word,

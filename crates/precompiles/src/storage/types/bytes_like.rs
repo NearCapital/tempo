@@ -86,23 +86,10 @@ impl Storable for Bytes {
         debug_assert_eq!(ctx, LayoutCtx::FULL, "Bytes cannot be packed");
         delete_bytes_like(storage, slot)
     }
-
-    #[inline]
-    fn to_word(&self) -> Result<U256> {
-        // Bytes is a dynamic type - cannot be packed into a single word
-        Err(TempoPrecompileError::Fatal(
-            "to_word called on dynamic Bytes type".into(),
-        ))
-    }
-
-    #[inline]
-    fn from_word(_word: U256) -> Result<Self> {
-        // Bytes is a dynamic type - cannot be unpacked from a single word
-        Err(TempoPrecompileError::Fatal(
-            "from_word called on dynamic Bytes type".into(),
-        ))
-    }
 }
+
+// Bytes uses the default MaybePackable implementation (returns error)
+impl MaybePackable for Bytes {}
 
 impl Storable for String {
     #[inline]
@@ -127,23 +114,10 @@ impl Storable for String {
         debug_assert_eq!(ctx, LayoutCtx::FULL, "String cannot be packed");
         delete_bytes_like(storage, slot)
     }
-
-    #[inline]
-    fn to_word(&self) -> Result<U256> {
-        // String is a dynamic type - cannot be packed into a single word
-        Err(TempoPrecompileError::Fatal(
-            "to_word called on dynamic String type".into(),
-        ))
-    }
-
-    #[inline]
-    fn from_word(_word: U256) -> Result<Self> {
-        // String is a dynamic type - cannot be unpacked from a single word
-        Err(TempoPrecompileError::Fatal(
-            "from_word called on dynamic String type".into(),
-        ))
-    }
 }
+
+// String uses the default MaybePackable implementation (returns error)
+impl MaybePackable for String {}
 
 // -- HELPER FUNCTIONS ---------------------------------------------------------
 
