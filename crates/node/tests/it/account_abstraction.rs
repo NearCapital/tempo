@@ -2481,6 +2481,166 @@ async fn test_aa_fee_payer_tx() -> eyre::Result<()> {
     Ok(())
 }
 
+/// Test fee payer flow with reversed signing order (fee payer signs before user)
+/// This verifies that the signing order doesn't matter since the hashes are independent.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_aa_fee_payer_tx_reversed_signing_order() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Setup test node
+    let mut setup = TestNodeBuilder::new()
+        .allegretto_activated()
+        .build_with_node_access()
+        .await?;
+
+    let http_url = setup.node.rpc_url();
+
+    // Fee payer is the funded TEST_MNEMONIC account
+    let fee_payer_signer = MnemonicBuilder::from_phrase(TEST_MNEMONIC).build()?;
+    let fee_payer_addr = fee_payer_signer.address();
+
+    // User is a fresh random account with no balance
+    let user_signer = alloy::signers::local::PrivateKeySigner::random();
+    let user_addr = user_signer.address();
+
+    // Create provider without wallet (we'll sign manually)
+    let provider = ProviderBuilder::new().connect_http(http_url.clone());
+
+    let chain_id = provider.get_chain_id().await?;
+
+    println!("\n=== Testing AA Fee Payer Transaction (Reversed Signing Order) ===\n");
+    println!("Fee payer address: {fee_payer_addr}");
+    println!("User address: {user_addr} (unfunded)");
+
+    // Verify user has ZERO balance (check AlphaUSD since that's what fees are paid in)
+    let user_token_balance = ITIP20::new(DEFAULT_FEE_TOKEN_PRE_ALLEGRETTO, &provider)
+        .balanceOf(user_addr)
+        .call()
+        .await?;
+    assert_eq!(
+        user_token_balance,
+        U256::ZERO,
+        "User should have zero balance"
+    );
+    println!("User token balance: {user_token_balance} (expected: 0)");
+
+    // Get fee payer's balance before transaction (check AlphaUSD since that's what fees are paid in)
+    let fee_payer_balance_before = ITIP20::new(DEFAULT_FEE_TOKEN_PRE_ALLEGRETTO, &provider)
+        .balanceOf(fee_payer_addr)
+        .call()
+        .await?;
+    println!("Fee payer balance before: {fee_payer_balance_before} tokens");
+
+    // Create AA transaction with fee payer signature placeholder
+    let recipient = Address::random();
+    let mut tx = create_basic_aa_tx(
+        chain_id,
+        0, // First transaction for user
+        vec![Call {
+            to: recipient.into(),
+            value: U256::ZERO,
+            input: Bytes::new(),
+        }],
+        100_000,
+    );
+    tx.fee_payer_signature = Some(Signature::new(U256::ZERO, U256::ZERO, false)); // Placeholder
+
+    println!("Created AA transaction with fee payer placeholder");
+
+    // Step 1: Fee payer signs FIRST (reversed order)
+    let fee_payer_sig_hash = tx.fee_payer_signature_hash(user_addr);
+    let fee_payer_signature = fee_payer_signer.sign_hash_sync(&fee_payer_sig_hash)?;
+    println!("✓ Fee payer signed fee payer hash FIRST");
+
+    // Verify fee payer signature is valid
+    assert_eq!(
+        fee_payer_signature
+            .recover_address_from_prehash(&fee_payer_sig_hash)
+            .unwrap(),
+        fee_payer_addr,
+        "Fee payer signature should recover to fee payer address"
+    );
+
+    // Step 2: User signs SECOND (reversed order)
+    let user_sig_hash = tx.signature_hash();
+    let user_signature = user_signer.sign_hash_sync(&user_sig_hash)?;
+    println!("✓ User signed transaction SECOND");
+
+    // Verify user signature is valid
+    assert_eq!(
+        user_signature
+            .recover_address_from_prehash(&user_sig_hash)
+            .unwrap(),
+        user_addr,
+        "User signature should recover to user address"
+    );
+
+    // Step 3: Update transaction with real fee payer signature
+    tx.fee_payer_signature = Some(fee_payer_signature);
+
+    // Create signed transaction with user's signature
+    let aa_signature = AASignature::Primitive(PrimitiveSignature::Secp256k1(user_signature));
+    let encoded = encode_aa_tx(tx.clone(), aa_signature.clone());
+
+    // Recreate envelope for verification
+    let signed_tx = AASigned::new_unhashed(tx, aa_signature);
+    let envelope: TempoTxEnvelope = signed_tx.into();
+
+    println!(
+        "Encoded AA transaction: {} bytes (type: 0x{:02x})",
+        encoded.len(),
+        encoded[0]
+    );
+
+    // Inject transaction and mine block
+    setup.node.rpc.inject_tx(encoded.clone().into()).await?;
+    let payload = setup.node.advance_block().await?;
+
+    println!(
+        "✓ AA fee payer transaction (reversed signing) mined in block {}",
+        payload.block().inner.number
+    );
+
+    // Verify transaction can be fetched via eth_getTransactionByHash and is correct
+    verify_tx_in_block_via_rpc(&provider, &encoded, &envelope).await?;
+
+    // Verify the transaction was successful
+    assert!(
+        !payload.block().body().transactions.is_empty(),
+        "Block should contain the fee payer transaction"
+    );
+
+    // Verify user still has ZERO balance (fee payer paid)
+    let user_token_balance_after = ITIP20::new(DEFAULT_FEE_TOKEN_PRE_ALLEGRETTO, &provider)
+        .balanceOf(user_addr)
+        .call()
+        .await?;
+    assert_eq!(
+        user_token_balance_after,
+        U256::ZERO,
+        "User should still have zero balance"
+    );
+
+    // Verify fee payer's balance decreased (check AlphaUSD since that's what fees are paid in)
+    let fee_payer_balance_after = ITIP20::new(DEFAULT_FEE_TOKEN_PRE_ALLEGRETTO, &provider)
+        .balanceOf(fee_payer_addr)
+        .call()
+        .await?;
+
+    println!("Fee payer balance after: {fee_payer_balance_after} tokens");
+
+    assert!(
+        fee_payer_balance_after < fee_payer_balance_before,
+        "Fee payer balance should have decreased"
+    );
+
+    let gas_cost = fee_payer_balance_before - fee_payer_balance_after;
+    println!("Gas cost paid by fee payer: {gas_cost} tokens");
+    println!("✓ Reversed signing order works correctly!");
+
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_aa_empty_call_batch_should_fail() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
