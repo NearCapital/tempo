@@ -21,7 +21,7 @@ use tracing::{Span, info, instrument, warn};
 use crate::{
     consensus::block::Block,
     dkg::{
-        HardforkRegime,
+        HardforkRegime, RegimeEpochState,
         ceremony::{self, Ceremony},
         manager::{
             actor::{DkgOutcome, pre_allegretto},
@@ -594,4 +594,8 @@ impl Read for EpochState {
             validator_state,
         })
     }
+}
+
+impl RegimeEpochState for EpochState {
+    const REGIME: HardforkRegime = HardforkRegime::PostAllegretto;
 }

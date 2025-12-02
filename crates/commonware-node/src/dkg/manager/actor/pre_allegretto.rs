@@ -23,7 +23,7 @@ use tracing::{Span, info, instrument, warn};
 use crate::{
     consensus::block::Block,
     dkg::{
-        HardforkRegime,
+        HardforkRegime, RegimeEpochState,
         ceremony::{self, Ceremony},
         manager::validators::ValidatorState,
     },
@@ -554,4 +554,8 @@ impl Read for EpochState {
             share,
         })
     }
+}
+
+impl RegimeEpochState for EpochState {
+    const REGIME: HardforkRegime = HardforkRegime::PreAllegretto;
 }
