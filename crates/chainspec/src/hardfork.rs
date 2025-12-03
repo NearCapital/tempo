@@ -5,11 +5,11 @@
 //! ## Usage
 //!
 //! When a new hardfork is needed:
-//! 1. Add a new variant to `TempoHardfork` (e.g., `Allegro`, `Vivace`)
-//! 2. Add a field to `TempoGenesisInfo` in `spec.rs` (e.g., `allegro_time: Option<u64>`)
+//! 1. Add a new variant to `TempoHardfork` (e.g., `Vivace`, `Prestissimo`)
+//! 2. Add a field to `TempoGenesisInfo` in `spec.rs` (e.g., `vivace_time: Option<u64>`)
 //! 3. Add the hardfork to the `tempo_hardfork_opts` array in `TempoChainSpec::from_genesis`
 //! 4. Add a convenience method to `TempoHardforks` trait (optional, for ergonomics)
-//! 5. Update genesis files with the activation timestamp (e.g., `"allegroTime": 1234567890`)
+//! 5. Update genesis files with the activation timestamp (e.g., `"vivaceTime": 1234567890`)
 //! 6. Use hardfork checks in the EVM handler and precompiles to gate new features
 //!
 //! ## Current State
@@ -32,6 +32,8 @@ hardfork!(
         Moderato,
         /// Allegretto hardfork.
         Allegretto,
+        /// Allegro hardfork.
+        Allegro,
     }
 );
 
@@ -45,6 +47,11 @@ impl TempoHardfork {
     /// Returns `true` if this hardfork is Allegretto or later.
     pub fn is_allegretto(self) -> bool {
         self >= Self::Allegretto
+    }
+
+    /// Returns `true` if this hardfork is Allegro or later.
+    pub fn is_allegro(self) -> bool {
+        self >= Self::Allegro
     }
 }
 
@@ -71,9 +78,17 @@ pub trait TempoHardforks: EthereumHardforks {
             .active_at_timestamp(timestamp)
     }
 
+    /// Convenience method to check if Allegro hardfork is active at a given timestamp
+    fn is_allegro_active_at_timestamp(&self, timestamp: u64) -> bool {
+        self.tempo_fork_activation(TempoHardfork::Allegro)
+            .active_at_timestamp(timestamp)
+    }
+
     /// Retrieves the latest Tempo hardfork active at a given timestamp.
     fn tempo_hardfork_at(&self, timestamp: u64) -> TempoHardfork {
-        if self.is_allegretto_active_at_timestamp(timestamp) {
+        if self.is_allegro_active_at_timestamp(timestamp) {
+            TempoHardfork::Allegro
+        } else if self.is_allegretto_active_at_timestamp(timestamp) {
             TempoHardfork::Allegretto
         } else if self.is_moderato_active_at_timestamp(timestamp) {
             TempoHardfork::Moderato
@@ -89,6 +104,7 @@ impl From<TempoHardfork> for SpecId {
             TempoHardfork::Adagio => Self::OSAKA,
             TempoHardfork::Moderato => Self::OSAKA,
             TempoHardfork::Allegretto => Self::OSAKA,
+            TempoHardfork::Allegro => Self::OSAKA,
         }
     }
 }
@@ -100,7 +116,9 @@ impl From<SpecId> for TempoHardfork {
     /// `From<TempoHardfork> for SpecId`, because multiple Tempo
     /// hardforks may share the same underlying EVM spec.
     fn from(spec: SpecId) -> Self {
-        if spec.is_enabled_in(SpecId::from(Self::Allegretto)) {
+        if spec.is_enabled_in(SpecId::from(Self::Allegro)) {
+            Self::Allegro
+        } else if spec.is_enabled_in(SpecId::from(Self::Allegretto)) {
             Self::Allegretto
         } else if spec.is_enabled_in(SpecId::from(Self::Moderato)) {
             Self::Moderato
@@ -155,7 +173,17 @@ mod tests {
         assert!(!TempoHardfork::Moderato.is_allegretto());
 
         assert!(TempoHardfork::Allegretto.is_allegretto());
-
         assert!(TempoHardfork::Allegretto.is_moderato());
+    }
+
+    #[test]
+    fn test_is_allegro() {
+        assert!(!TempoHardfork::Adagio.is_allegro());
+        assert!(!TempoHardfork::Moderato.is_allegro());
+        assert!(!TempoHardfork::Allegretto.is_allegro());
+
+        assert!(TempoHardfork::Allegro.is_allegro());
+        assert!(TempoHardfork::Allegro.is_allegretto());
+        assert!(TempoHardfork::Allegro.is_moderato());
     }
 }
