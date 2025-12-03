@@ -1,12 +1,17 @@
 //! Test utilities for precompile dispatch testing
 
-use crate::{Precompile, storage::hashmap::HashMapStorageProvider};
+use crate::{
+    PATH_USD_ADDRESS, Precompile, Result,
+    storage::{Handler, StorageContext, hashmap::HashMapStorageProvider},
+    tip20::{self, ITIP20, TIP20Token},
+    tip20_factory::{self, TIP20Factory},
+};
 use alloy::{
     primitives::{Address, B256, Bytes, U256},
     sol_types::SolError,
 };
 use revm::precompile::PrecompileError;
-use tempo_contracts::precompiles::UnknownFunctionSelector;
+use tempo_contracts::precompiles::{TIP20_FACTORY_ADDRESS, UnknownFunctionSelector};
 
 /// A macro to generate a new precompile test case
 ///
@@ -117,8 +122,6 @@ pub fn setup_storage() -> (HashMapStorageProvider, Address) {
 ///
 /// Handles PathUSD initialization, factory creation, role grants, minting,
 /// approvals, and reward configuration in a single chainable API.
-///
-/// NOTE: uses fully-qualified paths because it's used in `precompile_test!`
 #[derive(Default)]
 pub struct TIP20Builder {
     name: String,
@@ -137,7 +140,7 @@ pub struct TIP20Builder {
 impl TIP20Builder {
     /// Create a new token builder with required fields.
     ///
-    /// Defaults: currency="USD", quote_token=PathUSD, fee_recipient=ZERO
+    /// Defaults to `currency: "USD"`, `quote_token: PathUSD`, `fee_recipient: Address::ZERO`
     pub fn new(name: &str, symbol: &str, admin: Address) -> Self {
         Self {
             name: name.to_string(),
@@ -204,43 +207,56 @@ impl TIP20Builder {
         self
     }
 
-    /// Build the token, returning just the TIP20Token.
-    pub fn build(self) -> crate::error::Result<crate::tip20::TIP20Token> {
-        self.build_with_id().map(|(_, token)| token)
-    }
-
-    /// Build the token, returning both token_id and TIP20Token.
-    pub fn build_with_id(self) -> crate::error::Result<(u64, crate::tip20::TIP20Token)> {
-        use crate::{
-            PATH_USD_ADDRESS, TIP20_FACTORY_ADDRESS,
-            tip20::{ITIP20, TIP20Token, address_to_token_id_unchecked},
-            tip20_factory::{ITIP20Factory, TIP20Factory},
-        };
-
-        // Initialize PathUSD if needed
+    /// Initialize PathUSD (token 0) if needed and return it.
+    pub fn path_usd(admin: Address) -> Result<TIP20Token> {
+        let mut path_usd = TIP20Token::from_address(PATH_USD_ADDRESS);
         if !is_initialized(PATH_USD_ADDRESS)? {
-            let mut path_usd = TIP20Token::from_address(PATH_USD_ADDRESS);
             path_usd.initialize(
                 "PathUSD",
                 "PUSD",
                 "USD",
                 Address::ZERO,
-                self.admin,
+                admin,
                 Address::ZERO,
             )?;
         }
 
-        // Initialize factory if needed
+        Ok(path_usd)
+    }
+
+    /// Initialize the TIP20 factory if needed. Skips token 0 in Allegretto.
+    pub fn factory() -> Result<TIP20Factory> {
         let mut factory = TIP20Factory::new();
         if !is_initialized(TIP20_FACTORY_ADDRESS)? {
             factory.initialize()?;
         }
 
+        // In Allegretto mode, token 0 is PathUSD, so we ensure the counter is, at least, 1.
+        if StorageContext.spec().is_allegretto() {
+            if factory.token_id_counter()?.is_zero() {
+                factory.token_id_counter.write(U256::ONE)?;
+            }
+        }
+
+        Ok(factory)
+    }
+
+    /// Build the token, returning just the TIP20Token.
+    pub fn build(self) -> Result<TIP20Token> {
+        self.build_with_id().map(|(_, token)| token)
+    }
+
+    /// Build the token, returning both token_id and TIP20Token.
+    pub fn build_with_id(self) -> Result<(u64, TIP20Token)> {
+        // Initialize factory and pathUSD if needed
+        let mut factory = Self::factory()?;
+        let _ = Self::path_usd(self.admin)?;
+
         // Create token via factory
         let quote = self.quote_token.unwrap_or(PATH_USD_ADDRESS);
         let token_address = factory.create_token(
             self.admin,
-            ITIP20Factory::createTokenCall {
+            tip20_factory::ITIP20Factory::createTokenCall {
                 name: self.name,
                 symbol: self.symbol,
                 currency: self.currency,
@@ -249,7 +265,7 @@ impl TIP20Builder {
             },
         )?;
 
-        let token_id = address_to_token_id_unchecked(token_address);
+        let token_id = tip20::address_to_token_id_unchecked(token_address);
         let mut token = TIP20Token::new(token_id);
 
         // Apply roles
@@ -282,7 +298,7 @@ impl TIP20Builder {
 }
 
 /// Checks if a contract at the given address has bytecode deployed.
-pub fn is_initialized(address: Address) -> crate::error::Result<bool> {
+pub fn is_initialized(address: Address) -> Result<bool> {
     use crate::storage::StorageContext;
     let account_info = StorageContext.get_account_info(address)?;
     Ok(!account_info.is_empty_code_hash())
