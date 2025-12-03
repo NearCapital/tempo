@@ -8,8 +8,8 @@ pub use error::{IntoPrecompileResult, Result};
 pub mod storage;
 
 pub mod account_keychain;
+pub mod nonce;
 pub mod path_usd;
-// pub mod nonce;
 // pub mod stablecoin_exchange;
 pub mod tip20;
 pub mod tip20_factory;

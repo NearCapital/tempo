@@ -136,7 +136,8 @@ impl PrecompileStorageProvider for HashMapStorageProvider {
 
     #[cfg(any(test, feature = "test-utils"))]
     fn get_events(&self, address: Address) -> &Vec<LogData> {
-        &self.events[&address]
+        static EMPTY: Vec<LogData> = Vec::new();
+        self.events.get(&address).unwrap_or(&EMPTY)
     }
 
     #[cfg(any(test, feature = "test-utils"))]

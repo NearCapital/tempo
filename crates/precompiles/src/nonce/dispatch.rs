@@ -7,7 +7,7 @@ use revm::precompile::{PrecompileError, PrecompileResult};
 
 use super::INonce;
 
-impl<S: PrecompileStorageProvider> Precompile for NonceManager<'_, S> {
+impl Precompile for NonceManager {
     fn call(&mut self, calldata: &[u8], _msg_sender: Address) -> PrecompileResult {
         self.storage
             .deduct_gas(input_cost(calldata.len()))
@@ -33,7 +33,7 @@ impl<S: PrecompileStorageProvider> Precompile for NonceManager<'_, S> {
             _ => unknown_selector(selector, self.storage.gas_used(), self.storage.spec()),
         };
 
-        result.map(|res| fill_precompile_output(res, self.storage))
+        result.map(|res| fill_precompile_output(res, &mut self.storage))
     }
 }
 
@@ -41,15 +41,14 @@ impl<S: PrecompileStorageProvider> Precompile for NonceManager<'_, S> {
 mod tests {
     use super::*;
     use crate::{
-        storage::hashmap::HashMapStorageProvider,
+        storage::StorageContext,
+        test_precompile,
         test_util::{assert_full_coverage, check_selector_coverage},
     };
     use tempo_contracts::precompiles::INonce::INonceCalls;
 
-    #[test]
-    fn nonce_test_selector_coverage() {
-        let mut storage = HashMapStorageProvider::new(1);
-        let mut nonce_manager = NonceManager::new(&mut storage);
+    test_precompile!(nonce_selector_coverage, || {
+        let mut nonce_manager = NonceManager::new();
 
         let unsupported =
             check_selector_coverage(&mut nonce_manager, INonceCalls::SELECTORS, "INonce", |s| {
@@ -57,5 +56,6 @@ mod tests {
             });
 
         assert_full_coverage([unsupported]);
-    }
+        Ok(())
+    });
 }

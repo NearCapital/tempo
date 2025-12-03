@@ -2,7 +2,7 @@
 
 use crate::{
     PATH_USD_ADDRESS, Precompile, Result,
-    storage::{Handler, StorageContext, hashmap::HashMapStorageProvider},
+    storage::{StorageContext, hashmap::HashMapStorageProvider},
     tip20::{self, ITIP20, TIP20Token},
     tip20_factory::{self, TIP20Factory},
 };
@@ -230,9 +230,26 @@ impl TIP20Builder {
 
     /// Initialize PathUSD (token 0) if needed and return it.
     pub fn path_usd(admin: Address) -> Result<TIP20Token> {
-        let mut path_usd = TIP20Token::from_address(PATH_USD_ADDRESS);
-        if !is_initialized(PATH_USD_ADDRESS)? {
-            path_usd.initialize(
+        if is_initialized(PATH_USD_ADDRESS)? {
+            return Ok(TIP20Token::from_address(PATH_USD_ADDRESS));
+        }
+
+        // In Allegretto, PathUSD is token 0 created via factory with quoteToken=0
+        if StorageContext.spec().is_allegretto() {
+            let mut factory = Self::factory()?;
+            factory.create_token(
+                admin,
+                tip20_factory::ITIP20Factory::createTokenCall {
+                    name: "PathUSD".to_string(),
+                    symbol: "PUSD".to_string(),
+                    currency: "USD".to_string(),
+                    quoteToken: Address::ZERO,
+                    admin,
+                },
+            )?;
+        } else {
+            // Pre-Allegretto: direct initialization
+            TIP20Token::from_address(PATH_USD_ADDRESS).initialize(
                 "PathUSD",
                 "PUSD",
                 "USD",
@@ -242,23 +259,15 @@ impl TIP20Builder {
             )?;
         }
 
-        Ok(path_usd)
+        Ok(TIP20Token::from_address(PATH_USD_ADDRESS))
     }
 
-    /// Initialize the TIP20 factory if needed. Skips token 0 in Allegretto.
+    /// Initialize the TIP20 factory if needed.
     pub fn factory() -> Result<TIP20Factory> {
         let mut factory = TIP20Factory::new();
         if !is_initialized(TIP20_FACTORY_ADDRESS)? {
             factory.initialize()?;
         }
-
-        // In Allegretto mode, token 0 is PathUSD, so we ensure the counter is, at least, 1.
-        if StorageContext.spec().is_allegretto() {
-            if factory.token_id_counter()?.is_zero() {
-                factory.token_id_counter.write(U256::ONE)?;
-            }
-        }
-
         Ok(factory)
     }
 
