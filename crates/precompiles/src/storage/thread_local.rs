@@ -149,7 +149,7 @@ impl StorageContext {
     }
 
     pub fn refund_gas(&mut self, gas: i64) {
-        let _ = Self::with_storage(|s| Ok(s.refund_gas(gas)));
+        Self::with_storage(|s| s.refund_gas(gas))
     }
 
     pub fn gas_used(&self) -> u64 {
@@ -157,8 +157,7 @@ impl StorageContext {
     }
 
     pub fn gas_refunded(&self) -> i64 {
-        // NOTE: safe to unwrap as `gas_refunded()` is infallible.
-        Self::with_storage(|s| Ok(s.gas_refunded())).unwrap()
+        Self::with_storage(|s| s.gas_refunded())
     }
 
     pub fn spec(&self) -> TempoHardfork {
