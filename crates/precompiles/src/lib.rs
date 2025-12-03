@@ -16,7 +16,7 @@ pub mod tip20_factory;
 pub mod tip20_rewards_registry;
 pub mod tip403_registry;
 pub mod tip_account_registrar;
-// pub mod tip_fee_manager;
+pub mod tip_fee_manager;
 // pub mod validator_config;
 
 // #[cfg(any(test, feature = "test-utils"))]
@@ -52,18 +52,10 @@ use revm::{
 };
 
 pub use tempo_contracts::precompiles::{
-    ACCOUNT_KEYCHAIN_ADDRESS,
-    // DEFAULT_FEE_TOKEN_POST_ALLEGRETTO,
-    // DEFAULT_FEE_TOKEN_PRE_ALLEGRETTO,
-    NONCE_PRECOMPILE_ADDRESS,
-    PATH_USD_ADDRESS,
-    STABLECOIN_EXCHANGE_ADDRESS,
-    TIP_ACCOUNT_REGISTRAR,
-    TIP_FEE_MANAGER_ADDRESS,
-    TIP20_FACTORY_ADDRESS,
-    TIP20_REWARDS_REGISTRY_ADDRESS,
-    TIP403_REGISTRY_ADDRESS,
-    VALIDATOR_CONFIG_ADDRESS,
+    ACCOUNT_KEYCHAIN_ADDRESS, DEFAULT_FEE_TOKEN_POST_ALLEGRETTO, DEFAULT_FEE_TOKEN_PRE_ALLEGRETTO,
+    NONCE_PRECOMPILE_ADDRESS, PATH_USD_ADDRESS, STABLECOIN_EXCHANGE_ADDRESS, TIP_ACCOUNT_REGISTRAR,
+    TIP_FEE_MANAGER_ADDRESS, TIP20_FACTORY_ADDRESS, TIP20_REWARDS_REGISTRY_ADDRESS,
+    TIP403_REGISTRY_ADDRESS, VALIDATOR_CONFIG_ADDRESS,
 };
 
 // Re-export storage layout helpers for read-only contexts (e.g., pool validation)
