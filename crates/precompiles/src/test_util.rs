@@ -332,7 +332,7 @@ impl TIP20Builder {
 /// Checks if a contract at the given address has bytecode deployed.
 #[cfg(any(test, feature = "test-utils"))]
 fn is_initialized(address: Address) -> bool {
-    crate::storage::StorageContext::default().has_bytecode(address)
+    crate::storage::StorageContext.has_bytecode(address)
 }
 
 /// Test helper function for constructing EVM words from hex string literals.

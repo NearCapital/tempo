@@ -226,7 +226,7 @@ impl OrderbookHandler {
     /// Find next initialized ask tick higher than current tick
     fn next_initialized_ask_tick(&self, tick: i16) -> (i16, bool) {
         // Guard against overflow when tick is at or above MAX_TICK
-        if StorageContext::default().spec().is_allegretto() && tick >= MAX_TICK {
+        if StorageContext.spec().is_allegretto() && tick >= MAX_TICK {
             return (MAX_TICK, false);
         }
         let mut next_tick = tick + 1;
@@ -242,7 +242,7 @@ impl OrderbookHandler {
     /// Find next initialized bid tick lower than current tick
     fn next_initialized_bid_tick(&self, tick: i16) -> (i16, bool) {
         // Guard against underflow when tick is at or below MIN_TICK
-        if StorageContext::default().spec().is_allegretto() && tick <= MIN_TICK {
+        if StorageContext.spec().is_allegretto() && tick <= MIN_TICK {
             return (MIN_TICK, false);
         }
         let mut next_tick = tick - 1;
