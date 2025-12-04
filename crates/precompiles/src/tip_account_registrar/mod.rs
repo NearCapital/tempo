@@ -50,7 +50,7 @@ impl<'a, S: PrecompileStorageProvider> TipAccountRegistrar<'a, S> {
         let (sig, v) = validate_signature(&signature)?;
 
         let signer = match ecrecover(&sig, v, &hash) {
-            Ok(recovered_addr) => Address::from_word(recovered_addr),
+            Ok(recovered_addr) => Address::from_word(recovered_addr)?,
             Err(_) => {
                 return Err(TIPAccountRegistrarError::invalid_signature().into());
             }

@@ -82,7 +82,7 @@ pub fn extract_packed_value<T: Packable>(
     let mask = create_element_mask(bytes);
 
     // Extract and right-align the value
-    Ok(T::from_word((slot_value >> shift_bits) & mask))
+    T::from_word((slot_value >> shift_bits) & mask)
 }
 
 /// Insert a packed value into a storage slot at a given byte offset.
@@ -187,6 +187,7 @@ pub const fn calc_packed_slot_count(n: usize, elem_bytes: usize) -> usize {
 /// ]);
 /// // Produces: [10 zeros] [0x2a] [20 bytes of 0x11] [0x01]
 /// ```
+#[cfg(any(test, feature = "test-utils"))]
 pub fn gen_word_from(values: &[&str]) -> U256 {
     let mut bytes = Vec::new();
 
