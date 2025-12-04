@@ -11253,6 +11253,7 @@ dependencies = [
  "serde",
  "tempo-contracts",
  "tempo-evm",
+ "tempo-precompiles",
  "tempo-primitives",
  "tempo-revm",
  "test-case",

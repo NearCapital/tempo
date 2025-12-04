@@ -462,6 +462,41 @@ impl From<TxAA> for TempoTypedTransaction {
     }
 }
 
+impl SignableTransaction<Signature> for TempoTypedTransaction {
+    fn set_chain_id(&mut self, chain_id: alloy_primitives::ChainId) {
+        match self {
+            Self::Legacy(tx_legacy) => tx_legacy.set_chain_id(chain_id),
+            Self::Eip2930(tx_eip2930) => tx_eip2930.set_chain_id(chain_id),
+            Self::Eip1559(tx_eip1559) => tx_eip1559.set_chain_id(chain_id),
+            Self::Eip7702(tx_eip7702) => tx_eip7702.set_chain_id(chain_id),
+            Self::AA(tx_aa) => tx_aa.set_chain_id(chain_id),
+            Self::FeeToken(tx_fee_token) => tx_fee_token.set_chain_id(chain_id),
+        }
+    }
+
+    fn encode_for_signing(&self, out: &mut dyn alloy_rlp::BufMut) {
+        match self {
+            Self::Legacy(tx_legacy) => tx_legacy.encode_for_signing(out),
+            Self::Eip2930(tx_eip2930) => tx_eip2930.encode_for_signing(out),
+            Self::Eip1559(tx_eip1559) => tx_eip1559.encode_for_signing(out),
+            Self::Eip7702(tx_eip7702) => tx_eip7702.encode_for_signing(out),
+            Self::AA(tx_aa) => tx_aa.encode_for_signing(out),
+            Self::FeeToken(tx_fee_token) => tx_fee_token.encode_for_signing(out),
+        }
+    }
+
+    fn payload_len_for_signature(&self) -> usize {
+        match self {
+            Self::Legacy(tx_legacy) => tx_legacy.payload_len_for_signature(),
+            Self::Eip2930(tx_eip2930) => tx_eip2930.payload_len_for_signature(),
+            Self::Eip1559(tx_eip1559) => tx_eip1559.payload_len_for_signature(),
+            Self::Eip7702(tx_eip7702) => tx_eip7702.payload_len_for_signature(),
+            Self::AA(tx_aa) => tx_aa.payload_len_for_signature(),
+            Self::FeeToken(tx_fee_token) => tx_fee_token.payload_len_for_signature(),
+        }
+    }
+}
+
 #[cfg(feature = "rpc")]
 impl reth_rpc_convert::SignableTxRequest<TempoTxEnvelope>
     for alloy_rpc_types_eth::TransactionRequest

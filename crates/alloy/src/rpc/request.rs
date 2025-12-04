@@ -354,3 +354,62 @@ impl<P: Provider<TempoNetwork>, D: CallDecoder> TempoCallBuilderExt
         self.map(|request| request.with_nonce_key(nonce_key))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use alloy_network::ReceiptResponse;
+    use alloy_primitives::{address, ruint::aliases::U256};
+    use alloy_provider::{Provider, ProviderBuilder};
+    use alloy_signer_local::PrivateKeySigner;
+    use tempo_contracts::precompiles::IRolesAuth;
+    use tempo_precompiles::tip20::ISSUER_ROLE;
+
+    use crate::{TempoNetwork, rpc::TempoCallBuilderExt};
+
+    #[tokio::test]
+    async fn test_request() {
+        let signer = PrivateKeySigner::from_str(
+            "0x85b449cf52f7eda099bf03fe5e550e74f112e29478e479ac4f187f4779b81da2",
+        )
+        .unwrap();
+        let caller = signer.address();
+
+        let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
+            .wallet(signer)
+            .connect_http("http://devnet-public-rpc-service:8545".parse().unwrap());
+
+        let roles = IRolesAuth::new(
+            address!("0x20c00000000000000000000000000000000001af"),
+            provider.clone(),
+        );
+        let tx = roles
+            .grantRole(*ISSUER_ROLE, caller)
+            .from(caller)
+            .chain_id(42429)
+            .nonce_key(U256::random())
+            .nonce(0);
+
+        let eip1550_fees = provider.estimate_eip1559_fees().await.unwrap();
+        // XXX: estimation is wrong here
+        let gas = provider
+            .estimate_gas(tx.clone().into_transaction_request())
+            .await
+            .unwrap();
+
+        let tx = tx
+            .max_fee_per_gas(eip1550_fees.max_fee_per_gas)
+            .max_priority_fee_per_gas(eip1550_fees.max_priority_fee_per_gas)
+            .gas(gas);
+        println!(
+            "{:#?}",
+            tx.clone().into_transaction_request().build_aa().unwrap()
+        );
+
+        let receipt = tx.send_sync().await.unwrap();
+        println!("hash: {}", receipt.transaction_hash());
+        // XXX: returns false, should be true
+        println!("success: {}", receipt.status());
+    }
+}

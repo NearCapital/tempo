@@ -231,6 +231,8 @@ impl MaxTpsArgs {
                 .map(async |(_, provider)| {
                     IFeeManagerInstance::new(TIP_FEE_MANAGER_ADDRESS, provider.clone())
                         .setUserToken(self.fee_token)
+                        // Force non-AA transaction
+                        .nonce(0)
                         .send()
                         .await
                 })
