@@ -230,7 +230,7 @@ impl TIP20Builder {
 
     /// Initialize PathUSD (token 0) if needed and return it.
     pub fn path_usd(admin: Address) -> Result<TIP20Token> {
-        if is_initialized(PATH_USD_ADDRESS)? {
+        if is_initialized(PATH_USD_ADDRESS) {
             return Ok(TIP20Token::from_address(PATH_USD_ADDRESS));
         }
 
@@ -265,7 +265,7 @@ impl TIP20Builder {
     /// Initialize the TIP20 factory if needed.
     pub fn factory() -> Result<TIP20Factory> {
         let mut factory = TIP20Factory::new();
-        if !is_initialized(TIP20_FACTORY_ADDRESS)? {
+        if !is_initialized(TIP20_FACTORY_ADDRESS) {
             factory.initialize()?;
         }
         Ok(factory)
@@ -328,8 +328,54 @@ impl TIP20Builder {
 }
 
 /// Checks if a contract at the given address has bytecode deployed.
-pub fn is_initialized(address: Address) -> Result<bool> {
-    use crate::storage::StorageContext;
-    let account_info = StorageContext.get_account_info(address)?;
-    Ok(!account_info.is_empty_code_hash())
+fn is_initialized(address: Address) -> bool {
+    crate::storage::StorageContext.has_bytecode(address)
+}
+
+/// Test helper function for constructing EVM words from hex string literals.
+///
+/// Takes an array of hex strings (with or without "0x" prefix), concatenates
+/// them left-to-right, left-pads with zeros to 32 bytes, and returns a U256.
+///
+/// # Example
+/// ```ignore
+/// let word = gen_word_from(&[
+///     "0x2a",                                        // 1 byte
+///     "0x1111111111111111111111111111111111111111",  // 20 bytes
+///     "0x01",                                        // 1 byte
+/// ]);
+/// // Produces: [10 zeros] [0x2a] [20 bytes of 0x11] [0x01]
+/// ```
+pub fn gen_word_from(values: &[&str]) -> U256 {
+    let mut bytes = Vec::new();
+
+    for value in values {
+        let hex_str = value.strip_prefix("0x").unwrap_or(value);
+
+        // Parse hex string to bytes
+        assert!(
+            hex_str.len() % 2 == 0,
+            "Hex string '{value}' has odd length"
+        );
+
+        for i in (0..hex_str.len()).step_by(2) {
+            let byte_str = &hex_str[i..i + 2];
+            let byte = u8::from_str_radix(byte_str, 16)
+                .unwrap_or_else(|e| panic!("Invalid hex in '{value}': {e}"));
+            bytes.push(byte);
+        }
+    }
+
+    assert!(
+        bytes.len() <= 32,
+        "Total bytes ({}) exceed 32-byte slot limit",
+        bytes.len()
+    );
+
+    // Left-pad with zeros to 32 bytes
+    let mut slot_bytes = [0u8; 32];
+    let start_idx = 32 - bytes.len();
+    slot_bytes[start_idx..].copy_from_slice(&bytes);
+
+    U256::from_be_bytes(slot_bytes)
 }

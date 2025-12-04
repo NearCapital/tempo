@@ -41,8 +41,12 @@ pub trait PrecompileStorageProvider {
     /// Sets the bytecode at the given address.
     fn set_code(&mut self, address: Address, code: Bytecode) -> Result<()>;
 
-    /// Returns the account info for the given address.
-    fn get_account_info(&mut self, address: Address) -> Result<&'_ AccountInfo>;
+    /// Executes a closure with access to the account info for the given address.
+    fn with_account_info(
+        &mut self,
+        address: Address,
+        f: &mut dyn FnMut(&AccountInfo),
+    ) -> Result<()>;
 
     /// Performs an SLOAD operation (persistent storage read).
     fn sload(&mut self, address: Address, key: U256) -> Result<U256>;
@@ -73,32 +77,6 @@ pub trait PrecompileStorageProvider {
 
     /// Returns the currently active hardfork.
     fn spec(&self) -> TempoHardfork;
-
-    // Test-only methods, only implemented by test providers like `HashMapStorageProvider`.
-    #[cfg(any(test, feature = "test-utils"))]
-    fn get_events(&self, _address: Address) -> &Vec<LogData> {
-        unimplemented!("get_events only available for test storage providers")
-    }
-    #[cfg(any(test, feature = "test-utils"))]
-    fn set_nonce(&mut self, _address: Address, _nonce: u64) {
-        unimplemented!("set_nonce only available for test storage providers")
-    }
-    #[cfg(any(test, feature = "test-utils"))]
-    fn set_timestamp(&mut self, _timestamp: U256) {
-        unimplemented!("set_timestamp only available for test storage providers")
-    }
-    #[cfg(any(test, feature = "test-utils"))]
-    fn set_beneficiary(&mut self, _beneficiary: Address) {
-        unimplemented!("set_beneficiary only available for test storage providers")
-    }
-    #[cfg(any(test, feature = "test-utils"))]
-    fn set_spec(&mut self, _spec: TempoHardfork) {
-        unimplemented!("set_spec only available for test storage providers")
-    }
-    #[cfg(any(test, feature = "test-utils"))]
-    fn clear_transient(&mut self) {
-        unimplemented!("clear_transient only available for test storage providers")
-    }
 }
 
 /// Storage operations for a given (contract) address.

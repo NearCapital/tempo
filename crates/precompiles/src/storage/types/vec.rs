@@ -488,8 +488,8 @@ impl StorageOps for PackedSlot {
 mod tests {
     use super::*;
     use crate::{
-        storage::{Handler, StorageContext, packing::gen_word_from},
-        test_util::setup_storage,
+        storage::{Handler, StorageContext},
+        test_util::{gen_word_from, setup_storage},
     };
     use alloy::primitives::Address;
     use proptest::prelude::*;

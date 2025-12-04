@@ -3,7 +3,10 @@
 //! This module tests the Storable derive macro's implementation of storage packing,
 //! verifying that fields are correctly packed into slots according to Solidity's rules.
 
-use tempo_precompiles::storage::{Layout, StorableType, StorageContext, packing::gen_word_from};
+use tempo_precompiles::{
+    storage::{Layout, StorableType, StorageContext},
+    test_util::gen_word_from,
+};
 
 use super::*;
 

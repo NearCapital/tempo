@@ -53,23 +53,19 @@ impl TipAccountRegistrar {
             }
         };
 
-        let account_info = self.storage.get_account_info(signer)?;
-
-        if account_info.nonce != 0 {
-            return Err(TIPAccountRegistrarError::nonce_not_zero().into());
-        }
-
-        if !account_info.is_empty_code_hash() {
-            return Err(TIPAccountRegistrarError::code_not_empty().into());
-        }
-
         // EIP-7702 gas cost
         // can be discussed to lower this down as this cost i think encompasses the bytes of authorization in EIP-7702 tx.
-        let cost = if account_info.is_empty() {
-            revm::primitives::eip7702::PER_EMPTY_ACCOUNT_COST
-        } else {
-            revm::primitives::eip7702::PER_AUTH_BASE_COST
-        };
+        let cost = self.storage.with_account_info(signer, |info| {
+            if info.nonce != 0 {
+                Err(TIPAccountRegistrarError::nonce_not_zero().into())
+            } else if !info.is_empty_code_hash() {
+                Err(TIPAccountRegistrarError::code_not_empty().into())
+            } else if info.is_empty() {
+                Ok(revm::primitives::eip7702::PER_EMPTY_ACCOUNT_COST)
+            } else {
+                Ok(revm::primitives::eip7702::PER_AUTH_BASE_COST)
+            }
+        })?;
         self.storage.deduct_gas(cost)?;
 
         // Delegate the account to the default 7702 implementation

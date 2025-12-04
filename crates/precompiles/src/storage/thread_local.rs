@@ -6,18 +6,10 @@ use tempo_chainspec::hardfork::TempoHardfork;
 
 use crate::{
     error::{Result, TempoPrecompileError},
-    storage::PrecompileStorageProvider,
+    storage::{PrecompileStorageProvider, hashmap},
 };
 
-scoped_thread_local!(static STORAGE: RefCell<*mut dyn PrecompileStorageProvider>);
-
-/// Extends the lifetime of a reference: `&'a T -> &'b T`
-///
-/// SAFETY: the caller must ensure the reference remains valid for the extended lifetime.
-#[inline]
-unsafe fn extend_lifetime<'b, T: ?Sized>(r: &T) -> &'b T {
-    unsafe { &*(r as *const T) }
-}
+scoped_thread_local!(static STORAGE: RefCell<&mut dyn PrecompileStorageProvider>);
 
 /// Thread-local storage accessor that implements `PrecompileStorageProvider` without the trait bound.
 ///
@@ -49,11 +41,11 @@ impl StorageContext {
     where
         S: PrecompileStorageProvider,
     {
-        let ptr: *mut dyn PrecompileStorageProvider = storage;
         // SAFETY: `scoped_tls` ensures the pointer is only accessible within the closure scope.
-        let ptr_static: *mut (dyn PrecompileStorageProvider + 'static) =
-            unsafe { std::mem::transmute(ptr) };
-        let cell = RefCell::new(ptr_static);
+        let storage: &mut dyn PrecompileStorageProvider = storage;
+        let storage_static: &mut (dyn PrecompileStorageProvider + 'static) =
+            unsafe { std::mem::transmute(storage) };
+        let cell = RefCell::new(storage_static);
         STORAGE.set(&cell, f)
     }
 
@@ -73,7 +65,7 @@ impl StorageContext {
             // SAFETY: `scoped_tls` ensures the pointer is only accessible within the closure scope.
             // Holding the guard prevents re-entrant borrows.
             let mut guard = cell.borrow_mut();
-            f(unsafe { &mut **guard })
+            f(&mut **guard)
         })
     }
 
@@ -91,7 +83,7 @@ impl StorageContext {
             // SAFETY: `scoped_tls` ensures the pointer is only accessible within the closure scope.
             // Holding the guard prevents re-entrant borrows.
             let mut guard = cell.borrow_mut();
-            f(unsafe { &mut **guard })
+            f(&mut **guard)
         })
     }
 
@@ -113,15 +105,21 @@ impl StorageContext {
         Self::try_with_storage(|s| s.set_code(address, code))
     }
 
-    pub fn get_account_info(&self, address: Address) -> Result<&'_ AccountInfo> {
-        // SAFETY: The returned reference is valid for the duration of the
-        // `StorageContext::enter` closure. Since `StorageContext` can only be used
-        // while inside enter(), the reference remains valid.
+    /// Executes a closure with access to the account info, returning the closure's result.
+    ///
+    /// This is an ergonomic wrapper that flattens the Result, avoiding double `?`.
+    pub fn with_account_info<T>(
+        &self,
+        address: Address,
+        mut f: impl FnMut(&AccountInfo) -> Result<T>,
+    ) -> Result<T> {
+        let mut result: Option<Result<T>> = None;
         Self::try_with_storage(|s| {
-            let info = s.get_account_info(address)?;
-            // SAFETY: Underlying storage data outlives the accessor.
-            Ok(unsafe { extend_lifetime(info) })
-        })
+            s.with_account_info(address, &mut |info| {
+                result = Some(f(info));
+            })
+        })?;
+        result.unwrap()
     }
 
     pub fn sload(&self, address: Address, key: U256) -> Result<U256> {
@@ -163,34 +161,78 @@ impl StorageContext {
     pub fn spec(&self) -> TempoHardfork {
         Self::with_storage(|s| s.spec())
     }
+}
 
-    #[cfg(any(test, feature = "test-utils"))]
+#[cfg(any(test, feature = "test-utils"))]
+impl StorageContext {
+    /// Returns a mutable reference to the underlying `HashMapStorageProvider`.
+    ///
+    /// NOTE: takes a non-mutable reference because it's internal. The mutability
+    /// of the storage operation is determined by the public function.
+    fn as_hashmap(&self) -> &mut hashmap::HashMapStorageProvider {
+        Self::with_storage(|s| {
+            // SAFETY: Test code always uses HashMapStorageProvider.
+            // Reference valid for duration of StorageContext::enter closure.
+            unsafe {
+                extend_lifetime_mut(
+                    &mut *(s as *mut dyn PrecompileStorageProvider
+                        as *mut hashmap::HashMapStorageProvider),
+                )
+            }
+        })
+    }
+
+    /// NOTE: assumes storage tests always use the `HashMapStorageProvider`
+    pub fn get_account_info(&self, address: Address) -> Option<&AccountInfo> {
+        self.as_hashmap().get_account_info(address)
+    }
+
+    /// NOTE: assumes storage tests always use the `HashMapStorageProvider`
     pub fn get_events(&self, address: Address) -> &Vec<LogData> {
-        // SAFETY: The returned reference is valid for the duration of the
-        // `StorageContext::enter` closure. Since `StorageContext` can only be used
-        // while inside enter(), the reference remains valid.
-        Self::with_storage(|s| unsafe { extend_lifetime(s.get_events(address)) })
+        self.as_hashmap().get_events(address)
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    /// NOTE: assumes storage tests always use the `HashMapStorageProvider`
     pub fn set_nonce(&mut self, address: Address, nonce: u64) {
-        Self::with_storage(|s| s.set_nonce(address, nonce))
+        self.as_hashmap().set_nonce(address, nonce)
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    /// NOTE: assumes storage tests always use the `HashMapStorageProvider`
     pub fn set_timestamp(&mut self, timestamp: U256) {
-        Self::with_storage(|s| s.set_timestamp(timestamp))
+        self.as_hashmap().set_timestamp(timestamp)
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    /// NOTE: assumes storage tests always use the `HashMapStorageProvider`
     pub fn set_beneficiary(&mut self, beneficiary: Address) {
-        Self::with_storage(|s| s.set_beneficiary(beneficiary))
+        self.as_hashmap().set_beneficiary(beneficiary)
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    /// NOTE: assumes storage tests always use the `HashMapStorageProvider`
     pub fn set_spec(&mut self, spec: TempoHardfork) {
-        Self::with_storage(|s| s.set_spec(spec))
+        self.as_hashmap().set_spec(spec)
     }
+
+    /// NOTE: assumes storage tests always use the `HashMapStorageProvider`
+    pub fn clear_transient(&mut self) {
+        self.as_hashmap().clear_transient()
+    }
+
+    /// Checks if a contract at the given address has bytecode deployed.
+    pub fn has_bytecode(&self, address: Address) -> bool {
+        if let Some(account_info) = self.get_account_info(address) {
+            !account_info.is_empty_code_hash()
+        } else {
+            false
+        }
+    }
+}
+
+/// Extends the lifetime of a mutable reference: `&'a mut T -> &'b mut T`
+///
+/// SAFETY: the caller must ensure the reference remains valid for the extended lifetime.
+#[cfg(any(test, feature = "test-utils"))]
+unsafe fn extend_lifetime_mut<'b, T: ?Sized>(r: &mut T) -> &'b mut T {
+    unsafe { &mut *(r as *mut T) }
 }
 
 #[cfg(test)]

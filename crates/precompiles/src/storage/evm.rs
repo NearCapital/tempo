@@ -72,10 +72,11 @@ impl<'a> PrecompileStorageProvider for EvmPrecompileStorageProvider<'a> {
     }
 
     #[inline]
-    fn get_account_info(
+    fn with_account_info(
         &mut self,
         address: Address,
-    ) -> Result<&'_ AccountInfo, TempoPrecompileError> {
+        f: &mut dyn FnMut(&AccountInfo),
+    ) -> Result<(), TempoPrecompileError> {
         self.ensure_loaded_account(address)?;
         let account = self.internals.load_account_code(address)?.map(|a| &a.info);
         let is_cold = account.is_cold;
@@ -86,7 +87,8 @@ impl<'a> PrecompileStorageProvider for EvmPrecompileStorageProvider<'a> {
             .checked_sub(revm::interpreter::gas::warm_cold_cost(is_cold))
             .ok_or(TempoPrecompileError::OutOfGas)?;
 
-        Ok(account.data)
+        f(account.data);
+        Ok(())
     }
 
     #[inline]
@@ -247,26 +249,26 @@ impl From<EvmInternalsError> for TempoPrecompileError {
 //         Ok(())
 //     }
 
-//     #[test]
-//     fn test_get_account_info() -> eyre::Result<()> {
-//         let db = CacheDB::new(EmptyDB::new());
-//         let mut evm = TempoEvmFactory::default().create_evm(db, EvmEnv::default());
-//         let ctx = evm.ctx_mut();
-//         let evm_internals = EvmInternals::new(&mut ctx.journaled_state, &ctx.block);
-//         let mut provider = EvmPrecompileStorageProvider::new_max_gas(evm_internals, &ctx.cfg);
+// #[test]
+// fn test_with_account_info() -> eyre::Result<()> {
+//     let db = CacheDB::new(EmptyDB::new());
+//     let mut evm = TempoEvmFactory::default().create_evm(db, EvmEnv::default());
+//     let ctx = evm.ctx_mut();
+//     let evm_internals = EvmInternals::new(&mut ctx.journaled_state, &ctx.block);
+//     let mut provider = EvmPrecompileStorageProvider::new_max_gas(evm_internals, &ctx.cfg);
 
 //         let address = address!("3000000000000000000000000000000000000003");
 
-//         // Get account info for a new account
-//         let account_info = provider.get_account_info(address)?;
-
-//         // Should be an empty account
-//         assert!(account_info.balance.is_zero());
-//         assert_eq!(account_info.nonce, 0);
-//         // Note: load_account_code may return empty bytecode as Some(empty) for new accounts
-//         if let Some(ref code) = account_info.code {
-//             assert!(code.is_empty(), "New account should have empty code");
-//         }
+// // Get account info for a new account
+// provider.with_account_info(address, &mut |info| {
+//     // Should be an empty account
+//     assert!(info.balance.is_zero());
+//     assert_eq!(info.nonce, 0);
+//     // Note: load_account_code may return empty bytecode as Some(empty) for new accounts
+//     if let Some(ref code) = info.code {
+//         assert!(code.is_empty(), "New account should have empty code");
+//     }
+// })?;
 
 //         Ok(())
 //     }

@@ -78,8 +78,8 @@ impl StorageKey for Address {
 mod tests {
     use super::*;
     use crate::{
-        storage::{Handler, PrecompileStorageProvider, StorageContext, packing::gen_word_from},
-        test_util::setup_storage,
+        storage::{Handler, PrecompileStorageProvider, StorageContext},
+        test_util::{gen_word_from, setup_storage},
     };
     use proptest::prelude::*;
 

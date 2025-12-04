@@ -65,12 +65,14 @@ impl PrecompileStorageProvider for HashMapStorageProvider {
         Ok(())
     }
 
-    fn get_account_info(
+    fn with_account_info(
         &mut self,
         address: Address,
-    ) -> Result<&'_ AccountInfo, TempoPrecompileError> {
+        f: &mut dyn FnMut(&AccountInfo),
+    ) -> Result<(), TempoPrecompileError> {
         let account = self.accounts.entry(address).or_default();
-        Ok(&*account)
+        f(&*account);
+        Ok(())
     }
 
     fn sstore(
@@ -133,36 +135,37 @@ impl PrecompileStorageProvider for HashMapStorageProvider {
     fn spec(&self) -> TempoHardfork {
         self.spec
     }
+}
 
-    #[cfg(any(test, feature = "test-utils"))]
-    fn get_events(&self, address: Address) -> &Vec<LogData> {
+#[cfg(any(test, feature = "test-utils"))]
+impl HashMapStorageProvider {
+    pub fn get_account_info(&self, address: Address) -> Option<&AccountInfo> {
+        self.accounts.get(&address)
+    }
+
+    pub fn get_events(&self, address: Address) -> &Vec<LogData> {
         static EMPTY: Vec<LogData> = Vec::new();
         self.events.get(&address).unwrap_or(&EMPTY)
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
-    fn set_nonce(&mut self, address: Address, nonce: u64) {
+    pub fn set_nonce(&mut self, address: Address, nonce: u64) {
         let account = self.accounts.entry(address).or_default();
         account.nonce = nonce;
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
-    fn set_timestamp(&mut self, timestamp: U256) {
+    pub fn set_timestamp(&mut self, timestamp: U256) {
         self.timestamp = timestamp;
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
-    fn set_beneficiary(&mut self, beneficiary: Address) {
+    pub fn set_beneficiary(&mut self, beneficiary: Address) {
         self.beneficiary = beneficiary;
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
-    fn set_spec(&mut self, spec: TempoHardfork) {
+    pub fn set_spec(&mut self, spec: TempoHardfork) {
         self.spec = spec;
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
-    fn clear_transient(&mut self) {
+    pub fn clear_transient(&mut self) {
         self.transient.clear();
     }
 }
