@@ -357,33 +357,67 @@ impl<P: Provider<TempoNetwork>, D: CallDecoder> TempoCallBuilderExt
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
 
     use alloy_network::ReceiptResponse;
-    use alloy_primitives::{address, ruint::aliases::U256};
-    use alloy_provider::{Provider, ProviderBuilder};
+    use alloy_primitives::{TxHash, address, ruint::aliases::U256};
+    use alloy_provider::{PendingTransactionBuilder, Provider, ProviderBuilder};
     use alloy_signer_local::PrivateKeySigner;
-    use tempo_contracts::precompiles::IRolesAuth;
-    use tempo_precompiles::tip20::ISSUER_ROLE;
+    use tempo_contracts::precompiles::{
+        IFeeManager::IFeeManagerInstance,
+        IRolesAuth,
+        ITIP20Factory::{self, ITIP20FactoryInstance},
+    };
+    use tempo_precompiles::{
+        PATH_USD_ADDRESS, TIP_FEE_MANAGER_ADDRESS, TIP20_FACTORY_ADDRESS, tip20::ISSUER_ROLE,
+    };
 
     use crate::{TempoNetwork, rpc::TempoCallBuilderExt};
 
     #[tokio::test]
     async fn test_request() {
-        let signer = PrivateKeySigner::from_str(
-            "0x85b449cf52f7eda099bf03fe5e550e74f112e29478e479ac4f187f4779b81da2",
-        )
-        .unwrap();
+        let signer = PrivateKeySigner::random();
+        println!("private key: {:x}", signer.credential().to_bytes());
+
         let caller = signer.address();
 
         let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
             .wallet(signer)
             .connect_http("http://devnet-public-rpc-service:8545".parse().unwrap());
 
-        let roles = IRolesAuth::new(
-            address!("0x20c00000000000000000000000000000000001af"),
-            provider.clone(),
-        );
+        let hashes: Vec<TxHash> = provider
+            .raw_request("tempo_fundAddress".into(), (caller,))
+            .await
+            .unwrap();
+        for hash in hashes {
+            PendingTransactionBuilder::new(provider.root().clone(), hash)
+                .get_receipt()
+                .await
+                .unwrap();
+        }
+
+        IFeeManagerInstance::new(TIP_FEE_MANAGER_ADDRESS, provider.clone())
+            .setUserToken(address!("0x20C0000000000000000000000000000000000001"))
+            .send_sync()
+            .await
+            .unwrap();
+
+        let receipt = ITIP20FactoryInstance::new(TIP20_FACTORY_ADDRESS, provider.clone())
+            .createToken(
+                "Test".to_string(),
+                "TEST".to_string(),
+                "USD".to_string(),
+                PATH_USD_ADDRESS,
+                caller,
+            )
+            .send_sync()
+            .await
+            .unwrap();
+        let token = receipt
+            .decoded_log::<ITIP20Factory::TokenCreated>()
+            .unwrap()
+            .token;
+
+        let roles = IRolesAuth::new(token, provider.clone());
         let tx = roles
             .grantRole(*ISSUER_ROLE, caller)
             .from(caller)
