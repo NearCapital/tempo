@@ -90,7 +90,7 @@ impl TipFeeManager {
         }
     }
 
-    pub fn get_validator_token(&mut self, beneficiary: Address) -> Result<Address> {
+    pub fn get_validator_token(&self, beneficiary: Address) -> Result<Address> {
         let token = self.validator_tokens.at(beneficiary).read()?;
 
         if token.is_zero() {

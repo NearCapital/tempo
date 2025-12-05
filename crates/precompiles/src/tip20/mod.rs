@@ -336,7 +336,7 @@ impl TIP20Token {
     }
 
     /// Gets the current fee recipient
-    pub fn get_fee_recipient(&mut self, _msg_sender: Address) -> Result<Address> {
+    pub fn get_fee_recipient(&self, _msg_sender: Address) -> Result<Address> {
         self.fee_recipient.read()
     }
 

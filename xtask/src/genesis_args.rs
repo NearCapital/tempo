@@ -422,21 +422,18 @@ fn create_path_usd_token(
 
     StorageContext::enter(&mut provider, || {
         // Create PathUSD through factory with address(0) as quote token (required for first token post-Allegretto)
-        let token_address = {
-            let mut factory = TIP20Factory::new();
-            factory
-                .create_token(
+        let token_address = TIP20Factory::new()
+            .create_token(
+                admin,
+                ITIP20Factory::createTokenCall {
+                    name: "pathUSD".into(),
+                    symbol: "pathUSD".into(),
+                    currency: "USD".into(),
+                    quoteToken: Address::ZERO, // First token must use address(0) as quote token
                     admin,
-                    ITIP20Factory::createTokenCall {
-                        name: "pathUSD".into(),
-                        symbol: "pathUSD".into(),
-                        currency: "USD".into(),
-                        quoteToken: Address::ZERO, // First token must use address(0) as quote token
-                        admin,
-                    },
-                )
-                .expect("Could not create PathUSD token")
-        };
+                },
+            )
+            .expect("Could not create PathUSD token");
 
         // Verify it was created at the expected address (token_id=0)
         assert_eq!(
