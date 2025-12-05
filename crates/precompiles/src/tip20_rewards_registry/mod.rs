@@ -247,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn test_streams_ending_at() -> eyre::Result<()> {
+    fn test_ending_streams() -> eyre::Result<()> {
         let mut storage = HashMapStorageProvider::new(1);
         let token1 = Address::random();
         let token2 = Address::random();
