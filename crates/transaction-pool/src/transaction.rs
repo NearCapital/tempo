@@ -87,7 +87,7 @@ impl TempoPooledTransaction {
     /// Returns true for:
     /// - AA transactions with 2D nonce keys, as pool is responsible for properly tracking 2D nonces.
     /// - AA transactions with `valid_after` timestamps, as pool is responsible for actually delaying
-    /// and promoting them.
+    ///   and promoting them.
     pub(crate) fn should_add_to_aa_pool(&self) -> bool {
         !self.nonce_key().is_zero() || self.valid_after().is_some()
     }
