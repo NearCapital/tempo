@@ -63,7 +63,7 @@ use tempo_transaction_pool::{
     TempoTransactionPool,
     transaction::{TempoPoolTransactionError, TempoPooledTransaction},
 };
-use tracing::{Level, debug, error, info, instrument, trace, warn};
+use tracing::{Level, error, info, instrument, trace, warn};
 
 #[derive(Debug, Clone)]
 pub struct TempoPayloadBuilder<Provider> {
@@ -583,6 +583,7 @@ where
         // Apply subblock transactions
         for subblock in &subblocks {
             for tx in subblock.transactions_recovered() {
+                let execution_start = Instant::now();
                 if let Err(err) = builder.execute_transaction(tx.cloned()) {
                     if let BlockExecutionError::Validation(BlockValidationError::InvalidTx {
                         ..
@@ -600,6 +601,9 @@ where
                         return Err(PayloadBuilderError::evm(err));
                     }
                 }
+                self.metrics
+                    .transaction_execution_duration_seconds
+                    .record(execution_start.elapsed());
             }
         }
 
@@ -613,9 +617,13 @@ where
         // Apply system transactions
         let system_txs_execution_start = Instant::now();
         for system_tx in system_txs {
+            let execution_start = Instant::now();
             builder
                 .execute_transaction(system_tx)
                 .map_err(PayloadBuilderError::evm)?;
+            self.metrics
+                .transaction_execution_duration_seconds
+                .record(execution_start.elapsed());
         }
         let system_txs_execution_elapsed = system_txs_execution_start.elapsed();
         self.metrics
