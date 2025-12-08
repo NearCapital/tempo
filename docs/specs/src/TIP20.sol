@@ -2,11 +2,14 @@
 pragma solidity ^0.8.13;
 
 import { TIP20Factory } from "./TIP20Factory.sol";
+import { TIP20UserStorage } from "./TIP20UserStorage.sol";
 import { TIP403Registry } from "./TIP403Registry.sol";
 import { TIP20RolesAuth } from "./abstracts/TIP20RolesAuth.sol";
 import { ITIP20 } from "./interfaces/ITIP20.sol";
 
 contract TIP20 is ITIP20, TIP20RolesAuth {
+
+    using TIP20UserStorage for address;
 
     TIP403Registry internal constant TIP403_REGISTRY =
         TIP403Registry(0x403c000000000000000000000000000000000000);
@@ -65,7 +68,6 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
     //////////////////////////////////////////////////////////////*/
 
     uint128 internal _totalSupply;
-    mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
     /*//////////////////////////////////////////////////////////////
@@ -82,14 +84,6 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
     uint256 internal constant ACC_PRECISION = 1e18;
     uint256 public globalRewardPerToken;
     uint128 public optedInSupply;
-
-    struct UserRewardInfo {
-        address rewardRecipient;
-        uint256 rewardPerToken;
-        uint256 rewardBalance;
-    }
-
-    mapping(address => UserRewardInfo) public userRewardInfo;
 
     /*//////////////////////////////////////////////////////////////
                               POLICY ADMINISTRATION
@@ -263,13 +257,18 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
         _transfer(from, to, amount);
     }
 
+    function balanceOf(address user) public view returns (uint256) {
+        return user.getBalance();
+    }
+
     function totalSupply() public view returns (uint256) {
         return _totalSupply;
     }
 
     function _transfer(address from, address to, uint256 amount) internal {
-        if (amount > balanceOf[from]) {
-            revert InsufficientBalance(balanceOf[from], amount, address(this));
+        uint256 fromBalance = from.getBalance();
+        if (amount > fromBalance) {
+            revert InsufficientBalance(fromBalance, amount, address(this));
         }
 
         // Handle reward accounting for opted-in sender
@@ -287,8 +286,10 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
         }
 
         unchecked {
-            balanceOf[from] -= amount;
-            if (to != address(0)) balanceOf[to] += amount;
+            from.setBalance(fromBalance - amount);
+            if (to != address(0)) {
+                to.setBalance(to.getBalance() + amount);
+            }
         }
 
         emit Transfer(from, to, amount);
@@ -306,7 +307,7 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
 
         unchecked {
             _totalSupply += uint128(amount);
-            balanceOf[to] += amount;
+            to.setBalance(to.getBalance() + amount);
         }
 
         emit Transfer(address(0), to, amount);
@@ -373,8 +374,9 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
         require(msg.sender == TIP_FEE_MANAGER_ADDRESS);
         require(from != address(0));
 
-        if (amount > balanceOf[from]) {
-            revert InsufficientBalance(balanceOf[from], amount, address(this));
+        uint256 fromBalance = from.getBalance();
+        if (amount > fromBalance) {
+            revert InsufficientBalance(fromBalance, amount, address(this));
         }
 
         address fromsRewardRecipient = _updateRewardsAndGetRecipient(from);
@@ -383,8 +385,8 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
         }
 
         unchecked {
-            balanceOf[from] -= amount;
-            balanceOf[TIP_FEE_MANAGER_ADDRESS] += amount;
+            from.setBalance(fromBalance - amount);
+            TIP_FEE_MANAGER_ADDRESS.setBalance(TIP_FEE_MANAGER_ADDRESS.getBalance() + amount);
         }
     }
 
@@ -392,7 +394,7 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
         require(msg.sender == TIP_FEE_MANAGER_ADDRESS);
         require(to != address(0));
 
-        uint256 feeManagerBalance = balanceOf[TIP_FEE_MANAGER_ADDRESS];
+        uint256 feeManagerBalance = TIP_FEE_MANAGER_ADDRESS.getBalance();
         if (refund > feeManagerBalance) {
             revert InsufficientBalance(feeManagerBalance, refund, address(this));
         }
@@ -403,8 +405,8 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
         }
 
         unchecked {
-            balanceOf[TIP_FEE_MANAGER_ADDRESS] -= refund;
-            balanceOf[to] += refund;
+            TIP_FEE_MANAGER_ADDRESS.setBalance(feeManagerBalance - refund);
+            to.setBalance(to.getBalance() + refund);
         }
 
         emit Transfer(to, TIP_FEE_MANAGER_ADDRESS, actualUsed);
@@ -419,20 +421,19 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
         internal
         returns (address rewardRecipient)
     {
-        rewardRecipient = userRewardInfo[user].rewardRecipient;
+        rewardRecipient = user.getRewardRecipient();
         uint256 cachedGlobalRewardPerToken = globalRewardPerToken;
-        uint256 rewardPerTokenDelta =
-            cachedGlobalRewardPerToken - userRewardInfo[user].rewardPerToken;
+        uint256 rewardPerTokenDelta = cachedGlobalRewardPerToken - user.getRewardPerToken();
 
         if (rewardPerTokenDelta != 0) {
             // No rewards to update if not opted-in
             if (rewardRecipient != address(0)) {
                 // Balance to update
-                uint256 reward = (uint256(balanceOf[user]) * (rewardPerTokenDelta)) / ACC_PRECISION;
+                uint256 reward = (user.getBalance() * rewardPerTokenDelta) / ACC_PRECISION;
 
-                userRewardInfo[rewardRecipient].rewardBalance += reward;
+                rewardRecipient.setRewardBalance(rewardRecipient.getRewardBalance() + reward);
             }
-            userRewardInfo[user].rewardPerToken = cachedGlobalRewardPerToken;
+            user.setRewardPerToken(cachedGlobalRewardPerToken);
         }
     }
 
@@ -479,12 +480,12 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
         address oldRewardRecipient = _updateRewardsAndGetRecipient(msg.sender);
         if (oldRewardRecipient != address(0)) {
             if (newRewardRecipient == address(0)) {
-                optedInSupply -= uint128(balanceOf[msg.sender]);
+                optedInSupply -= uint128(msg.sender.getBalance());
             }
         } else if (newRewardRecipient != address(0)) {
-            optedInSupply += uint128(balanceOf[msg.sender]);
+            optedInSupply += uint128(msg.sender.getBalance());
         }
-        userRewardInfo[msg.sender].rewardRecipient = newRewardRecipient;
+        msg.sender.setRewardRecipient(newRewardRecipient);
 
         emit RewardRecipientSet(msg.sender, newRewardRecipient);
     }
@@ -494,16 +495,16 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
 
         _updateRewardsAndGetRecipient(msg.sender);
 
-        uint256 amount = userRewardInfo[msg.sender].rewardBalance;
-        uint256 selfBalance = balanceOf[address(this)];
+        uint256 amount = msg.sender.getRewardBalance();
+        uint256 selfBalance = address(this).getBalance();
         maxAmount = (selfBalance > amount ? amount : selfBalance);
-        userRewardInfo[msg.sender].rewardBalance -= maxAmount;
+        msg.sender.setRewardBalance(amount - maxAmount);
 
-        balanceOf[address(this)] -= maxAmount;
-        if (userRewardInfo[msg.sender].rewardRecipient != address(0)) {
+        address(this).setBalance(selfBalance - maxAmount);
+        if (msg.sender.getRewardRecipient() != address(0)) {
             optedInSupply += uint128(maxAmount);
         }
-        balanceOf[msg.sender] += maxAmount;
+        msg.sender.setBalance(msg.sender.getBalance() + maxAmount);
 
         emit Transfer(address(this), msg.sender, maxAmount);
     }
@@ -512,5 +513,14 @@ contract TIP20 is ITIP20, TIP20RolesAuth {
                         REWARD DISTRIBUTION VIEWS
     //////////////////////////////////////////////////////////////*/
 
+    function userRewardInfo(address user)
+        external
+        view
+        returns (address rewardRecipient, uint256 rewardPerToken, uint256 rewardBalance)
+    {
+        rewardRecipient = user.getRewardRecipient();
+        rewardPerToken = user.getRewardPerToken();
+        rewardBalance = user.getRewardBalance();
+    }
 
     }
