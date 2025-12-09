@@ -57,6 +57,15 @@ use crate::{
 /// P256 precompile cost (6900 from EIP-7951) + 1100 for 129 bytes extra signature size - ecrecover savings (3000)
 const P256_VERIFY_GAS: u64 = 5_000;
 
+/// Gas cost for ecrecover signature verification (used by KeyAuthorization)
+const ECRECOVER_GAS: u64 = 3_000;
+
+/// Base gas for KeyAuthorization (22k storage + 5k buffer), signature gas added at runtime
+const KEY_AUTH_BASE_GAS: u64 = 27_000;
+
+/// Gas per spending limit in KeyAuthorization
+const KEY_AUTH_PER_LIMIT_GAS: u64 = 22_000;
+
 /// Hashed account code of default 7702 delegate deployment
 const DEFAULT_7702_DELEGATE_CODE_HASH: B256 =
     b256!("e7b3e4597bdbdd0cc4eb42f9b799b580f23068f54e472bb802cb71efb1570482");
@@ -92,6 +101,31 @@ fn tempo_signature_verification_gas(signature: &TempoSignature) -> u64 {
             primitive_signature_verification_gas(&keychain_sig.signature)
         }
     }
+}
+
+/// Calculates the intrinsic gas cost for a KeyAuthorization.
+///
+/// This is charged before execution as part of transaction validation.
+/// Gas = BASE (27k) + signature verification + (22k per spending limit)
+#[inline]
+fn calculate_key_authorization_gas(
+    key_auth: &tempo_primitives::transaction::SignedKeyAuthorization,
+) -> u64 {
+    // All signature types pay ECRECOVER_GAS (3k) as the baseline since
+    // primitive_signature_verification_gas assumes ecrecover is already in base 21k.
+    // For KeyAuthorization, we're doing an additional signature verification.
+    let sig_gas = ECRECOVER_GAS + primitive_signature_verification_gas(&key_auth.signature);
+
+    // Per-limit storage gas
+    let limits_gas = key_auth
+        .authorization
+        .limits
+        .as_ref()
+        .map(|limits| limits.len() as u64 * KEY_AUTH_PER_LIMIT_GAS)
+        .unwrap_or(0);
+
+    // Total: base (27k) + sig verification + limits
+    KEY_AUTH_BASE_GAS + sig_gas + limits_gas
 }
 
 /// Tempo EVM [`Handler`] implementation with Tempo specific modifications:
@@ -1085,12 +1119,14 @@ where
 ///   - Initcode analysis gas (2 per 32-byte chunk, Shanghai+)
 /// - Check that value transfer is zero.
 /// - Access list costs (shared across batch)
+/// - Key authorization costs (if present): 30k/32k base + 22k per spending limit
 /// - Floor gas calculation (EIP-7623, Prague+)
 fn calculate_aa_batch_intrinsic_gas<'a>(
     calls: &[tempo_primitives::transaction::Call],
     signature: &TempoSignature,
     access_list: Option<impl Iterator<Item = &'a AccessListItem>>,
     authorization_list: &[RecoveredTempoAuthorization],
+    key_authorization: Option<&tempo_primitives::transaction::SignedKeyAuthorization>,
 ) -> Result<InitialAndFloorGas, TempoInvalidTransaction> {
     let mut gas = InitialAndFloorGas::default();
 
@@ -1111,7 +1147,12 @@ fn calculate_aa_batch_intrinsic_gas<'a>(
         gas.initial_gas += tempo_signature_verification_gas(auth.signature());
     }
 
-    // 4. Per-call costs
+    // 5. Key authorization costs (if present)
+    if let Some(key_auth) = key_authorization {
+        gas.initial_gas += calculate_key_authorization_gas(key_auth);
+    }
+
+    // 6. Per-call costs
     let mut total_tokens = 0u64;
 
     for call in calls {
@@ -1202,6 +1243,7 @@ where
         &aa_env.signature,
         tx.access_list(),
         &aa_env.tempo_authorization_list,
+        aa_env.key_authorization.as_ref(),
     )?;
 
     if evm.ctx.cfg.is_eip7623_disabled() {
@@ -1476,6 +1518,7 @@ mod tests {
             &aa_env.signature,
             None::<std::iter::Empty<&AccessListItem>>, // no access list
             &aa_env.tempo_authorization_list,
+            None, // no key authorization
         )
         .unwrap();
 
@@ -1540,6 +1583,7 @@ mod tests {
             &aa_env.signature,
             None::<std::iter::Empty<&AccessListItem>>,
             &aa_env.tempo_authorization_list,
+            None, // no key authorization
         )
         .unwrap();
 
@@ -1596,6 +1640,7 @@ mod tests {
             &aa_env.signature,
             None::<std::iter::Empty<&AccessListItem>>,
             &aa_env.tempo_authorization_list,
+            None, // no key authorization
         )
         .unwrap();
 
@@ -1641,6 +1686,7 @@ mod tests {
             &aa_env.signature,
             None::<std::iter::Empty<&AccessListItem>>,
             &aa_env.tempo_authorization_list,
+            None, // no key authorization
         )
         .unwrap();
 
@@ -1684,6 +1730,7 @@ mod tests {
             &aa_env.signature,
             None::<std::iter::Empty<&AccessListItem>>,
             &aa_env.tempo_authorization_list,
+            None, // no key authorization
         );
 
         assert_eq!(
@@ -1724,6 +1771,7 @@ mod tests {
             &aa_env.signature,
             None::<std::iter::Empty<&AccessListItem>>,
             &aa_env.tempo_authorization_list,
+            None, // no key authorization
         )
         .unwrap();
 
@@ -1829,6 +1877,7 @@ mod tests {
             &aa_env.signature,
             None::<std::iter::Empty<&AccessListItem>>,
             &aa_env.tempo_authorization_list,
+            None, // no key authorization
         )
         .unwrap();
 
