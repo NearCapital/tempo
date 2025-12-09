@@ -33,7 +33,7 @@ use eyre::{OptionExt as _, WrapErr as _, bail, ensure, eyre};
 use futures::{
     StreamExt as _, TryFutureExt as _,
     channel::{mpsc, oneshot},
-    future::{Either, always_ready, try_join},
+    future::{Either, always_ready, ready, try_join},
 };
 use rand::{CryptoRng, Rng};
 use reth_node_builder::ConsensusEngineHandle;
@@ -314,7 +314,12 @@ impl Inner<Init> {
                 ))
            },
 
-            res = self.clone().propose(context.clone(), parent_view, parent_digest, round) => {
+            res = self.clone().propose(
+                context.clone(),
+                parent_view,
+                parent_digest,
+                round
+            ) => {
                 res.wrap_err("failed creating a proposal")
             }
         )?;
@@ -330,7 +335,8 @@ impl Inner<Init> {
 
         response.send(proposal_digest).map_err(|_| {
             eyre!(
-                "failed returning proposal to consensus engine: response channel was already closed"
+                "failed returning proposal to consensus engine: response \
+                channel was already closed"
             )
         })?;
 
@@ -345,7 +351,8 @@ impl Inner<Init> {
             *lock = Some(proposal.clone());
         }
 
-        // Make sure reth sees the new payload so that in the next round we can verify blocks on top of it.
+        // Make sure reth sees the new payload so that in the next round we can
+        // verify blocks on top of it.
         let is_good = verify_block(
             context,
             round.epoch(),
@@ -365,17 +372,6 @@ impl Inner<Init> {
             eyre::bail!("validation reported that that just-proposed block is invalid");
         }
 
-        if let Err(error) = self
-            .state
-            .executor_mailbox
-            .canonicalize_head(proposal_height, proposal_digest)
-        {
-            warn!(
-                %error,
-                %proposal_digest,
-                "failed making the proposal the head of the canonical chain",
-            );
-        }
         Ok(())
     }
 
@@ -479,18 +475,14 @@ impl Inner<Init> {
             return Ok(parent);
         }
 
-        if let Err(error) = self
-            .state
-            .executor_mailbox
-            .canonicalize_head(parent.height(), parent.digest())
-        {
-            tracing::warn!(
-                %error,
-                parent.height = parent.height(),
-                parent.digest = %parent.digest(),
-                "failed updating canonical head to parent",
-            );
-        }
+        ready(
+            self.state
+                .executor_mailbox
+                .canonicalize_head(parent.height(), parent.digest()),
+        )
+        .and_then(|ack| ack.map_err(eyre::Report::new))
+        .await
+        .wrap_err("failed updating canonical head to parent")?;
 
         // Query DKG manager for ceremony data before building payload
         // This data will be passed to the payload builder via attributes
