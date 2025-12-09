@@ -84,9 +84,9 @@ impl AA2dPool {
 
     /// Updates all metrics to reflect the current state of the pool
     fn update_metrics(&self) {
-        let (pending, queued) = self.pending_and_queued_txn_count();
-        let total = self.by_id.len();
-        self.metrics.set_transaction_counts(total, pending, queued);
+        // let (pending, queued) = self.pending_and_queued_txn_count();
+        // let total = self.by_id.len();
+        // self.metrics.set_transaction_counts(total, pending, queued);
     }
 
     /// Entrypoint for adding a 2d AA transaction.
