@@ -462,13 +462,15 @@ mod tests {
     fn test_is_tip20_post_allegro_moderato() -> eyre::Result<()> {
         let mut storage = HashMapStorageProvider::new(1).with_spec(TempoHardfork::AllegroModerato);
         let sender = Address::random();
+
+        // initialize_path_usd deploys PathUSD via factory for post-Allegretto specs,
+        // which properly increments tokenIdCounter to 1
         initialize_path_usd(&mut storage, sender)?;
 
         let mut factory = TIP20Factory::new(&mut storage);
-        factory.initialize()?;
 
-        // Set tokenIdCounter to 1 (simulating PATH_USD was created through factory)
-        factory.sstore_token_id_counter(U256::from(1))?;
+        // Verify tokenIdCounter was set by factory deployment
+        assert_eq!(factory.token_id_counter()?, U256::from(1));
 
         // PATH_USD (token ID 0) should be valid since 0 < 1
         assert!(factory.is_tip20(crate::PATH_USD_ADDRESS)?);
