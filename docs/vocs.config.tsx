@@ -21,7 +21,7 @@ export default defineConfig({
           content="width=device-width, initial-scale=1, maximum-scale=1"
           name="viewport"
         />
-        <meta content="/social.jpg" property="og:image" />
+        <meta content="/og-docs.png" property="og:image" />
         <meta content="image/png" property="og:image:type" />
         <meta content="1200" property="og:image:width" />
         <meta content="630" property="og:image:height" />
