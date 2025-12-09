@@ -1242,7 +1242,11 @@ where
     JOURNAL: JournalTr,
 {
     journal.load_account(token)?;
-    let balance_slot = TIP20Token::from_address(token).balances.at(sender).slot();
+    let balance_slot = TIP20Token::from_address(token)
+        .users
+        .at(sender)
+        .balance
+        .slot();
     let balance = journal.sload(token, balance_slot)?.data;
 
     Ok(balance)

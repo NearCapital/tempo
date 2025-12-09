@@ -234,7 +234,7 @@ impl<T: Storable> Handler<T> for Slot<T> {
 mod tests {
     use super::*;
     use crate::{
-        storage::{Handler, PrecompileStorageProvider, StorageKey},
+        storage::{Handler, HashStrategy, Keccak256, PrecompileStorageProvider},
         test_util::setup_storage,
     };
     use alloy::primitives::{Address, B256};
@@ -424,7 +424,7 @@ mod tests {
         let (mut storage, address) = setup_storage();
         StorageContext::enter(&mut storage, || {
             let pair_key = B256::random();
-            let base = pair_key.mapping_slot(U256::ZERO);
+            let base = Keccak256::<B256>::compute_slot(&pair_key, U256::ZERO);
             let test_addr = Address::random();
 
             // Write, read, delete
@@ -443,7 +443,7 @@ mod tests {
         let (mut storage, address) = setup_storage();
         StorageContext::enter(&mut storage, || {
             let key = B256::random();
-            let base = key.mapping_slot(U256::ZERO);
+            let base = Keccak256::<B256>::compute_slot(&key, U256::ZERO);
 
             let field_0 = Address::random();
             let field_1: u64 = (U256::random() % U256::from(u64::MAX)).to();

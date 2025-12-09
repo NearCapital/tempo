@@ -332,9 +332,13 @@ fn test_user_mapping_slot_is_direct() -> eyre::Result<()> {
         let (user, balance) = (Address::random(), U256::random());
         layout.balances.at(user).write(balance)?;
 
-        // Verify the slot is directly derived from address (left-padded, no hash)
+        // Verify the slot is directly derived from address with STORAGE_SPACE prefix
+        // Format: [STORAGE_SPACE=1][address_bytes (20)][zeros (11)]
         let handler = layout.balances.at(user);
-        let expected_slot = U256::from_be_slice(user.as_slice()) << 96;
+        let mut expected_bytes = [0u8; 32];
+        expected_bytes[0] = 1; // STORAGE_SPACE for UserMapping (DirectBytes<1>)
+        expected_bytes[1..21].copy_from_slice(user.as_slice());
+        let expected_slot = U256::from_be_bytes(expected_bytes);
         assert_eq!(handler.slot(), expected_slot);
 
         // Verify read works with the direct slot
@@ -376,41 +380,3 @@ fn test_user_mapping_with_struct_value() -> eyre::Result<()> {
         Ok(())
     })
 }
-
-// -- USER MAPPING COMPILE-TIME CONSTRAINTS ------------------------------------
-//
-// The following tests verify compile-time constraints on UserMapping.
-// They are commented out because they intentionally fail to compile.
-
-// #[test]
-// fn test_multiple_user_mappings_forbidden() {
-//     #[contract]
-//     pub struct Layout {
-//         pub balances: UserMapping<U256>,
-//         pub allowances: UserMapping<U256>, // multiple `UserMapping`
-//     }
-// }
-
-// #[test]
-// fn test_nested_user_mapping_in_user_mapping_forbidden() {
-//     #[contract]
-//     pub struct Layout {
-//         pub nested: UserMapping<UserMapping<U256>>, // nested `UserMapping`
-//     }
-// }
-
-// #[test]
-// fn test_user_mapping_in_mapping_forbidden() {
-//     #[contract]
-//     pub struct Layout {
-//         pub nested: Mapping<Address, UserMapping<U256>>, // `UserMapping` as `Mapping` value
-//     }
-// }
-
-// #[test]
-// fn test_mapping_in_user_mapping_forbidden() {
-//     #[contract]
-//     pub struct Layout {
-//         pub nested: UserMapping<Mapping<Address, U256>>, // `Mapping` as `UserMapping` value
-//     }
-// }

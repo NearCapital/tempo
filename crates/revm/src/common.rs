@@ -269,7 +269,11 @@ pub trait TempoStateAccess<T> {
     /// Returns the balance of the given token for the given account.
     fn get_token_balance(&mut self, token: Address, account: Address) -> Result<U256, Self::Error> {
         // Query the user's balance in the determined fee token's TIP20 contract
-        let balance_slot = TIP20Token::from_address(token).balances.at(account).slot();
+        let balance_slot = TIP20Token::from_address(token)
+            .users
+            .at(account)
+            .balance
+            .slot();
         // Load fee token account to ensure that we can load storage for it.
         self.basic(token)?;
         self.sload(token, balance_slot)
