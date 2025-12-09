@@ -6,7 +6,7 @@
  * Usage: Import this file in extract-sdk-types.ts to get fully resolved types.
  */
 
-import type { Account, Chain } from 'viem'
+import type { Account, Chain, WatchContractEventReturnType } from 'viem'
 // Use relative paths to node_modules for reliable resolution
 import type {
   ReadParameters,
@@ -24,8 +24,15 @@ export type WriteParametersExpanded = ExpandType<
 // ReadParameters doesn't have generics, but expand for consistency
 export type ReadParametersExpanded = ExpandType<ReadParameters>
 
+// WatchContractEventReturnType is just () => void - an unsubscribe function
+// Exported for consistency with other parameter types
+export type WatchContractEventReturnTypeExpanded =
+  ExpandType<WatchContractEventReturnType>
+
 // For debugging/inspection - concrete values that force full type resolution
 export const _writeParamsSample: WriteParametersExpanded =
   {} as WriteParametersExpanded
 export const _readParamsSample: ReadParametersExpanded =
   {} as ReadParametersExpanded
+export const _watchReturnSample: WatchContractEventReturnTypeExpanded =
+  {} as WatchContractEventReturnTypeExpanded

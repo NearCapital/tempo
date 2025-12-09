@@ -2,11 +2,11 @@
  * Extracts type information from tempo.ts SDK functions for documentation auditing.
  *
  * Usage:
- *   pnpm tsx scripts/extract-sdk-types.ts <module> <function>
+ *   bun tsx scripts/extract-sdk-types.ts <module> <function>
  *
  * Examples:
- *   pnpm tsx scripts/extract-sdk-types.ts token transfer
- *   pnpm tsx scripts/extract-sdk-types.ts token getBalance
+ *   bun tsx scripts/extract-sdk-types.ts token transfer
+ *   bun tsx scripts/extract-sdk-types.ts token getBalance
  *
  * Output:
  *   Writes JSON to .claude/sdk-types/<module>.<function>.json
@@ -20,9 +20,9 @@ const [, , moduleName, functionName] = process.argv
 
 if (!moduleName || !functionName) {
   console.error(
-    'Usage: pnpm tsx scripts/extract-sdk-types.ts <module> <function>',
+    'Usage: bun tsx scripts/extract-sdk-types.ts <module> <function>',
   )
-  console.error('Example: pnpm tsx scripts/extract-sdk-types.ts token transfer')
+  console.error('Example: bun tsx scripts/extract-sdk-types.ts token transfer')
   process.exit(1)
 }
 
@@ -737,7 +737,7 @@ const typeInfo: TypeInfo = {
   returnType: extracted.returnType,
   syncReturnType: syncReturnType || undefined,
   callbackArgs: extracted.callbackArgs,
-  sourceFile: viemActionsPath,
+  sourceFile: path.relative(process.cwd(), viemActionsPath),
 }
 
 // Output directory
