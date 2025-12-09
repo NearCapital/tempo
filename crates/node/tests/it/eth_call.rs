@@ -126,8 +126,9 @@ async fn test_eth_trace_call() -> eyre::Result<()> {
     let token_storage_diff = token_diff.storage.clone();
     // Assert sender token balance has changed
     let slot = TIP20Token::from_address(*token.address())
-        .balances
+        .users
         .at(caller)
+        .balance
         .slot();
     let sender_balance = token_storage_diff
         .get(&B256::from(slot))
@@ -143,8 +144,9 @@ async fn test_eth_trace_call() -> eyre::Result<()> {
 
     // Assert recipient token balance is changed
     let slot = TIP20Token::from_address(*token.address())
-        .balances
+        .users
         .at(recipient)
+        .balance
         .slot();
     let recipient_balance = token_storage_diff
         .get(&B256::from(slot))

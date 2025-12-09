@@ -187,8 +187,9 @@ fn subblocks_are_included_post_allegretto() {
                 // Assert that all validators were paid for their subblock transactions
                 for fee_recipient in &fee_recipients {
                     let balance_slot = TIP20Token::from_address(DEFAULT_FEE_TOKEN_POST_ALLEGRETTO)
-                        .balances
+                        .users
                         .at(*fee_recipient)
+                        .balance
                         .slot();
                     let slot = fee_token_storage.get(&balance_slot).unwrap();
 
@@ -348,8 +349,9 @@ fn subblocks_are_included_post_allegretto_with_failing_txs() {
 
                 // Assert that all validators were paid for their subblock transactions
                 let balance_slot = TIP20Token::from_address(DEFAULT_FEE_TOKEN_POST_ALLEGRETTO)
-                    .balances
+                    .users
                     .at(*fee_recipient)
+                    .balance
                     .slot();
                 let slot = fee_token_storage.get(&balance_slot).unwrap();
 
