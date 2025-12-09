@@ -193,7 +193,7 @@ const KNOWN_TYPE_IMPORTS: Record<string, string> = {
   BlockOverrides: 'viem',
   StateOverride: 'viem',
   // tempo.ts types
-  TokenIdOrAddress: 'tempo.ts',
+  TokenIdOrAddress: 'tempo.ts/ox',
 }
 
 // Primitives and built-in types that don't need imports
@@ -560,6 +560,7 @@ function detectActionType(
   let hasParameters = false
   let hasArgs = false
   let hasReturnValue = false
+  let returnValueType = ''
   let foundNamespace = false
 
   function visit(node: ts.Node) {
@@ -583,7 +584,12 @@ function detectActionType(
             const name = statement.name.getText()
             if (name === 'Parameters') hasParameters = true
             if (name === 'Args') hasArgs = true
-            if (name === 'ReturnValue') hasReturnValue = true
+            if (name === 'ReturnValue') {
+              hasReturnValue = true
+              // Get the type to check if it's WatchContractEventReturnType
+              const type = checker.getTypeAtLocation(statement)
+              returnValueType = getTypeString(type)
+            }
           }
         }
       }
@@ -597,11 +603,14 @@ function detectActionType(
   if (!foundNamespace) return null
 
   // Determine action type based on namespace structure:
-  // - Watchers: Parameters + Args, NO ReturnValue
+  // - Watchers: Parameters + Args, AND (no ReturnValue OR ReturnValue is WatchContractEventReturnType)
   // - Write actions: has Sync variant
   // - Read actions: no Sync variant
   let actionType: 'read' | 'write' | 'watch'
-  if (hasParameters && hasArgs && !hasReturnValue) {
+  const isWatchReturnType =
+    returnValueType === 'WatchContractEventReturnType' ||
+    returnValueType === '() => void'
+  if (hasParameters && hasArgs && (!hasReturnValue || isWatchReturnType)) {
     actionType = 'watch'
   } else if (hasSyncVariant) {
     actionType = 'write'
@@ -673,6 +682,7 @@ function extractArgsFromNamespace(
         let hasParameters = false
         let hasArgs = false
         let hasReturnValue = false
+        let returnValueType = ''
         let argsType: ReturnTypeInfo | null = null
 
         // First pass: check what types exist
@@ -680,15 +690,23 @@ function extractArgsFromNamespace(
           if (ts.isTypeAliasDeclaration(statement)) {
             if (statement.name.getText() === 'Parameters') hasParameters = true
             if (statement.name.getText() === 'Args') hasArgs = true
-            if (statement.name.getText() === 'ReturnValue')
+            if (statement.name.getText() === 'ReturnValue') {
               hasReturnValue = true
+              // Get the type to check if it's WatchContractEventReturnType
+              const type = checker.getTypeAtLocation(statement)
+              returnValueType = getTypeString(type)
+            }
           }
         }
 
-        // Watchers have Parameters (input) and Args (callback args) but NO ReturnValue
-        // Write actions have Parameters, Args, AND ReturnValue
+        // Watchers have Parameters (input) and Args (callback args), AND (no ReturnValue OR WatchContractEventReturnType)
+        // Write actions have Parameters, Args, AND ReturnValue (non-watch type)
         // Read actions have just Args (input) and ReturnValue (output)
-        const isWatcher = hasParameters && hasArgs && !hasReturnValue
+        const isWatchReturnType =
+          returnValueType === 'WatchContractEventReturnType' ||
+          returnValueType === '() => void'
+        const isWatcher =
+          hasParameters && hasArgs && (!hasReturnValue || isWatchReturnType)
 
         for (const statement of body.statements) {
           // For watchers: extract from Parameters type
