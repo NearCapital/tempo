@@ -1166,10 +1166,10 @@ fn calculate_aa_batch_intrinsic_gas<'a>(
     }
 
     // 5. Key authorization costs (if present, post-AllegroModerato)
-    if spec.is_allegro_moderato() {
-        if let Some(key_auth) = key_authorization {
-            gas.initial_gas += calculate_key_authorization_gas(key_auth);
-        }
+    if spec.is_allegro_moderato()
+        && let Some(key_auth) = key_authorization
+    {
+        gas.initial_gas += calculate_key_authorization_gas(key_auth);
     }
 
     // 6. Per-call costs
@@ -2069,7 +2069,7 @@ mod tests {
                 alloy_primitives::Signature::test_signature(),
             )),
             aa_calls: vec![call],
-            key_authorization: Some(key_auth.clone()),
+            key_authorization: Some(key_auth),
             signature_hash: B256::ZERO,
             ..Default::default()
         };
@@ -2105,8 +2105,7 @@ mod tests {
         assert_eq!(
             gas_with_key_auth.initial_gas - gas_without_key_auth.initial_gas,
             expected_key_auth_gas,
-            "Key authorization should add exactly {} gas to batch",
-            expected_key_auth_gas
+            "Key authorization should add exactly {expected_key_auth_gas} gas to batch",
         );
 
         // Also verify absolute values
