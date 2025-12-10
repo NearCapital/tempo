@@ -173,18 +173,31 @@ impl<'a, S: PrecompileStorageProvider> AccountKeychain<'a, S> {
         }
 
         // Emit event
-        let mut public_key_bytes = [0u8; 32];
-        public_key_bytes[12..].copy_from_slice(call.keyId.as_slice());
-        self.storage.emit_event(
-            ACCOUNT_KEYCHAIN_ADDRESS,
-            AccountKeychainEvent::KeyAuthorized(IAccountKeychain::KeyAuthorized {
-                account: msg_sender,
-                publicKey: B256::from(public_key_bytes),
-                signatureType: signature_type,
-                expiry: call.expiry,
-            })
-            .into_log_data(),
-        )?;
+        if !self.storage.spec().is_allegro_moderato() {
+            let mut public_key_bytes = [0u8; 32];
+            public_key_bytes[12..].copy_from_slice(call.keyId.as_slice());
+            self.storage.emit_event(
+                ACCOUNT_KEYCHAIN_ADDRESS,
+                AccountKeychainEvent::KeyAuthorized_1(IAccountKeychain::KeyAuthorized_1 {
+                    account: msg_sender,
+                    publicKey: B256::from(public_key_bytes),
+                    signatureType: signature_type,
+                    expiry: call.expiry,
+                })
+                .into_log_data(),
+            )?;
+        } else {
+            self.storage.emit_event(
+                ACCOUNT_KEYCHAIN_ADDRESS,
+                AccountKeychainEvent::KeyAuthorized_0(IAccountKeychain::KeyAuthorized_0 {
+                    account: msg_sender,
+                    publicKey: call.keyId,
+                    signatureType: signature_type,
+                    expiry: call.expiry,
+                })
+                .into_log_data(),
+            )?;
+        }
 
         Ok(())
     }
@@ -220,16 +233,27 @@ impl<'a, S: PrecompileStorageProvider> AccountKeychain<'a, S> {
         // Note: We don't clear spending limits here - they become inaccessible
 
         // Emit event
-        let mut public_key_bytes = [0u8; 32];
-        public_key_bytes[12..].copy_from_slice(call.keyId.as_slice());
-        self.storage.emit_event(
-            ACCOUNT_KEYCHAIN_ADDRESS,
-            AccountKeychainEvent::KeyRevoked(IAccountKeychain::KeyRevoked {
-                account: msg_sender,
-                publicKey: B256::from(public_key_bytes),
-            })
-            .into_log_data(),
-        )?;
+        if !self.storage.spec().is_allegro_moderato() {
+            let mut public_key_bytes = [0u8; 32];
+            public_key_bytes[12..].copy_from_slice(call.keyId.as_slice());
+            self.storage.emit_event(
+                ACCOUNT_KEYCHAIN_ADDRESS,
+                AccountKeychainEvent::KeyRevoked_1(IAccountKeychain::KeyRevoked_1 {
+                    account: msg_sender,
+                    publicKey: B256::from(public_key_bytes),
+                })
+                .into_log_data(),
+            )?;
+        } else {
+            self.storage.emit_event(
+                ACCOUNT_KEYCHAIN_ADDRESS,
+                AccountKeychainEvent::KeyRevoked_0(IAccountKeychain::KeyRevoked_0 {
+                    account: msg_sender,
+                    publicKey: call.keyId,
+                })
+                .into_log_data(),
+            )?;
+        }
 
         Ok(())
     }
@@ -268,18 +292,35 @@ impl<'a, S: PrecompileStorageProvider> AccountKeychain<'a, S> {
         self.sstore_spending_limits(limit_key, call.token, call.newLimit)?;
 
         // Emit event
-        let mut public_key_bytes = [0u8; 32];
-        public_key_bytes[12..].copy_from_slice(call.keyId.as_slice());
-        self.storage.emit_event(
-            ACCOUNT_KEYCHAIN_ADDRESS,
-            AccountKeychainEvent::SpendingLimitUpdated(IAccountKeychain::SpendingLimitUpdated {
-                account: msg_sender,
-                publicKey: B256::from(public_key_bytes),
-                token: call.token,
-                newLimit: call.newLimit,
-            })
-            .into_log_data(),
-        )?;
+        if !self.storage.spec().is_allegro_moderato() {
+            let mut public_key_bytes = [0u8; 32];
+            public_key_bytes[12..].copy_from_slice(call.keyId.as_slice());
+            self.storage.emit_event(
+                ACCOUNT_KEYCHAIN_ADDRESS,
+                AccountKeychainEvent::SpendingLimitUpdated_1(
+                    IAccountKeychain::SpendingLimitUpdated_1 {
+                        account: msg_sender,
+                        publicKey: B256::from(public_key_bytes),
+                        token: call.token,
+                        newLimit: call.newLimit,
+                    },
+                )
+                .into_log_data(),
+            )?;
+        } else {
+            self.storage.emit_event(
+                ACCOUNT_KEYCHAIN_ADDRESS,
+                AccountKeychainEvent::SpendingLimitUpdated_0(
+                    IAccountKeychain::SpendingLimitUpdated_0 {
+                        account: msg_sender,
+                        publicKey: call.keyId,
+                        token: call.token,
+                        newLimit: call.newLimit,
+                    },
+                )
+                .into_log_data(),
+            )?;
+        }
 
         Ok(())
     }
