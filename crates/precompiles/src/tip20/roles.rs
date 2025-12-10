@@ -160,7 +160,7 @@ mod tests {
         let test_address = Address::from([
             0x20, 0xC0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
         ]);
-        let mut token = TIP20Token::from_address(test_address, &mut storage);
+        let mut token = TIP20Token::from_address(test_address, &mut storage).unwrap();
 
         let admin = Address::from([1u8; 20]);
         let user = Address::from([2u8; 20]);
@@ -168,7 +168,14 @@ mod tests {
 
         // Initialize and grant admin
         token
-            .initialize("name", "symbol", "currency", Address::ZERO, admin)
+            .initialize(
+                "name",
+                "symbol",
+                "currency",
+                Address::ZERO,
+                admin,
+                Address::ZERO,
+            )
             .unwrap();
 
         // Test hasRole
@@ -208,7 +215,7 @@ mod tests {
     fn test_role_admin_functions() {
         let mut storage = HashMapStorageProvider::new(1);
         let test_address = address!("0x20C0000000000000000000000000000000000001");
-        let mut token = TIP20Token::from_address(test_address, &mut storage);
+        let mut token = TIP20Token::from_address(test_address, &mut storage).unwrap();
 
         let admin = Address::from([1u8; 20]);
         let custom_role = keccak256(b"CUSTOM_ROLE");
@@ -216,7 +223,14 @@ mod tests {
 
         // Initialize and grant admin
         token
-            .initialize("name", "symbol", "currency", Address::ZERO, admin)
+            .initialize(
+                "name",
+                "symbol",
+                "currency",
+                Address::ZERO,
+                admin,
+                Address::ZERO,
+            )
             .unwrap();
 
         // Set custom admin for role
@@ -241,13 +255,20 @@ mod tests {
     fn test_renounce_role() {
         let mut storage = HashMapStorageProvider::new(1);
         let test_address = address!("0x20C0000000000000000000000000000000000001");
-        let mut token = TIP20Token::from_address(test_address, &mut storage);
+        let mut token = TIP20Token::from_address(test_address, &mut storage).unwrap();
 
         let user = Address::from([1u8; 20]);
         let custom_role = keccak256(b"CUSTOM_ROLE");
 
         token
-            .initialize("name", "symbol", "currency", Address::ZERO, Address::ZERO)
+            .initialize(
+                "name",
+                "symbol",
+                "currency",
+                Address::ZERO,
+                Address::ZERO,
+                Address::ZERO,
+            )
             .unwrap();
         token.grant_role_internal(user, custom_role).unwrap();
 
@@ -268,14 +289,21 @@ mod tests {
     fn test_unauthorized_access() {
         let mut storage = HashMapStorageProvider::new(1);
         let test_address = address!("0x20C0000000000000000000000000000000000001");
-        let mut token = TIP20Token::from_address(test_address, &mut storage);
+        let mut token = TIP20Token::from_address(test_address, &mut storage).unwrap();
 
         let user = Address::from([1u8; 20]);
         let other = Address::from([2u8; 20]);
         let custom_role = keccak256(b"CUSTOM_ROLE");
 
         token
-            .initialize("name", "symbol", "currency", Address::ZERO, Address::ZERO)
+            .initialize(
+                "name",
+                "symbol",
+                "currency",
+                Address::ZERO,
+                Address::ZERO,
+                Address::ZERO,
+            )
             .unwrap();
 
         // Try to grant role without permission

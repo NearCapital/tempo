@@ -27,7 +27,7 @@ use reth_chainspec::EthChainSpec;
 use reth_evm::{
     self, ConfigureEngineEvm, ConfigureEvm, EvmEnvFor, ExecutableTxIterator, ExecutionCtxFor,
 };
-use reth_primitives_traits::{SealedBlock, SealedHeader, SignedTransaction};
+use reth_primitives_traits::{SealedBlock, SealedHeader, SignerRecoverable};
 use tempo_payload_types::TempoExecutionData;
 use tempo_primitives::{
     Block, SubBlockMetadata, TempoHeader, TempoPrimitives, TempoReceipt, TempoTxEnvelope,
@@ -39,7 +39,7 @@ use reth_evm_ethereum::EthEvmConfig;
 use tempo_chainspec::{TempoChainSpec, hardfork::TempoHardforks};
 use tempo_revm::evm::TempoContext;
 
-pub use tempo_revm::{TempoBlockEnv, TempoStateAccess};
+pub use tempo_revm::{TempoBlockEnv, TempoHaltReason, TempoStateAccess};
 
 /// Tempo-related EVM configuration.
 #[derive(Debug, Clone)]
@@ -258,13 +258,10 @@ impl ConfigureEngineEvm<TempoExecutionData> for TempoEvmConfig {
         &self,
         payload: &TempoExecutionData,
     ) -> Result<impl ExecutableTxIterator<Self>, Self::Error> {
-        Ok(payload
-            .block
-            .body()
-            .transactions
-            .clone()
-            .into_iter()
-            .map(|tx| tx.try_recover().map(|signer| tx.with_signer(signer))))
+        let transactions = payload.block.body().transactions.clone().into_iter();
+        let convert = |tx: TempoTxEnvelope| tx.try_into_recovered();
+
+        Ok((transactions, convert))
     }
 }
 
