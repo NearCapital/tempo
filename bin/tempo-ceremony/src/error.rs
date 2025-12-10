@@ -59,4 +59,10 @@ pub enum Error {
     /// One or more peers rejected our outcome.
     #[error("outcome rejected by peers: {0:?}")]
     OutcomeRejected(Box<[PublicKey]>),
+    /// One or more dealers were disqualified.
+    #[error("dealers disqualified: {0:?}")]
+    DealersDisqualified(Box<[PublicKey]>),
+    /// Reveals were present.
+    #[error("unexpected reveals during genesis ceremony - {0} dealers had reveals")]
+    UnexpectedReveals(usize),
 }

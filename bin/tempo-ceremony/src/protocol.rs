@@ -687,29 +687,23 @@ impl GenesisCeremony {
     /// Compute our private share and group public polynomial.
     pub fn compute_shares(&self) -> eyre::Result<FinalizedShares> {
         let (result, disqualified) = self.player.arbiter.clone().finalize();
+
+        // In a genesis ceremony, any disqualifications indicate something went wrong
+        // (malicious actor or protocol bug). Fail the ceremony rather than continue.
         if !disqualified.is_empty() {
-            tracing::warn!(?disqualified, "Disqualified dealers");
+            let disqualified_keys: Vec<_> = disqualified.into_iter().collect();
+            return Err(Error::DealersDisqualified(disqualified_keys.into_boxed_slice()).into());
         }
 
         let arbiter_output = result?;
-        let my_index = self
-            .membership
-            .indexed
-            .get_index_of(&self.membership.my_public_key)
-            .expect("in participants");
 
-        let reveals: BTreeMap<u32, group::Share> = arbiter_output
-            .reveals
-            .into_iter()
-            .filter_map(|(dealer_idx, shares)| {
-                shares
-                    .iter()
-                    .find(|s| s.index == my_index as u32)
-                    .cloned()
-                    .map(|s| (dealer_idx, s))
-            })
-            .collect();
+        // Reveals should be empty since we reject dealings with reveals in validate_dealing(),
+        // but check defensively in any case.
+        if !arbiter_output.reveals.is_empty() {
+            return Err(Error::UnexpectedReveals(arbiter_output.reveals.len()).into());
+        }
 
+        let reveals = BTreeMap::new();
         let out = self
             .player
             .player
