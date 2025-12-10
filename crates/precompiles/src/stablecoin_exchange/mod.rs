@@ -264,18 +264,6 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
         Ok(())
     }
 
-    fn ensure_transfer_authorized(&mut self, token: Address, user: Address) -> Result<()> {
-        if token == PATH_USD_ADDRESS {
-            PathUSD::new(self.storage)
-                .token
-                .ensure_transfer_authorized(user, self.address)?;
-        } else {
-            TIP20Token::from_address(token, self.storage)?
-                .ensure_transfer_authorized(user, self.address)?;
-        }
-        Ok(())
-    }
-
     /// Decrement user's internal balance or transfer from external wallet
     fn decrement_balance_or_transfer_from(
         &mut self,
@@ -284,7 +272,8 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
         amount: u128,
     ) -> Result<()> {
         if self.storage.spec().is_allegro_moderato() {
-            self.ensure_transfer_authorized(token, user)?;
+            TIP20Token::from_address(token, self.storage)?
+                .ensure_transfer_authorized(user, self.address)?;
         }
 
         let user_balance = self.balance_of(user, token)?;
