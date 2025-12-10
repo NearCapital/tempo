@@ -29,7 +29,7 @@ Make sure the port is open and accessible from other participants.
 The coordinator will send you a `ceremony.toml` file containing all participants. You need to set your listen address:
 
 ```toml
-namespace = "tempo-genesis-2025"
+namespace = "tempo-genesis"
 
 [network]
 listen_address = "0.0.0.0:9000"  # Set this to your listening address & port
