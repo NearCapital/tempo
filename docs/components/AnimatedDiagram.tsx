@@ -1183,9 +1183,9 @@ export function AnimatedDiagram(props: AnimatedDiagramProps) {
 
   return (
     <>
-      {/* Title */}
+      {/* Hidden anchor for title (rendered in markdown instead) */}
       {title && (
-        <h2 id={title.toLowerCase().replace(/\s+/g, '-')} className="vocs_H2 mb-6 font-medium">{title}</h2>
+        <div id={title.toLowerCase().replace(/\s+/g, '-')} className="absolute -top-24" />
       )}
       
       {/* Main inline component */}

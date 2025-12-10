@@ -112,6 +112,7 @@ export function StablecoinMintBurnDiagram() {
     <AnimatedDiagram
       src="/learn/example.svg"
       alt="Stablecoin mint and burn flow diagram showing how users deposit funds, stablecoins are minted and burned, and how reserves are managed through smart contracts"
+      title="Stablecoin Mints"
       steps={steps}
       staticElements={staticElements}
       autoPlay={true}
