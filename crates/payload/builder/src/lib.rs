@@ -563,10 +563,10 @@ where
             }
             block_size_used += tx_rlp_length;
         }
-        let normal_transactions_execution_elapsed = execution_start.elapsed();
+        let total_normal_transaction_execution_elapsed = execution_start.elapsed();
         self.metrics
             .total_normal_transaction_execution_duration_seconds
-            .record(normal_transactions_execution_elapsed);
+            .record(total_normal_transaction_execution_elapsed);
         self.metrics
             .payment_transactions
             .record(payment_transactions as f64);
@@ -614,10 +614,10 @@ where
                 subblock_transactions += 1.0;
             }
         }
-        let subblock_transactions_execution_elapsed = subblocks_start.elapsed();
+        let total_subblock_transaction_execution_elapsed = subblocks_start.elapsed();
         self.metrics
             .total_subblock_transaction_execution_duration_seconds
-            .record(subblock_transactions_execution_elapsed);
+            .record(total_subblock_transaction_execution_elapsed);
         self.metrics.subblocks.record(subblocks_count);
         self.metrics.subblocks_last.set(subblocks_count);
         self.metrics
@@ -639,10 +639,10 @@ where
             .system_transactions_execution_duration_seconds
             .record(system_txs_execution_elapsed);
 
-        let execution_elapsed = execution_start.elapsed();
+        let total_transaction_execution_elapsed = execution_start.elapsed();
         self.metrics
             .total_transaction_execution_duration_seconds
-            .record(execution_elapsed);
+            .record(total_transaction_execution_elapsed);
 
         let builder_finish_start = Instant::now();
         let BlockBuilderOutcome {
@@ -694,12 +694,14 @@ where
             gas_limit = sealed_block.gas_limit(),
             gas_used,
             extra_data = %sealed_block.extra_data(),
-            total_transactions,
+            subblocks_count,
             payment_transactions,
+            subblock_transactions,
+            total_transactions,
             ?elapsed,
-            ?normal_transactions_execution_elapsed,
-            ?subblock_transactions_execution_elapsed,
-            ?execution_elapsed,
+            ?total_normal_transaction_execution_elapsed,
+            ?total_subblock_transaction_execution_elapsed,
+            ?total_transaction_execution_elapsed,
             ?builder_finish_elapsed,
             "Built payload"
         );
