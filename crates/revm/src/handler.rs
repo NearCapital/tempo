@@ -2,9 +2,8 @@
 
 use std::{cmp::Ordering, fmt::Debug};
 
-use alloy_evm::EvmInternals;
+use alloy_evm::{EvmError, EvmInternals};
 use alloy_primitives::{Address, B256, U256, b256};
-use reth_evm::EvmError;
 use revm::{
     Database,
     context::{
