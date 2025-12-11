@@ -588,6 +588,8 @@ where
         }
 
         let subblocks_start = Instant::now();
+        let subblocks_count = subblocks.len() as f64;
+        let mut subblock_transactions = 0f64;
         // Apply subblock transactions
         for subblock in &subblocks {
             for tx in subblock.transactions_recovered() {
@@ -608,12 +610,22 @@ where
                         return Err(PayloadBuilderError::evm(err));
                     }
                 }
+
+                subblock_transactions += 1.0;
             }
         }
         let subblock_transactions_execution_elapsed = subblocks_start.elapsed();
         self.metrics
             .total_subblock_transaction_execution_duration_seconds
             .record(subblock_transactions_execution_elapsed);
+        self.metrics.subblocks.record(subblocks_count);
+        self.metrics.subblocks_last.set(subblocks_count);
+        self.metrics
+            .subblock_transactions
+            .record(subblock_transactions);
+        self.metrics
+            .subblock_transactions_last
+            .set(subblock_transactions);
 
         // Apply system transactions
         let system_txs_execution_start = Instant::now();

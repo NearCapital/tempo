@@ -16,6 +16,14 @@ pub(crate) struct TempoPayloadBuilderMetrics {
     pub(crate) payment_transactions: Histogram,
     /// Number of payment transactions in the payload.
     pub(crate) payment_transactions_last: Gauge,
+    /// Number of subblocks in the payload.
+    pub(crate) subblocks: Histogram,
+    /// Number of subblocks in the payload.
+    pub(crate) subblocks_last: Gauge,
+    /// Number of subblock transactions in the payload.
+    pub(crate) subblock_transactions: Histogram,
+    /// Number of subblock transactions in the payload.
+    pub(crate) subblock_transactions_last: Gauge,
     /// Amount of gas used in the payload.
     pub(crate) gas_used: Histogram,
     /// Amount of gas used in the payload.
