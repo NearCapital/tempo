@@ -1330,7 +1330,19 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
             }
         }
 
-        Orderbook::write_tick_level(self, order.book_key(), order.is_bid(), order.tick(), level)?;
+        // Post allegro-moderato, delete ticks where there is no more liquidity rather than writing
+        // the latest level
+        if self.storage.spec().is_allegro_moderato() && level.head == 0 {
+            Orderbook::delete_tick_level(self, order.book_key(), order.is_bid(), order.tick())?;
+        } else {
+            Orderbook::write_tick_level(
+                self,
+                order.book_key(),
+                order.is_bid(),
+                order.tick(),
+                level,
+            )?;
+        }
 
         // Refund tokens to maker
         let orderbook = self.sload_books(order.book_key())?;
