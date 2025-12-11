@@ -300,8 +300,8 @@ mod tests {
         // Verify with low-level read
         let loaded_slot = storage.sload(address, base_slot + U256::from(2)).unwrap();
         let expected = gen_word_from(&[
-            "0xFF",                                                             /* offset 31 (1
-                                                                                 * byte) */
+            "0xFF", /* offset 31 (1
+                     * byte) */
             "0x00000000000000000000000000000000000000000000000000000000000000", /* padding (31
                                                                                  * bytes) */
         ]);
@@ -756,8 +756,8 @@ mod tests {
         // Verify with low-level read
         let loaded_slot = storage.sload(address, base_slot + U256::ONE).unwrap();
         let expected = gen_word_from(&[
-            "0x00",                                                             /* offset 31 (1
-                                                                                 * byte) */
+            "0x00", /* offset 31 (1
+                     * byte) */
             "0x00000000000000000000000000000000000000000000000000000000000000", /* padding (31
                                                                                  * bytes) */
         ]);
