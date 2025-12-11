@@ -563,6 +563,16 @@ where
             }
             block_size_used += tx_rlp_length;
         }
+        let normal_transactions_execution_elapsed = execution_start.elapsed();
+        self.metrics
+            .total_normal_transaction_execution_duration_seconds
+            .record(normal_transactions_execution_elapsed);
+        self.metrics
+            .payment_transactions
+            .record(payment_transactions as f64);
+        self.metrics
+            .payment_transactions_last
+            .set(payment_transactions as f64);
 
         // check if we have a better block or received more subblocks
         if !is_better_payload(best_payload.as_ref(), total_fees)
@@ -577,6 +587,7 @@ where
             });
         }
 
+        let subblocks_start = Instant::now();
         // Apply subblock transactions
         for subblock in &subblocks {
             for tx in subblock.transactions_recovered() {
@@ -599,17 +610,10 @@ where
                 }
             }
         }
-
-        let execution_elapsed = execution_start.elapsed();
+        let subblock_transactions_execution_elapsed = subblocks_start.elapsed();
         self.metrics
-            .total_transaction_execution_duration_seconds
-            .record(execution_elapsed);
-        self.metrics
-            .payment_transactions
-            .record(payment_transactions as f64);
-        self.metrics
-            .payment_transactions_last
-            .set(payment_transactions as f64);
+            .total_subblock_transaction_execution_duration_seconds
+            .record(subblock_transactions_execution_elapsed);
 
         // Apply system transactions
         let system_txs_execution_start = Instant::now();
@@ -622,6 +626,11 @@ where
         self.metrics
             .system_transactions_execution_duration_seconds
             .record(system_txs_execution_elapsed);
+
+        let execution_elapsed = execution_start.elapsed();
+        self.metrics
+            .total_transaction_execution_duration_seconds
+            .record(execution_elapsed);
 
         let builder_finish_start = Instant::now();
         let BlockBuilderOutcome {
@@ -676,6 +685,8 @@ where
             total_transactions,
             payment_transactions,
             ?elapsed,
+            ?normal_transactions_execution_elapsed,
+            ?subblock_transactions_execution_elapsed,
             ?execution_elapsed,
             ?builder_finish_elapsed,
             "Built payload"
