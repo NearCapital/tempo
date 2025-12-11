@@ -25,9 +25,17 @@ use revm::{
     context::ContextTr,
     state::{Account, Bytecode},
 };
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::atomic::{AtomicBool, Ordering},
+};
 use tempo_chainspec::{TempoChainSpec, hardfork::TempoHardforks};
 use tempo_contracts::CREATEX_ADDRESS;
+
+/// Tracks whether the CreateX bytecode has been fixed post-AllegroModerato fork.
+/// This ensures we only perform the DB read and update once.
+static CREATEX_BYTECODE_FIXED: AtomicBool = AtomicBool::new(false);
+
 use tempo_precompiles::{
     ACCOUNT_KEYCHAIN_ADDRESS, STABLECOIN_EXCHANGE_ADDRESS, TIP_FEE_MANAGER_ADDRESS,
     TIP20_REWARDS_REGISTRY_ADDRESS, stablecoin_exchange::IStablecoinExchange,
@@ -492,11 +500,12 @@ where
             }
         }
 
-        // Modify CreateX bytecode if AllegroModerato is active
-        if self
-            .inner
-            .spec
-            .is_allegro_moderato_active_at_timestamp(block_timestamp)
+        // Modify CreateX bytecode once when AllegroModerato becomes active
+        if !CREATEX_BYTECODE_FIXED.load(Ordering::Relaxed)
+            && self
+                .inner
+                .spec
+                .is_allegro_moderato_active_at_timestamp(block_timestamp)
         {
             let evm = self.evm_mut();
             let db = evm.ctx_mut().db_mut();
@@ -507,18 +516,18 @@ where
 
             let mut acc_info = acc.account_info().unwrap_or_default();
 
-            // Only update if bytecode doesn't match the correct (post-fork) version
-            let correct_code = tempo_contracts::contracts::CREATEX_POST_ALLEGRO_MODERATO_BYTECODE;
-            let correct_code_hash = alloy_primitives::keccak256(&correct_code);
+            let correct_code_hash = tempo_contracts::contracts::CREATEX_POST_ALLEGRO_MODERATO_BYTECODE_HASH;
             if acc_info.code_hash != correct_code_hash {
                 acc_info.code_hash = correct_code_hash;
-                acc_info.code = Some(Bytecode::new_legacy(correct_code));
+                acc_info.code = Some(Bytecode::new_legacy(tempo_contracts::contracts::CREATEX_POST_ALLEGRO_MODERATO_BYTECODE));
 
                 let mut revm_acc: Account = acc_info.into();
                 revm_acc.mark_touch();
 
                 db.commit(HashMap::from_iter([(CREATEX_ADDRESS, revm_acc)]));
             }
+
+            CREATEX_BYTECODE_FIXED.store(true, Ordering::Relaxed);
         }
 
         Ok(())
