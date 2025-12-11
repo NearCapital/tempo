@@ -252,7 +252,7 @@ For transactions using nonce keys:
 2. If `sequence == 0`: Add progressive cost
    ```rust
    let num_active_nonce_keys = count(non_zero_nonce_keys with sequence > 0)
-   base_gas_cost = 21_000 + num_active_nonce_keys * 20_000
+   base_gas_cost = 21_000 + (num_active_nonce_keys + 1) * 20_000
    ```
 
 This linearly increasing fee compensates for state growth and mitigates DOS vectors from unbounded sequence key creation.
@@ -893,13 +893,13 @@ Transactions using parallelizable nonces incur additional costs based on the non
 - **Additional Cost:** Progressive based on active keys
 - **Formula:**
   ```
-  additional_gas = num_active_nonce_keys * 20,000
+  additional_gas = (num_active_nonce_keys + 1) * 20,000
   total_base_cost = 21,000 + additional_gas + signature_verification_cost
   ```
 - **Examples:**
-  - First user key: 21,000 + 0 = 21,000 gas
-  - Second user key: 21,000 + 20,000 = 41,000 gas
-  - Third user key: 21,000 + 40,000 = 61,000 gas
+  - First user key: 21,000 + 20,000 = 41,000 gas
+  - Second user key: 21,000 + 40,000 = 61,000 gas
+  - Third user key: 21,000 + 60,000 = 81,000 gas
 
 **Rationale for Progressive Pricing:**
 1. **State Growth Compensation:** Each new nonce key adds permanent state that nodes must maintain
@@ -1096,7 +1096,7 @@ def calculate_tempo_tx_base_gas(tx):
         else:
             # New nonce key - progressive pricing
             num_active_keys = num_active_user_keys(tx.sender_address)
-            nonce_gas = num_active_keys * NEW_NONCE_KEY_MULTIPLIER
+            nonce_gas = (num_active_keys + 1) * NEW_NONCE_KEY_MULTIPLIER
 
     # Step 3: Calculate key authorization cost (if present)
     if tx.key_authorization is not None:
