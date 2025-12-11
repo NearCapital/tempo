@@ -64,7 +64,7 @@ pub mod contracts {
     );
 
     pub const CREATEX_POST_ALLEGRO_MODERATO_BYTECODE_HASH: B256 =
-        b256!("12ec861579b63a3ab9db3b5a23c57d56402ad3061475b088f17054e2f2daf22f");
+        b256!("bd8a7ea8cfca7b4e5f5041d7d4b17bc317c5ce42cfbc42066a00cf26b43eb53f");
 }
 
 pub use contracts::{CreateX, IthacaAccount, Multicall, Permit2, SafeDeployer};

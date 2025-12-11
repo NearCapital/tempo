@@ -25,16 +25,9 @@ use revm::{
     context::ContextTr,
     state::{Account, Bytecode},
 };
-use std::{
-    collections::{HashMap, HashSet},
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::collections::{HashMap, HashSet};
 use tempo_chainspec::{TempoChainSpec, hardfork::TempoHardforks};
 use tempo_contracts::CREATEX_ADDRESS;
-
-/// Tracks whether the CreateX bytecode has been fixed post-AllegroModerato fork.
-/// This ensures we only perform the DB read and update once.
-static CREATEX_BYTECODE_FIXED: AtomicBool = AtomicBool::new(false);
 
 use tempo_precompiles::{
     ACCOUNT_KEYCHAIN_ADDRESS, STABLECOIN_EXCHANGE_ADDRESS, TIP_FEE_MANAGER_ADDRESS,
@@ -500,12 +493,11 @@ where
             }
         }
 
-        // Modify CreateX bytecode once when AllegroModerato becomes active
-        if !CREATEX_BYTECODE_FIXED.load(Ordering::Relaxed)
-            && self
-                .inner
-                .spec
-                .is_allegro_moderato_active_at_timestamp(block_timestamp)
+        // Modify CreateX bytecode if AllegroModerato is active and bytecode is outdated
+        if self
+            .inner
+            .spec
+            .is_allegro_moderato_active_at_timestamp(block_timestamp)
         {
             let evm = self.evm_mut();
             let db = evm.ctx_mut().db_mut();
@@ -529,8 +521,6 @@ where
 
                 db.commit(HashMap::from_iter([(CREATEX_ADDRESS, revm_acc)]));
             }
-
-            CREATEX_BYTECODE_FIXED.store(true, Ordering::Relaxed);
         }
 
         Ok(())
