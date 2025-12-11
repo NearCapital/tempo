@@ -26,11 +26,7 @@ impl TempoFaucetExt {
         funding_amount: U256,
         provider: DynProvider<TempoNetwork>,
     ) -> Self {
-        Self {
-            faucet_token_addresses,
-            funding_amount,
-            provider,
-        }
+        Self { faucet_token_addresses, funding_amount, provider }
     }
 }
 

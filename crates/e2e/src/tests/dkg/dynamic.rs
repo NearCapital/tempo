@@ -13,22 +13,14 @@ use crate::{CONSENSUS_NODE_PREFIX, Setup, execution_runtime::validator, setup_va
 
 #[test_traced]
 fn after_hardfork_validator_is_added_to_a_set_of_one() {
-    AssertValidatorIsAdded {
-        how_many_initial: 1,
-        epoch_length: 20,
-        allegretto_at_genesis: false,
-    }
-    .run();
+    AssertValidatorIsAdded { how_many_initial: 1, epoch_length: 20, allegretto_at_genesis: false }
+        .run();
 }
 
 #[test_traced]
 fn after_hardfork_validator_is_added_to_a_set_of_three() {
-    AssertValidatorIsAdded {
-        how_many_initial: 3,
-        epoch_length: 30,
-        allegretto_at_genesis: false,
-    }
-    .run();
+    AssertValidatorIsAdded { how_many_initial: 3, epoch_length: 30, allegretto_at_genesis: false }
+        .run();
 }
 
 #[test_traced]
@@ -53,42 +45,26 @@ fn after_hardfork_validator_is_removed_from_set_of_four() {
 
 #[test_traced]
 fn with_allegretto_at_genesis_validator_is_added_to_a_set_of_one() {
-    AssertValidatorIsAdded {
-        how_many_initial: 1,
-        epoch_length: 20,
-        allegretto_at_genesis: true,
-    }
-    .run();
+    AssertValidatorIsAdded { how_many_initial: 1, epoch_length: 20, allegretto_at_genesis: true }
+        .run();
 }
 
 #[test_traced]
 fn with_allegretto_at_genesis_validator_is_added_to_a_set_of_three() {
-    AssertValidatorIsAdded {
-        how_many_initial: 3,
-        epoch_length: 30,
-        allegretto_at_genesis: true,
-    }
-    .run();
+    AssertValidatorIsAdded { how_many_initial: 3, epoch_length: 30, allegretto_at_genesis: true }
+        .run();
 }
 
 #[test_traced]
 fn with_allegretto_at_genesis_validator_is_removed_from_set_of_two() {
-    AssertValidatorIsRemoved {
-        how_many_initial: 2,
-        epoch_length: 20,
-        allegretto_at_genesis: true,
-    }
-    .run();
+    AssertValidatorIsRemoved { how_many_initial: 2, epoch_length: 20, allegretto_at_genesis: true }
+        .run();
 }
 
 #[test_traced]
 fn with_allegretto_at_genesis_validator_is_removed_from_set_of_four() {
-    AssertValidatorIsRemoved {
-        how_many_initial: 4,
-        epoch_length: 40,
-        allegretto_at_genesis: true,
-    }
-    .run();
+    AssertValidatorIsRemoved { how_many_initial: 4, epoch_length: 40, allegretto_at_genesis: true }
+        .run();
 }
 
 struct AssertValidatorIsAdded {
@@ -99,11 +75,7 @@ struct AssertValidatorIsAdded {
 
 impl AssertValidatorIsAdded {
     fn run(self) {
-        let Self {
-            how_many_initial,
-            epoch_length,
-            allegretto_at_genesis,
-        } = self;
+        let Self { how_many_initial, epoch_length, allegretto_at_genesis } = self;
         let _ = tempo_eyre::install();
 
         let setup = Setup::new()
@@ -133,9 +105,7 @@ impl AssertValidatorIsAdded {
             };
 
             assert!(
-                validators
-                    .iter()
-                    .all(|node| node.consensus_config().share.is_some()),
+                validators.iter().all(|node| node.consensus_config().share.is_some()),
                 "must have removed the one non-signer node; must be left with only signers",
             );
 
@@ -262,8 +232,8 @@ impl AssertValidatorIsAdded {
                             (value as u32 == how_many_initial + 1) as u32;
                     }
                 }
-                if dealers_is_initial == how_many_initial
-                    && players_is_initial_plus_one == how_many_initial
+                if dealers_is_initial == how_many_initial &&
+                    players_is_initial_plus_one == how_many_initial
                 {
                     break;
                 }
@@ -307,16 +277,10 @@ struct AssertValidatorIsRemoved {
 
 impl AssertValidatorIsRemoved {
     fn run(self) {
-        let Self {
-            how_many_initial,
-            epoch_length,
-            allegretto_at_genesis,
-        } = self;
+        let Self { how_many_initial, epoch_length, allegretto_at_genesis } = self;
         let _ = tempo_eyre::install();
 
-        let setup = Setup::new()
-            .how_many_signers(how_many_initial)
-            .epoch_length(epoch_length);
+        let setup = Setup::new().how_many_signers(how_many_initial).epoch_length(epoch_length);
 
         let setup = if allegretto_at_genesis {
             setup.allegretto_time(0)
@@ -450,8 +414,8 @@ impl AssertValidatorIsRemoved {
                             (value as u32 == how_many_initial - 1) as u32;
                     }
                 }
-                if dealers_is_initial == how_many_initial
-                    && players_is_initial_minus_one == how_many_initial
+                if dealers_is_initial == how_many_initial &&
+                    players_is_initial_minus_one == how_many_initial
                 {
                     break;
                 }

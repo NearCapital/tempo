@@ -14,8 +14,8 @@ use tempo_precompiles_macros::Storable;
 ///
 /// # Order Types
 /// - **Regular orders**: Orders with `is_flip = false`
-/// - **Flip orders**: Orders with `is_flip = true` that automatically create
-///   a new order on the opposite side when fully filled
+/// - **Flip orders**: Orders with `is_flip = true` that automatically create a new order on the
+///   opposite side when fully filled
 ///
 /// # Order Lifecycle
 /// 1. Order is placed via `place()` or `placeFlip()` and added to pending queue
@@ -137,9 +137,7 @@ impl Order {
             return Err(OrderError::InvalidAskFlipTick { tick, flip_tick });
         }
 
-        Ok(Self::new(
-            order_id, maker, book_key, amount, tick, is_bid, true, flip_tick,
-        ))
+        Ok(Self::new(order_id, maker, book_key, amount, tick, is_bid, true, flip_tick))
     }
 
     /// Returns the order ID.
@@ -259,9 +257,7 @@ impl Order {
 
         // Check if fully filled
         if self.remaining != 0 {
-            return Err(OrderError::OrderNotFullyFilled {
-                remaining: self.remaining,
-            });
+            return Err(OrderError::OrderNotFullyFilled { remaining: self.remaining });
         }
 
         // Create flipped order
@@ -405,10 +401,7 @@ mod tests {
         let mut order = Order::new_bid(1, TEST_MAKER, TEST_BOOK_KEY, 1000, 5);
 
         let result = order.fill(1001);
-        assert!(matches!(
-            result,
-            Err(OrderError::FillAmountExceedsRemaining { .. })
-        ));
+        assert!(matches!(result, Err(OrderError::FillAmountExceedsRemaining { .. })));
     }
 
     #[test]
@@ -461,10 +454,7 @@ mod tests {
         let order = Order::new_flip(1, TEST_MAKER, TEST_BOOK_KEY, 1000, 5, true, 10).unwrap();
 
         let result = order.create_flipped_order(2);
-        assert!(matches!(
-            result,
-            Err(OrderError::OrderNotFullyFilled { .. })
-        ));
+        assert!(matches!(result, Err(OrderError::OrderNotFullyFilled { .. })));
     }
 
     #[test]

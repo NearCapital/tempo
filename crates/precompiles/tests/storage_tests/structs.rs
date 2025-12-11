@@ -40,11 +40,7 @@ fn test_struct_storage() {
         assert_eq!(slots::BLOCK_MAPPING, U256::from(3));
 
         // Test direct fields
-        let block = TestBlock {
-            field1: U256::from(1000),
-            field2: U256::from(2000),
-            field3: 3000,
-        };
+        let block = TestBlock { field1: U256::from(1000), field2: U256::from(2000), field3: 3000 };
 
         layout.field_a.write(U256::from(100)).unwrap();
         layout.field_b.write(U256::from(200)).unwrap();
@@ -69,16 +65,8 @@ fn test_struct_storage() {
         assert_eq!(addr_map.at(addr3).read().unwrap(), U256::from(3000));
 
         // Test block_mapping with TestBlock values
-        let block1 = TestBlock {
-            field1: U256::from(111),
-            field2: U256::from(222),
-            field3: 333,
-        };
-        let block2 = TestBlock {
-            field1: U256::from(444),
-            field2: U256::from(555),
-            field3: 666,
-        };
+        let block1 = TestBlock { field1: U256::from(111), field2: U256::from(222), field3: 333 };
+        let block2 = TestBlock { field1: U256::from(444), field2: U256::from(555), field3: 666 };
 
         layout.block_mapping.at(1).write(block1.clone()).unwrap();
         layout.block_mapping.at(2).write(block2.clone()).unwrap();
@@ -87,10 +75,7 @@ fn test_struct_storage() {
 
         // Verify non-existent keys return default values
         assert_eq!(addr_map.at(test_address(99)).read().unwrap(), U256::ZERO);
-        assert_eq!(
-            layout.block_mapping.at(99).read().unwrap(),
-            TestBlock::default()
-        );
+        assert_eq!(layout.block_mapping.at(99).read().unwrap(), TestBlock::default());
     });
 }
 
@@ -107,11 +92,7 @@ fn test_delete_struct_field_in_contract() {
     let (mut storage, address) = setup_storage();
     let mut layout = Layout::__new(address);
     StorageCtx::enter(&mut storage, || {
-        let block = TestBlock {
-            field1: U256::from(1000),
-            field2: U256::from(2000),
-            field3: 3000,
-        };
+        let block = TestBlock { field1: U256::from(1000), field2: U256::from(2000), field3: 3000 };
 
         // Write and verify data
         layout.field_a.write(U256::from(100)).unwrap();
@@ -128,11 +109,7 @@ fn test_delete_struct_field_in_contract() {
         // Verify block returns default values after deletion
         assert_eq!(
             layout.block.read().unwrap(),
-            TestBlock {
-                field1: U256::ZERO,
-                field2: U256::ZERO,
-                field3: 0,
-            }
+            TestBlock { field1: U256::ZERO, field2: U256::ZERO, field3: 0 }
         );
 
         // Verify other fields remain unchanged
@@ -154,11 +131,8 @@ fn test_user_profile_struct_in_contract() {
     let (mut storage, address) = setup_storage();
     let mut layout = Layout::__new(address);
     StorageCtx::enter(&mut storage, || {
-        let profile = UserProfile {
-            owner: test_address(42),
-            active: true,
-            balance: U256::from(999_999),
-        };
+        let profile =
+            UserProfile { owner: test_address(42), active: true, balance: U256::from(999_999) };
 
         // Write and verify data
         layout.counter.write(U256::from(5)).unwrap();
@@ -175,11 +149,7 @@ fn test_user_profile_struct_in_contract() {
         // Verify profile returns default values after deletion
         assert_eq!(
             layout.profile.read().unwrap(),
-            UserProfile {
-                owner: Address::ZERO,
-                active: false,
-                balance: U256::ZERO,
-            }
+            UserProfile { owner: Address::ZERO, active: false, balance: U256::ZERO }
         );
 
         // Verify other fields remain unchanged

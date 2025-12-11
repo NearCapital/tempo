@@ -68,11 +68,7 @@ where
     /// Creates a new handler for the array at the given base slot and address.
     #[inline]
     pub fn new(base_slot: U256, address: Address) -> Self {
-        Self {
-            base_slot,
-            address,
-            _phantom: PhantomData,
-        }
+        Self { base_slot, address, _phantom: PhantomData }
     }
 
     /// Returns a `Slot` accessor for full-array operations.
@@ -124,10 +120,7 @@ where
                 LayoutCtx::packed(location.offset_bytes),
             )
         } else {
-            (
-                self.base_slot + U256::from(index * T::SLOTS),
-                LayoutCtx::FULL,
-            )
+            (self.base_slot + U256::from(index * T::SLOTS), LayoutCtx::FULL)
         };
 
         Some(T::handle(base_slot, layout_ctx, self.address))
@@ -309,11 +302,8 @@ mod tests {
         let base_slot = U256::from(400);
 
         // [Address; 3] should use 3 slots (20 bytes doesn't divide 32 evenly)
-        let data: [Address; 3] = [
-            Address::repeat_byte(0x11),
-            Address::repeat_byte(0x22),
-            Address::repeat_byte(0x33),
-        ];
+        let data: [Address; 3] =
+            [Address::repeat_byte(0x11), Address::repeat_byte(0x22), Address::repeat_byte(0x33)];
 
         // Verify slot count
         assert_eq!(<[Address; 3] as StorableType>::LAYOUT, Layout::Slots(3));

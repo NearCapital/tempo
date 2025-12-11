@@ -30,9 +30,10 @@ struct Validator {
 #[contract(addr = VALIDATOR_CONFIG_ADDRESS)]
 pub struct ValidatorConfig {
     owner: Address,
-    // NOTE(rusowsky): we delete `validator_count`, as that info is available via `validators_array.len()`
-    // However, such change will have to be coordinated in a hardfork. Additionally, we must ensure that
-    // `validators_array` and `validators` are kept in slots 2 and 3 to preserve the storage layout.
+    // NOTE(rusowsky): we delete `validator_count`, as that info is available via
+    // `validators_array.len()` However, such change will have to be coordinated in a hardfork.
+    // Additionally, we must ensure that `validators_array` and `validators` are kept in slots
+    // 2 and 3 to preserve the storage layout.
     validator_count: u64,
     validators_array: Vec<Address>,
     validators: Mapping<Address, Validator>,
@@ -156,19 +157,14 @@ impl ValidatorConfig {
             inbound_address: call.inboundAddress,
             outbound_address: call.outboundAddress,
         };
-        self.validators
-            .at(call.newValidatorAddress)
-            .write(validator)?;
+        self.validators.at(call.newValidatorAddress).write(validator)?;
 
         // Add the validator public key to the validators array
         self.validators_array.push(call.newValidatorAddress)?;
 
         // Increment the validator count
-        self.validator_count.write(
-            count
-                .checked_add(1)
-                .ok_or(TempoPrecompileError::under_overflow())?,
-        )
+        self.validator_count
+            .write(count.checked_add(1).ok_or(TempoPrecompileError::under_overflow())?)
     }
 
     /// Update validator information (and optionally rotate to new address)
@@ -225,9 +221,7 @@ impl ValidatorConfig {
             outbound_address: call.outboundAddress,
         };
 
-        self.validators
-            .at(call.newValidatorAddress)
-            .write(updated_validator)
+        self.validators.at(call.newValidatorAddress).write(updated_validator)
     }
 
     /// Change validator active status (owner only)
@@ -281,16 +275,11 @@ mod tests {
 
             // Check that owner is owner1
             let current_owner = validator_config.owner()?;
-            assert_eq!(
-                current_owner, owner1,
-                "Owner should be owner1 after initialization"
-            );
+            assert_eq!(current_owner, owner1, "Owner should be owner1 after initialization");
 
             // Change owner to owner2
-            validator_config.change_owner(
-                owner1,
-                IValidatorConfig::changeOwnerCall { newOwner: owner2 },
-            )?;
+            validator_config
+                .change_owner(owner1, IValidatorConfig::changeOwnerCall { newOwner: owner2 })?;
 
             // Check that owner is now owner2
             let current_owner = validator_config.owner()?;
@@ -362,10 +351,7 @@ mod tests {
             // Owner2 (non-owner) tries to change validator status - should fail
             let res = validator_config.change_validator_status(
                 owner2,
-                IValidatorConfig::changeValidatorStatusCall {
-                    validator: validator1,
-                    active: true,
-                },
+                IValidatorConfig::changeValidatorStatusCall { validator: validator1, active: true },
             );
             assert_eq!(res, Err(ValidatorConfigError::unauthorized().into()));
 
@@ -553,10 +539,7 @@ mod tests {
 
             // Verify validator1 - updated from long to short address
             assert_eq!(validators[0].validatorAddress, validator1);
-            assert_eq!(
-                validators[0].publicKey, public_key1_new,
-                "PublicKey should be updated"
-            );
+            assert_eq!(validators[0].publicKey, public_key1_new, "PublicKey should be updated");
             assert_eq!(
                 validators[0].inboundAddress, short_inbound1,
                 "Address should be updated to short"
@@ -577,22 +560,13 @@ mod tests {
 
             // Verify validator2_new - rotated address, kept IP and publicKey
             assert_eq!(validators[3].validatorAddress, validator2_new);
-            assert_eq!(
-                validators[3].publicKey, public_key2,
-                "PublicKey should be same"
-            );
-            assert_eq!(
-                validators[3].inboundAddress, "192.168.1.2:8000",
-                "IP should be same"
-            );
+            assert_eq!(validators[3].publicKey, public_key2, "PublicKey should be same");
+            assert_eq!(validators[3].inboundAddress, "192.168.1.2:8000", "IP should be same");
             assert!(validators[3].active);
 
             // Verify validator3_new - rotated address with long host, kept publicKey
             assert_eq!(validators[4].validatorAddress, validator3_new);
-            assert_eq!(
-                validators[4].publicKey, public_key3,
-                "PublicKey should be same"
-            );
+            assert_eq!(validators[4].publicKey, public_key3, "PublicKey should be same");
             assert_eq!(
                 validators[4].inboundAddress, long_inbound3,
                 "Address should be updated to long"

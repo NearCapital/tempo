@@ -199,10 +199,10 @@ fn assert_allegretto_transition_refused_with_wrong_socket_addr(how_many: u32, ep
                 }
             }
 
-            if transition_refused == how_many
-                && epoch_transitioned == how_many
-                && dkg_successful == how_many
-                && at_least_two_post_allegretto_ceremonies_started == how_many
+            if transition_refused == how_many &&
+                epoch_transitioned == how_many &&
+                dkg_successful == how_many &&
+                at_least_two_post_allegretto_ceremonies_started == how_many
             {
                 break;
             }
@@ -271,10 +271,10 @@ fn assert_allegretto_transition_refused_without_contract_validators(
                 }
             }
 
-            if transition_refused == how_many
-                && epoch_transitioned == how_many
-                && dkg_successful == how_many
-                && at_least_two_post_allegretto_ceremonies_started == how_many
+            if transition_refused == how_many &&
+                epoch_transitioned == how_many &&
+                dkg_successful == how_many &&
+                at_least_two_post_allegretto_ceremonies_started == how_many
             {
                 break;
             }

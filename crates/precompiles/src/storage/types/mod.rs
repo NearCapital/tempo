@@ -111,11 +111,7 @@ impl LayoutCtx {
     /// Get the packed offset, returns `None` for `Full`
     #[inline]
     pub const fn packed_offset(&self) -> Option<usize> {
-        if self.0 == usize::MAX {
-            None
-        } else {
-            Some(self.0)
-        }
+        if self.0 == usize::MAX { None } else { Some(self.0) }
     }
 }
 

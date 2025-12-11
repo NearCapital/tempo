@@ -71,9 +71,7 @@ impl NonceManager {
             self.increment_active_key_count(account)?;
         }
 
-        let new_nonce = current
-            .checked_add(1)
-            .ok_or_else(NonceError::nonce_overflow)?;
+        let new_nonce = current.checked_add(1).ok_or_else(NonceError::nonce_overflow)?;
 
         self.nonces.at(account).at(nonce_key).write(new_nonce)?;
 
@@ -92,20 +90,16 @@ impl NonceManager {
     fn increment_active_key_count(&mut self, account: Address) -> Result<()> {
         let current = self.active_key_count.at(account).read()?;
 
-        let new_count = current
-            .checked_add(U256::ONE)
-            .ok_or_else(NonceError::nonce_overflow)?;
+        let new_count = current.checked_add(U256::ONE).ok_or_else(NonceError::nonce_overflow)?;
 
         self.active_key_count.at(account).write(new_count)?;
 
         // Emit ActiveKeyCountChanged event (only after Moderato hardfork)
         if self.storage.spec().is_moderato() {
-            self.emit_event(NonceEvent::ActiveKeyCountChanged(
-                INonce::ActiveKeyCountChanged {
-                    account,
-                    newCount: new_count,
-                },
-            ))?;
+            self.emit_event(NonceEvent::ActiveKeyCountChanged(INonce::ActiveKeyCountChanged {
+                account,
+                newCount: new_count,
+            }))?;
         }
 
         Ok(())
@@ -130,10 +124,7 @@ mod tests {
             let mgr = NonceManager::new();
 
             let account = address!("0x1111111111111111111111111111111111111111");
-            let nonce = mgr.get_nonce(INonce::getNonceCall {
-                account,
-                nonceKey: U256::from(5),
-            })?;
+            let nonce = mgr.get_nonce(INonce::getNonceCall { account, nonceKey: U256::from(5) })?;
 
             assert_eq!(nonce, 0);
             Ok(())
@@ -147,10 +138,7 @@ mod tests {
             let mgr = NonceManager::new();
 
             let account = address!("0x1111111111111111111111111111111111111111");
-            let result = mgr.get_nonce(INonce::getNonceCall {
-                account,
-                nonceKey: U256::ZERO,
-            });
+            let result = mgr.get_nonce(INonce::getNonceCall { account, nonceKey: U256::ZERO });
 
             assert_eq!(
                 result.unwrap_err(),
@@ -229,14 +217,10 @@ mod tests {
                 mgr.increment_nonce(account2, nonce_key)?;
             }
 
-            let nonce1 = mgr.get_nonce(INonce::getNonceCall {
-                account: account1,
-                nonceKey: nonce_key,
-            })?;
-            let nonce2 = mgr.get_nonce(INonce::getNonceCall {
-                account: account2,
-                nonceKey: nonce_key,
-            })?;
+            let nonce1 =
+                mgr.get_nonce(INonce::getNonceCall { account: account1, nonceKey: nonce_key })?;
+            let nonce2 =
+                mgr.get_nonce(INonce::getNonceCall { account: account2, nonceKey: nonce_key })?;
 
             assert_eq!(nonce1, 10);
             assert_eq!(nonce2, 20);
@@ -292,18 +276,12 @@ mod tests {
             let mut mgr = NonceManager::new();
             mgr.increment_nonce(account, nonce_key)?;
 
-            assert!(
-                mgr.emitted_events().is_empty(),
-                "No events should be emitted pre-Moderato"
-            );
+            assert!(mgr.emitted_events().is_empty(), "No events should be emitted pre-Moderato");
 
             let nonce_key2 = U256::from(10);
             mgr.increment_nonce(account, nonce_key2)?;
 
-            assert!(
-                mgr.emitted_events().is_empty(),
-                "No events should be emitted pre-Moderato"
-            );
+            assert!(mgr.emitted_events().is_empty(), "No events should be emitted pre-Moderato");
             Ok(())
         })
     }

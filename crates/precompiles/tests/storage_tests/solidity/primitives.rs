@@ -62,13 +62,8 @@ fn test_arrays_layout() {
         another_nested_array: [[u16; 2]; 6],
     }
 
-    let rust_layout = layout_fields!(
-        field_a,
-        large_array,
-        field_b,
-        nested_array,
-        another_nested_array
-    );
+    let rust_layout =
+        layout_fields!(field_a, large_array, field_b, nested_array, another_nested_array);
 
     // Compare against expected layout from Solidity
     let sol_path = testdata("arrays.sol");
@@ -194,10 +189,7 @@ fn test_multi_slot_arrays_layout() {
         use crate::storage_tests::__packing_packed_two_slot::*;
         let rust_struct = struct_fields!(slots::DYN_TWO_SLOT, value, timestamp, nonce, owner);
         if let Err(errors) = compare_struct_members(&solc_layout, "dynTwoSlot", &rust_struct) {
-            panic!(
-                "PackedTwoSlot member layout mismatch:\n{}",
-                errors.join("\n")
-            );
+            panic!("PackedTwoSlot member layout mismatch:\n{}", errors.join("\n"));
         }
     }
 
@@ -215,10 +207,7 @@ fn test_multi_slot_arrays_layout() {
             active
         );
         if let Err(errors) = compare_struct_members(&solc_layout, "dynThreeSlot", &rust_struct) {
-            panic!(
-                "PackedThreeSlot member layout mismatch:\n{}",
-                errors.join("\n")
-            );
+            panic!("PackedThreeSlot member layout mismatch:\n{}", errors.join("\n"));
         }
     }
 }

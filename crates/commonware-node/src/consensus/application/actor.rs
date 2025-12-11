@@ -113,11 +113,7 @@ where
 
     /// Runs the actor until it is externally stopped.
     async fn run_until_stopped(self, dkg_manager: crate::dkg::manager::Mailbox) {
-        let Self {
-            context,
-            mailbox,
-            inner,
-        } = self;
+        let Self { context, mailbox, inner } = self;
         // TODO(janis): should be placed under a shutdown signal so we don't
         // just stall on startup.
         let Ok(initialized) = inner.into_initialized(context.clone(), dkg_manager).await else {
@@ -125,13 +121,7 @@ where
             return;
         };
 
-        Actor {
-            context,
-            mailbox,
-            inner: initialized,
-        }
-        .run_until_stopped()
-        .await
+        Actor { context, mailbox, inner: initialized }.run_until_stopped().await
     }
 
     pub(in crate::consensus) fn start(
@@ -171,9 +161,7 @@ where
             Message::Finalized(finalized) => {
                 // XXX: being able to finalize is the only stop condition.
                 // There is no point continuing if this doesn't work.
-                self.inner
-                    .handle_finalized(*finalized)
-                    .wrap_err("failed finalizing block")?;
+                self.inner.handle_finalized(*finalized).wrap_err("failed finalizing block")?;
             }
             Message::Genesis(genesis) => {
                 self.context.with_label("genesis").spawn({
@@ -300,11 +288,7 @@ impl Inner<Init> {
         request: Propose,
         context: TContext,
     ) -> eyre::Result<()> {
-        let Propose {
-            parent: (parent_view, parent_digest),
-            mut response,
-            round,
-        } = request;
+        let Propose { parent: (parent_view, parent_digest), mut response, round } = request;
 
         let proposal = select!(
             () = response.cancellation() => {
@@ -357,10 +341,7 @@ impl Inner<Init> {
             context,
             round.epoch(),
             self.epoch_length,
-            self.execution_node
-                .add_ons_handle
-                .beacon_engine_handle
-                .clone(),
+            self.execution_node.add_ons_handle.beacon_engine_handle.clone(),
             &proposal,
             parent_digest,
             &self.scheme_provider,
@@ -397,13 +378,7 @@ impl Inner<Init> {
         ),
     )]
     async fn handle_verify<TContext: Pacer>(mut self, verify: Verify, context: TContext) {
-        let Verify {
-            parent,
-            payload,
-            proposer,
-            mut response,
-            round,
-        } = verify;
+        let Verify { parent, payload, proposer, mut response, round } = verify;
         let result = select!(
             () = response.cancellation() => {
                 Err(eyre!(
@@ -425,11 +400,9 @@ impl Inner<Init> {
         if let Ok((block, true)) = result {
             // Only make the verified block canonical when not doing a
             // re-propose at the end of an epoch.
-            if parent.1 != payload
-                && let Err(error) = self
-                    .state
-                    .executor_mailbox
-                    .canonicalize_head(block.height(), block.digest())
+            if parent.1 != payload &&
+                let Err(error) =
+                    self.state.executor_mailbox.canonicalize_head(block.height(), block.digest())
             {
                 tracing::warn!(
                     %error,
@@ -475,17 +448,16 @@ impl Inner<Init> {
             return Ok(parent);
         }
 
-        // Send the proposal parent to reth to cover edge cases when we were not asked to verify it directly.
+        // Send the proposal parent to reth to cover edge cases when we were not asked to verify it
+        // directly.
         if !verify_block(
             context.clone(),
             utils::epoch(self.epoch_length, parent.height()),
             self.epoch_length,
-            self.execution_node
-                .add_ons_handle
-                .beacon_engine_handle
-                .clone(),
+            self.execution_node.add_ons_handle.beacon_engine_handle.clone(),
             &parent,
-            // It is safe to not verify the parent of the parent because this block is already notarized.
+            // It is safe to not verify the parent of the parent because this block is already
+            // notarized.
             parent.parent_digest(),
             &self.scheme_provider,
         )
@@ -495,14 +467,10 @@ impl Inner<Init> {
             eyre::bail!("the proposal parent block is not valid");
         }
 
-        ready(
-            self.state
-                .executor_mailbox
-                .canonicalize_head(parent.height(), parent.digest()),
-        )
-        .and_then(|ack| ack.map_err(eyre::Report::new))
-        .await
-        .wrap_err("failed updating canonical head to parent")?;
+        ready(self.state.executor_mailbox.canonicalize_head(parent.height(), parent.digest()))
+            .and_then(|ack| ack.map_err(eyre::Report::new))
+            .await
+            .wrap_err("failed updating canonical head to parent")?;
 
         // Query DKG manager for ceremony data before building payload
         // This data will be passed to the payload builder via attributes
@@ -530,12 +498,7 @@ impl Inner<Init> {
             outcome.encode().freeze().into()
         } else {
             // Regular block: try to include intermediate dealing
-            match self
-                .state
-                .dkg_manager
-                .get_intermediate_dealing(round.epoch())
-                .await
-            {
+            match self.state.dkg_manager.get_intermediate_dealing(round.epoch()).await {
                 Err(error) => {
                     warn!(
                         %error,
@@ -566,11 +529,7 @@ impl Inner<Init> {
             self.fee_recipient,
             context.current().epoch_millis(),
             extra_data,
-            move || {
-                self.subblocks
-                    .get_subblocks(parent.block_hash())
-                    .unwrap_or_default()
-            },
+            move || self.subblocks.get_subblocks(parent.block_hash()).unwrap_or_default(),
         );
 
         let interrupt_handle = attrs.interrupt_handle().clone();
@@ -654,13 +613,9 @@ impl Inner<Init> {
             }
         }
 
-        if let Err(reason) = verify_header_extra_data(
-            &block,
-            &self.state.dkg_manager,
-            self.epoch_length,
-            &proposer,
-        )
-        .await
+        if let Err(reason) =
+            verify_header_extra_data(&block, &self.state.dkg_manager, self.epoch_length, &proposer)
+                .await
         {
             warn!(
                 %reason,
@@ -669,10 +624,8 @@ impl Inner<Init> {
             return Ok((block, false));
         }
 
-        if let Err(error) = self
-            .state
-            .executor_mailbox
-            .canonicalize_head(parent.height(), parent.digest())
+        if let Err(error) =
+            self.state.executor_mailbox.canonicalize_head(parent.height(), parent.digest())
         {
             tracing::warn!(
                 %error,
@@ -686,10 +639,7 @@ impl Inner<Init> {
             context,
             round.epoch(),
             self.epoch_length,
-            self.execution_node
-                .add_ons_handle
-                .beacon_engine_handle
-                .clone(),
+            self.execution_node.add_ons_handle.beacon_engine_handle.clone(),
             &block,
             parent_digest,
             &self.scheme_provider,
@@ -813,11 +763,7 @@ async fn verify_block<TContext: Pacer>(
     let execution_data = TempoExecutionData {
         block: Arc::new(block),
         validator_set: Some(
-            scheme
-                .participants()
-                .into_iter()
-                .map(|p| B256::from_slice(p))
-                .collect(),
+            scheme.participants().into_iter().map(|p| B256::from_slice(p)).collect(),
         ),
     };
     let payload_status = engine
@@ -828,10 +774,7 @@ async fn verify_block<TContext: Pacer>(
     match payload_status.status {
         PayloadStatusEnum::Valid | PayloadStatusEnum::Accepted => Ok(true),
         PayloadStatusEnum::Invalid { validation_error } => {
-            info!(
-                validation_error,
-                "execution layer returned that the block was invalid"
-            );
+            info!(validation_error, "execution layer returned that the block was invalid");
             Ok(false)
         }
         PayloadStatusEnum::Syncing => {
@@ -883,8 +826,8 @@ async fn verify_header_extra_data(
                 match so that the end-of-block is valid",
             ));
         }
-    } else if !block.header().extra_data().is_empty()
-        && let Ok(dealing) = block.try_read_ceremony_deal_outcome()
+    } else if !block.header().extra_data().is_empty() &&
+        let Ok(dealing) = block.try_read_ceremony_deal_outcome()
     {
         info!("block header extra_data header contained intermediate DKG dealing; verifying it");
         ensure!(
@@ -925,10 +868,7 @@ fn report_verification_result(
 ) -> eyre::Result<()> {
     match &verification_result {
         Ok((_, is_good)) => {
-            info!(
-                proposal_valid = is_good,
-                "returning proposal verification result to consensus",
-            );
+            info!(proposal_valid = is_good, "returning proposal verification result to consensus",);
             response.send(*is_good).map_err(|_| {
                 eyre!(
                     "attempted to send return verification result, but \
@@ -946,7 +886,8 @@ fn report_verification_result(
     Ok(())
 }
 
-/// Ensures the task associated with the [`Handle`] is aborted [`Handle::abort`] when this instance is dropped.
+/// Ensures the task associated with the [`Handle`] is aborted [`Handle::abort`] when this instance
+/// is dropped.
 struct AbortOnDrop(Handle<()>);
 
 impl Drop for AbortOnDrop {

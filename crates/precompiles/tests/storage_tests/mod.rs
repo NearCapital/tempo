@@ -196,12 +196,7 @@ pub(crate) fn arb_test_block() -> impl Strategy<Value = TestBlock> {
 /// Generate arbitrary PackedTwoSlot structs
 pub(crate) fn arb_packed_two_slot() -> impl Strategy<Value = PackedTwoSlot> {
     (arb_u256(), any::<u64>(), any::<u32>(), arb_address()).prop_map(
-        |(value, timestamp, nonce, owner)| PackedTwoSlot {
-            value,
-            timestamp,
-            nonce,
-            owner,
-        },
+        |(value, timestamp, nonce, owner)| PackedTwoSlot { value, timestamp, nonce, owner },
     )
 }
 
@@ -216,15 +211,7 @@ pub(crate) fn arb_packed_three_slot() -> impl Strategy<Value = PackedThreeSlot> 
         arb_address(),
         any::<bool>(),
     )
-        .prop_map(
-            |(value, timestamp, start_time, end_time, nonce, owner, active)| PackedThreeSlot {
-                value,
-                timestamp,
-                start_time,
-                end_time,
-                nonce,
-                owner,
-                active,
-            },
-        )
+        .prop_map(|(value, timestamp, start_time, end_time, nonce, owner, active)| {
+            PackedThreeSlot { value, timestamp, start_time, end_time, nonce, owner, active }
+        })
 }

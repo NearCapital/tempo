@@ -16,23 +16,15 @@ pub(crate) struct GenerateGenesis {
 
 impl GenerateGenesis {
     pub(crate) async fn run(self) -> eyre::Result<()> {
-        let Self {
-            output,
-            genesis_args,
-        } = self;
-        let (genesis, consensus_config) = genesis_args
-            .generate_genesis()
-            .await
-            .wrap_err("failed generating genesis")?;
+        let Self { output, genesis_args } = self;
+        let (genesis, consensus_config) =
+            genesis_args.generate_genesis().await.wrap_err("failed generating genesis")?;
 
         let json =
             serde_json::to_string_pretty(&genesis).wrap_err("failed encoding genesis as JSON")?;
 
         std::fs::create_dir_all(&output).wrap_err_with(|| {
-            format!(
-                "failed to create directory and parents for `{}`",
-                output.display()
-            )
+            format!("failed to create directory and parents for `{}`", output.display())
         })?;
         let genesis_dst = output.join("genesis.json");
         std::fs::write(&genesis_dst, json).wrap_err_with(|| {
@@ -52,25 +44,16 @@ impl GenerateGenesis {
                     )
                 })?;
                 let signing_key_dst = validator.dst_signing_key(&output);
-                validator
-                    .signing_key
-                    .write_to_file(&signing_key_dst)
-                    .wrap_err_with(|| {
-                        format!(
-                            "failed writing ed25519 signing key to `{}`",
-                            signing_key_dst.display()
-                        )
-                    })?;
+                validator.signing_key.write_to_file(&signing_key_dst).wrap_err_with(|| {
+                    format!("failed writing ed25519 signing key to `{}`", signing_key_dst.display())
+                })?;
                 let signing_share_dst = validator.dst_signing_share(&output);
-                validator
-                    .signing_share
-                    .write_to_file(&signing_share_dst)
-                    .wrap_err_with(|| {
-                        format!(
-                            "failed writing bls12381 signing share to `{}`",
-                            signing_share_dst.display()
-                        )
-                    })?;
+                validator.signing_share.write_to_file(&signing_share_dst).wrap_err_with(|| {
+                    format!(
+                        "failed writing bls12381 signing share to `{}`",
+                        signing_share_dst.display()
+                    )
+                })?;
                 println!(
                     "validator keys written to `{}`, `{}`",
                     signing_key_dst.display(),

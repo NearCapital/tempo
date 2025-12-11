@@ -39,13 +39,9 @@ impl PolicyData {
         use crate::storage::packing::insert_packed_value;
         use __packing_policy_data::{ADMIN_LOC as A_LOC, POLICY_TYPE_LOC as PT_LOC};
 
-        let encoded = insert_packed_value(
-            U256::ZERO,
-            &self.policy_type,
-            PT_LOC.offset_bytes,
-            PT_LOC.size,
-        )
-        .expect("unable to insert 'policy_type'");
+        let encoded =
+            insert_packed_value(U256::ZERO, &self.policy_type, PT_LOC.offset_bytes, PT_LOC.size)
+                .expect("unable to insert 'policy_type'");
 
         insert_packed_value(encoded, &self.admin, A_LOC.offset_bytes, A_LOC.size)
             .expect("unable to insert 'admin'")
@@ -91,26 +87,20 @@ impl TIP403Registry {
         let new_policy_id = self.policy_id_counter()?;
 
         // Increment counter
-        self.policy_id_counter.write(
-            new_policy_id
-                .checked_add(1)
-                .ok_or(TempoPrecompileError::under_overflow())?,
-        )?;
+        self.policy_id_counter
+            .write(new_policy_id.checked_add(1).ok_or(TempoPrecompileError::under_overflow())?)?;
 
         // Store policy data
-        self.policy_data.at(new_policy_id).write(PolicyData {
-            policy_type: call.policyType as u8,
-            admin: call.admin,
-        })?;
+        self.policy_data
+            .at(new_policy_id)
+            .write(PolicyData { policy_type: call.policyType as u8, admin: call.admin })?;
 
         // Emit events
-        self.emit_event(TIP403RegistryEvent::PolicyCreated(
-            ITIP403Registry::PolicyCreated {
-                policyId: new_policy_id,
-                updater: msg_sender,
-                policyType: call.policyType,
-            },
-        ))?;
+        self.emit_event(TIP403RegistryEvent::PolicyCreated(ITIP403Registry::PolicyCreated {
+            policyId: new_policy_id,
+            updater: msg_sender,
+            policyType: call.policyType,
+        }))?;
 
         self.emit_event(TIP403RegistryEvent::PolicyAdminUpdated(
             ITIP403Registry::PolicyAdminUpdated {
@@ -132,20 +122,11 @@ impl TIP403Registry {
         let new_policy_id = self.policy_id_counter()?;
 
         // Increment counter
-        self.policy_id_counter.write(
-            new_policy_id
-                .checked_add(1)
-                .ok_or(TempoPrecompileError::under_overflow())?,
-        )?;
+        self.policy_id_counter
+            .write(new_policy_id.checked_add(1).ok_or(TempoPrecompileError::under_overflow())?)?;
 
         // Store policy data
-        self.set_policy_data(
-            new_policy_id,
-            PolicyData {
-                policy_type: policy_type as u8,
-                admin,
-            },
-        )?;
+        self.set_policy_data(new_policy_id, PolicyData { policy_type: policy_type as u8, admin })?;
 
         // Set initial accounts
         for account in call.accounts.iter() {
@@ -179,13 +160,11 @@ impl TIP403Registry {
         }
 
         // Emit policy creation events
-        self.emit_event(TIP403RegistryEvent::PolicyCreated(
-            ITIP403Registry::PolicyCreated {
-                policyId: new_policy_id,
-                updater: msg_sender,
-                policyType: call.policyType,
-            },
-        ))?;
+        self.emit_event(TIP403RegistryEvent::PolicyCreated(ITIP403Registry::PolicyCreated {
+            policyId: new_policy_id,
+            updater: msg_sender,
+            policyType: call.policyType,
+        }))?;
 
         self.emit_event(TIP403RegistryEvent::PolicyAdminUpdated(
             ITIP403Registry::PolicyAdminUpdated {
@@ -211,13 +190,7 @@ impl TIP403Registry {
         }
 
         // Update admin policy ID
-        self.set_policy_data(
-            call.policyId,
-            PolicyData {
-                admin: call.admin,
-                ..data
-            },
-        )?;
+        self.set_policy_data(call.policyId, PolicyData { admin: call.admin, ..data })?;
 
         self.emit_event(TIP403RegistryEvent::PolicyAdminUpdated(
             ITIP403Registry::PolicyAdminUpdated {
@@ -247,14 +220,12 @@ impl TIP403Registry {
 
         self.set_policy_set(call.policyId, call.account, call.allowed)?;
 
-        self.emit_event(TIP403RegistryEvent::WhitelistUpdated(
-            ITIP403Registry::WhitelistUpdated {
-                policyId: call.policyId,
-                updater: msg_sender,
-                account: call.account,
-                allowed: call.allowed,
-            },
-        ))
+        self.emit_event(TIP403RegistryEvent::WhitelistUpdated(ITIP403Registry::WhitelistUpdated {
+            policyId: call.policyId,
+            updater: msg_sender,
+            account: call.account,
+            allowed: call.allowed,
+        }))
     }
 
     pub fn modify_policy_blacklist(
@@ -276,14 +247,12 @@ impl TIP403Registry {
 
         self.set_policy_set(call.policyId, call.account, call.restricted)?;
 
-        self.emit_event(TIP403RegistryEvent::BlacklistUpdated(
-            ITIP403Registry::BlacklistUpdated {
-                policyId: call.policyId,
-                updater: msg_sender,
-                account: call.account,
-                restricted: call.restricted,
-            },
-        ))
+        self.emit_event(TIP403RegistryEvent::BlacklistUpdated(ITIP403Registry::BlacklistUpdated {
+            policyId: call.policyId,
+            updater: msg_sender,
+            account: call.account,
+            restricted: call.restricted,
+        }))
     }
 
     // Internal helper functions
@@ -400,10 +369,12 @@ mod tests {
             )?;
 
             // User should not be authorized initially
-            assert!(!registry.is_authorized(ITIP403Registry::isAuthorizedCall {
-                policyId: policy_id,
-                user,
-            })?);
+            assert!(
+                !registry.is_authorized(ITIP403Registry::isAuthorizedCall {
+                    policyId: policy_id,
+                    user,
+                })?
+            );
 
             // Add user to whitelist
             registry.modify_policy_whitelist(
@@ -416,10 +387,12 @@ mod tests {
             )?;
 
             // User should now be authorized
-            assert!(registry.is_authorized(ITIP403Registry::isAuthorizedCall {
-                policyId: policy_id,
-                user,
-            })?);
+            assert!(
+                registry.is_authorized(ITIP403Registry::isAuthorizedCall {
+                    policyId: policy_id,
+                    user,
+                })?
+            );
 
             Ok(())
         })
@@ -443,10 +416,12 @@ mod tests {
             )?;
 
             // User should be authorized initially (not in blacklist)
-            assert!(registry.is_authorized(ITIP403Registry::isAuthorizedCall {
-                policyId: policy_id,
-                user,
-            })?);
+            assert!(
+                registry.is_authorized(ITIP403Registry::isAuthorizedCall {
+                    policyId: policy_id,
+                    user,
+                })?
+            );
 
             // Add user to blacklist
             registry.modify_policy_blacklist(
@@ -459,10 +434,12 @@ mod tests {
             )?;
 
             // User should no longer be authorized
-            assert!(!registry.is_authorized(ITIP403Registry::isAuthorizedCall {
-                policyId: policy_id,
-                user,
-            })?);
+            assert!(
+                !registry.is_authorized(ITIP403Registry::isAuthorizedCall {
+                    policyId: policy_id,
+                    user,
+                })?
+            );
 
             Ok(())
         })

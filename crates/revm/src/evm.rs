@@ -64,11 +64,7 @@ impl<DB: Database, I> TempoEvm<DB, I> {
             EthFrame<EthInterpreter>,
         >,
     ) -> Self {
-        Self {
-            inner,
-            logs: Vec::new(),
-            collected_fee: U256::ZERO,
-        }
+        Self { inner, logs: Vec::new(), collected_fee: U256::ZERO }
     }
 }
 
@@ -106,12 +102,7 @@ where
 
     fn all(
         &self,
-    ) -> (
-        &Self::Context,
-        &Self::Instructions,
-        &Self::Precompiles,
-        &FrameStack<Self::Frame>,
-    ) {
+    ) -> (&Self::Context, &Self::Instructions, &Self::Precompiles, &FrameStack<Self::Frame>) {
         self.inner.all()
     }
 
@@ -215,18 +206,12 @@ mod tests {
             &ctx.cfg,
         );
         StorageCtx::enter(&mut storage, || {
-            TIP20Setup::create("USD", "USD", Address::ZERO)
-                .apply()
-                .unwrap();
+            TIP20Setup::create("USD", "USD", Address::ZERO).apply().unwrap();
         });
         drop(storage);
 
         let caller_0 = Address::random();
-        let tx_env = TxEnv {
-            caller: caller_0,
-            nonce: 0,
-            ..Default::default()
-        };
+        let tx_env = TxEnv { caller: caller_0, nonce: 0, ..Default::default() };
         let mut res = tempo_evm.transact_raw(tx_env.into())?;
         assert!(res.result.is_success());
 
@@ -251,9 +236,7 @@ mod tests {
             &ctx.cfg,
         );
         StorageCtx::enter(&mut storage, || {
-            TIP20Setup::create("USD", "USD", Address::ZERO)
-                .apply()
-                .unwrap();
+            TIP20Setup::create("USD", "USD", Address::ZERO).apply().unwrap();
         });
         drop(storage);
 
@@ -269,16 +252,10 @@ mod tests {
             },
         );
 
-        let tx_env = TxEnv {
-            kind: contract.into(),
-            ..Default::default()
-        };
+        let tx_env = TxEnv { kind: contract.into(), ..Default::default() };
         let res = tempo_evm.transact_raw(tx_env.into())?;
         assert!(res.result.is_success());
-        assert_eq!(
-            U256::from_be_slice(res.result.output().unwrap()),
-            U256::from(1000100)
-        );
+        assert_eq!(U256::from_be_slice(res.result.output().unwrap()), U256::from(1000100));
 
         Ok(())
     }

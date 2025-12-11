@@ -47,7 +47,8 @@ impl TipAccountRegistrar {
         };
 
         // EIP-7702 gas cost
-        // can be discussed to lower this down as this cost i think encompasses the bytes of authorization in EIP-7702 tx.
+        // can be discussed to lower this down as this cost i think encompasses the bytes of
+        // authorization in EIP-7702 tx.
         let cost = self.storage.with_account_info(signer, |info| {
             if info.nonce != 0 {
                 Err(TIPAccountRegistrarError::nonce_not_zero().into())
@@ -62,8 +63,7 @@ impl TipAccountRegistrar {
         self.storage.deduct_gas(cost)?;
 
         // Delegate the account to the default 7702 implementation
-        self.storage
-            .set_code(signer, Bytecode::new_eip7702(DEFAULT_7702_DELEGATE_ADDRESS))?;
+        self.storage.set_code(signer, Bytecode::new_eip7702(DEFAULT_7702_DELEGATE_ADDRESS))?;
 
         Ok(signer)
     }
@@ -71,7 +71,8 @@ impl TipAccountRegistrar {
     /// Post-Moderato: Validates an ECDSA signature and deploys the default 7702 delegate code
     /// to the recovered signer's account. The account must have nonce = 0 and empty code.
     ///
-    /// This version computes the hash internally from arbitrary message bytes to prevent signature forgery.
+    /// This version computes the hash internally from arbitrary message bytes to prevent signature
+    /// forgery.
     pub fn delegate_to_default_v2(
         &mut self,
         call: ITipAccountRegistrar::delegateToDefault_1Call,
@@ -197,10 +198,7 @@ mod tests {
 
             // Verify the error can be decoded as UnknownFunctionSelector
             let decoded_error = UnknownFunctionSelector::abi_decode(&output.bytes);
-            assert!(
-                decoded_error.is_ok(),
-                "Should decode as UnknownFunctionSelector"
-            );
+            assert!(decoded_error.is_ok(), "Should decode as UnknownFunctionSelector");
 
             // Verify it contains the expected selector
             let error = decoded_error.unwrap();

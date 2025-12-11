@@ -35,10 +35,10 @@ impl TryIntoSimTx<TempoTxEnvelope> for TempoTransactionRequest {
 
                 Ok(tx.into_signed(signature).into())
             }
-            TempoTxType::Legacy
-            | TempoTxType::Eip2930
-            | TempoTxType::Eip1559
-            | TempoTxType::Eip7702 => {
+            TempoTxType::Legacy |
+            TempoTxType::Eip2930 |
+            TempoTxType::Eip1559 |
+            TempoTxType::Eip7702 => {
                 let Self {
                     inner,
                     fee_token,
@@ -103,9 +103,9 @@ impl TryIntoTxEnv<TempoTxEnv, TempoBlockEnv> for TempoTransactionRequest {
             fee_token,
             is_system_tx: false,
             fee_payer: None,
-            tempo_tx_env: if !calls.is_empty()
-                || !tempo_authorization_list.is_empty()
-                || nonce_key.is_some()
+            tempo_tx_env: if !calls.is_empty() ||
+                !tempo_authorization_list.is_empty() ||
+                nonce_key.is_some()
             {
                 // Create mock signature for gas estimation
                 // If key_type is not provided, default to secp256k1
@@ -180,12 +180,12 @@ fn create_mock_tempo_signature(
         }
         SignatureType::WebAuthn => {
             // Create a dummy WebAuthn signature with the specified size
-            // key_data contains the total size of webauthn_data (excluding 128 bytes for public keys)
-            // Default: 200 bytes if no key_data provided
+            // key_data contains the total size of webauthn_data (excluding 128 bytes for public
+            // keys) Default: 200 bytes if no key_data provided
 
-            // Base clientDataJSON template (50 bytes): {"type":"webauthn.get","challenge":"","origin":""}
-            // Authenticator data (37 bytes): 32 rpIdHash + 1 flags + 4 signCount
-            // Minimum total: 87 bytes
+            // Base clientDataJSON template (50 bytes):
+            // {"type":"webauthn.get","challenge":"","origin":""} Authenticator data (37
+            // bytes): 32 rpIdHash + 1 flags + 4 signCount Minimum total: 87 bytes
             const BASE_CLIENT_JSON: &str = r#"{"type":"webauthn.get","challenge":"","origin":""}"#;
             const AUTH_DATA_SIZE: usize = 37;
             const MIN_WEBAUTHN_SIZE: usize = AUTH_DATA_SIZE + BASE_CLIENT_JSON.len(); // 87 bytes

@@ -177,14 +177,8 @@ impl AssertStaticTransitions {
         } = self;
         let _ = tempo_eyre::install();
 
-        let setup = Setup::new()
-            .how_many_signers(how_many)
-            .epoch_length(epoch_length);
-        let setup = if allegretto_time_at_geneseis {
-            setup.allegretto_time(0)
-        } else {
-            setup
-        };
+        let setup = Setup::new().how_many_signers(how_many).epoch_length(epoch_length);
+        let setup = if allegretto_time_at_geneseis { setup.allegretto_time(0) } else { setup };
 
         let mut epoch_reached = false;
         let mut dkg_successful = false;

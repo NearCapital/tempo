@@ -44,13 +44,8 @@ fn test_array_storage() {
 
         // Store data
         let small_array = [42u8; 32];
-        let large_array = [
-            U256::from(100),
-            U256::from(200),
-            U256::from(300),
-            U256::from(400),
-            U256::from(500),
-        ];
+        let large_array =
+            [U256::from(100), U256::from(200), U256::from(300), U256::from(400), U256::from(500)];
         let auto_array = [
             address!("0x0000000000000000000000000000000000000011"),
             address!("0x0000000000000000000000000000000000000022"),
@@ -76,24 +71,10 @@ fn test_array_storage() {
 
         // Test individual element access
         layout.large_array.at(1).unwrap().delete().unwrap();
-        layout
-            .large_array
-            .at(2)
-            .unwrap()
-            .write(U256::from(222))
-            .unwrap();
-        assert_eq!(
-            layout.large_array.at(0).unwrap().read().unwrap(),
-            U256::from(100)
-        );
-        assert_eq!(
-            layout.large_array.at(1).unwrap().read().unwrap(),
-            U256::ZERO
-        );
-        assert_eq!(
-            layout.large_array.at(2).unwrap().read().unwrap(),
-            U256::from(222)
-        );
+        layout.large_array.at(2).unwrap().write(U256::from(222)).unwrap();
+        assert_eq!(layout.large_array.at(0).unwrap().read().unwrap(), U256::from(100));
+        assert_eq!(layout.large_array.at(1).unwrap().read().unwrap(), U256::ZERO);
+        assert_eq!(layout.large_array.at(2).unwrap().read().unwrap(), U256::from(222));
 
         // Test delete
         layout.large_array.delete().unwrap();
@@ -144,60 +125,26 @@ fn test_array_element_access() {
         assert_eq!(layout.small_array.at(11).unwrap().read().unwrap(), 0_u8);
 
         // Test unpacked array element access (U256 elements, T::BYTES = 32 > 16)
-        let large_data = [
-            U256::from(100),
-            U256::from(200),
-            U256::from(300),
-            U256::from(400),
-            U256::from(500),
-        ];
+        let large_data =
+            [U256::from(100), U256::from(200), U256::from(300), U256::from(400), U256::from(500)];
         layout.large_array.write(large_data).unwrap();
 
         // Read individual elements from unpacked array
-        assert_eq!(
-            layout.large_array.at(0).unwrap().read().unwrap(),
-            U256::from(100)
-        );
-        assert_eq!(
-            layout.large_array.at(2).unwrap().read().unwrap(),
-            U256::from(300)
-        );
-        assert_eq!(
-            layout.large_array.at(4).unwrap().read().unwrap(),
-            U256::from(500)
-        );
+        assert_eq!(layout.large_array.at(0).unwrap().read().unwrap(), U256::from(100));
+        assert_eq!(layout.large_array.at(2).unwrap().read().unwrap(), U256::from(300));
+        assert_eq!(layout.large_array.at(4).unwrap().read().unwrap(), U256::from(500));
 
         // Write individual element in unpacked array
-        layout
-            .large_array
-            .at(2)
-            .unwrap()
-            .write(U256::from(999))
-            .unwrap();
-        assert_eq!(
-            layout.large_array.at(2).unwrap().read().unwrap(),
-            U256::from(999)
-        );
+        layout.large_array.at(2).unwrap().write(U256::from(999)).unwrap();
+        assert_eq!(layout.large_array.at(2).unwrap().read().unwrap(), U256::from(999));
         // Verify other elements unchanged
-        assert_eq!(
-            layout.large_array.at(1).unwrap().read().unwrap(),
-            U256::from(200)
-        );
-        assert_eq!(
-            layout.large_array.at(3).unwrap().read().unwrap(),
-            U256::from(400)
-        );
+        assert_eq!(layout.large_array.at(1).unwrap().read().unwrap(), U256::from(200));
+        assert_eq!(layout.large_array.at(3).unwrap().read().unwrap(), U256::from(400));
 
         // Delete individual element in unpacked array
         layout.large_array.at(2).unwrap().delete().unwrap();
-        assert_eq!(
-            layout.large_array.at(2).unwrap().read().unwrap(),
-            U256::ZERO
-        );
-        assert_eq!(
-            layout.large_array.at(1).unwrap().read().unwrap(),
-            U256::from(200)
-        );
+        assert_eq!(layout.large_array.at(2).unwrap().read().unwrap(), U256::ZERO);
+        assert_eq!(layout.large_array.at(1).unwrap().read().unwrap(), U256::from(200));
 
         Ok::<(), tempo_precompiles::error::TempoPrecompileError>(())
     })

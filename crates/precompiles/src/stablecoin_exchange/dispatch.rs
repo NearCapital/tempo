@@ -255,15 +255,12 @@ mod tests {
             let sender = Address::random();
             let token = Address::random();
 
-            let call = IStablecoinExchange::placeCall {
-                token,
-                amount: 100u128,
-                isBid: true,
-                tick: 0,
-            };
+            let call =
+                IStablecoinExchange::placeCall { token, amount: 100u128, isBid: true, tick: 0 };
             let calldata = call.abi_encode();
 
-            // Should dispatch to place function (may fail due to business logic, but dispatch works)
+            // Should dispatch to place function (may fail due to business logic, but dispatch
+            // works)
             let result = exchange.call(&calldata, sender);
             // Ok indicates successful dispatch (either success or TempoPrecompileError)
             assert!(result.is_ok());
@@ -339,10 +336,7 @@ mod tests {
             let output = result?.bytes;
             let returned_value = u32::abi_decode(&output)?;
 
-            assert_eq!(
-                returned_value, 67_232,
-                "Pre-moderato MIN_PRICE should be 67_232"
-            );
+            assert_eq!(returned_value, 67_232, "Pre-moderato MIN_PRICE should be 67_232");
             Ok(())
         })
     }
@@ -364,10 +358,7 @@ mod tests {
             let output = result?.bytes;
             let returned_value = u32::abi_decode(&output)?;
 
-            assert_eq!(
-                returned_value, 98_000,
-                "Post-moderato MIN_PRICE should be 98_000"
-            );
+            assert_eq!(returned_value, 98_000, "Post-moderato MIN_PRICE should be 98_000");
             Ok(())
         })
     }
@@ -390,10 +381,7 @@ mod tests {
             let returned_value = i16::abi_decode(&output)?;
 
             let expected = crate::stablecoin_exchange::TICK_SPACING;
-            assert_eq!(
-                returned_value, expected,
-                "TICK_SPACING should be {expected}"
-            );
+            assert_eq!(returned_value, expected, "TICK_SPACING should be {expected}");
             Ok(())
         })
     }
@@ -415,10 +403,7 @@ mod tests {
             let output = result?.bytes;
             let returned_value = u32::abi_decode(&output)?;
 
-            assert_eq!(
-                returned_value, 132_767,
-                "Pre-moderato MAX_PRICE should be 132_767"
-            );
+            assert_eq!(returned_value, 132_767, "Pre-moderato MAX_PRICE should be 132_767");
             Ok(())
         })
     }
@@ -440,10 +425,7 @@ mod tests {
             let output = result?.bytes;
             let returned_value = u32::abi_decode(&output)?;
 
-            assert_eq!(
-                returned_value, 102_000,
-                "Post-moderato MAX_PRICE should be 102_000"
-            );
+            assert_eq!(returned_value, 102_000, "Post-moderato MAX_PRICE should be 102_000");
             Ok(())
         })
     }
@@ -479,10 +461,7 @@ mod tests {
             let sender = Address::random();
             let token = Address::random();
 
-            let call = IStablecoinExchange::withdrawCall {
-                token,
-                amount: 100u128,
-            };
+            let call = IStablecoinExchange::withdrawCall { token, amount: 100u128 };
             let calldata = call.abi_encode();
 
             // Should dispatch to withdraw function
@@ -673,7 +652,8 @@ mod tests {
 
             let sender = Address::random();
 
-            // Use an invalid selector that doesn't match any function - should return Ok with reverted status
+            // Use an invalid selector that doesn't match any function - should return Ok with
+            // reverted status
             let calldata = Bytes::from([0x12, 0x34, 0x56, 0x78]);
 
             let result = exchange.call(&calldata, sender);

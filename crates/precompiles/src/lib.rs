@@ -140,9 +140,7 @@ macro_rules! tempo_precompile {
 pub struct TipFeeManagerPrecompile;
 impl TipFeeManagerPrecompile {
     pub fn create(chain_id: u64, spec: TempoHardfork) -> DynPrecompile {
-        tempo_precompile!("TipFeeManager", chain_id, spec, |input| {
-            TipFeeManager::new()
-        })
+        tempo_precompile!("TipFeeManager", chain_id, spec, |input| { TipFeeManager::new() })
     }
 }
 
@@ -167,18 +165,14 @@ impl TIP20RewardsRegistryPrecompile {
 pub struct TIP403RegistryPrecompile;
 impl TIP403RegistryPrecompile {
     pub fn create(chain_id: u64, spec: TempoHardfork) -> DynPrecompile {
-        tempo_precompile!("TIP403Registry", chain_id, spec, |input| {
-            TIP403Registry::new()
-        })
+        tempo_precompile!("TIP403Registry", chain_id, spec, |input| { TIP403Registry::new() })
     }
 }
 
 pub struct TIP20FactoryPrecompile;
 impl TIP20FactoryPrecompile {
     pub fn create(chain_id: u64, spec: TempoHardfork) -> DynPrecompile {
-        tempo_precompile!("TIP20Factory", chain_id, spec, |input| {
-            TIP20Factory::new()
-        })
+        tempo_precompile!("TIP20Factory", chain_id, spec, |input| { TIP20Factory::new() })
     }
 }
 
@@ -186,9 +180,7 @@ pub struct TIP20Precompile;
 impl TIP20Precompile {
     pub fn create(address: Address, chain_id: u64, spec: TempoHardfork) -> DynPrecompile {
         let token_id = address_to_token_id_unchecked(address);
-        tempo_precompile!("TIP20Token", chain_id, spec, |input| {
-            TIP20Token::new(token_id)
-        })
+        tempo_precompile!("TIP20Token", chain_id, spec, |input| { TIP20Token::new(token_id) })
     }
 }
 
@@ -204,18 +196,14 @@ impl StablecoinExchangePrecompile {
 pub struct NoncePrecompile;
 impl NoncePrecompile {
     pub fn create(chain_id: u64, spec: TempoHardfork) -> DynPrecompile {
-        tempo_precompile!("NonceManager", chain_id, spec, |input| {
-            NonceManager::new()
-        })
+        tempo_precompile!("NonceManager", chain_id, spec, |input| { NonceManager::new() })
     }
 }
 
 pub struct AccountKeychainPrecompile;
 impl AccountKeychainPrecompile {
     pub fn create(chain_id: u64, spec: TempoHardfork) -> DynPrecompile {
-        tempo_precompile!("AccountKeychain", chain_id, spec, |input| {
-            AccountKeychain::new()
-        })
+        tempo_precompile!("AccountKeychain", chain_id, spec, |input| { AccountKeychain::new() })
     }
 }
 
@@ -229,9 +217,7 @@ impl PathUSDPrecompile {
 pub struct ValidatorConfigPrecompile;
 impl ValidatorConfigPrecompile {
     pub fn create(chain_id: u64, spec: TempoHardfork) -> DynPrecompile {
-        tempo_precompile!("ValidatorConfig", chain_id, spec, |input| {
-            ValidatorConfig::new()
-        })
+        tempo_precompile!("ValidatorConfig", chain_id, spec, |input| { ValidatorConfig::new() })
     }
 }
 

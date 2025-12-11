@@ -30,7 +30,8 @@ pub(crate) fn gen_handler_field_decl(field: &LayoutField<'_>) -> proc_macro2::To
 /// - `all_fields`: all allocated fields (for neighbor slot detection)
 /// - `packing_mod`: optional packing module identifier
 ///   - `None` = contract storage (uses `slots` module, inefficient layout)
-///   - `Some(mod_ident)` = storable struct (uses packing module, efficient layout, offsets from `base_slot`)
+///   - `Some(mod_ident)` = storable struct (uses packing module, efficient layout, offsets from
+///     `base_slot`)
 pub(crate) fn gen_handler_field_init(
     field: &LayoutField<'_>,
     field_idx: usize,

@@ -32,8 +32,7 @@ impl TIP20Factory {
 
     /// Returns true if the factory has been initialized (has code set).
     pub fn is_initialized(&self) -> Result<bool> {
-        self.storage
-            .with_account_info(TIP20_FACTORY_ADDRESS, |info| Ok(info.code.is_some()))
+        self.storage.with_account_info(TIP20_FACTORY_ADDRESS, |info| Ok(info.code.is_some()))
     }
 
     /// Returns true if the address is a valid TIP20 token.
@@ -78,17 +77,18 @@ impl TIP20Factory {
                 return Err(TIP20Error::invalid_quote_token().into());
             }
         } else if self.storage.spec().is_moderato() {
-            // Post-Moderato: Fixed validation - quote token id must be < current token_id (strictly less than).
-            if !is_tip20_prefix(call.quoteToken)
-                || address_to_token_id_unchecked(call.quoteToken) >= token_id
+            // Post-Moderato: Fixed validation - quote token id must be < current token_id (strictly
+            // less than).
+            if !is_tip20_prefix(call.quoteToken) ||
+                address_to_token_id_unchecked(call.quoteToken) >= token_id
             {
                 return Err(TIP20Error::invalid_quote_token().into());
             }
         } else {
             // Pre-Moderato: Original validation with off-by-one bug for consensus compatibility.
             // The buggy check allowed quote_token_id == token_id to pass.
-            if !is_tip20_prefix(call.quoteToken)
-                || address_to_token_id_unchecked(call.quoteToken) > token_id
+            if !is_tip20_prefix(call.quoteToken) ||
+                address_to_token_id_unchecked(call.quoteToken) > token_id
             {
                 return Err(TIP20Error::invalid_quote_token().into());
             }
@@ -107,23 +107,19 @@ impl TIP20Factory {
 
         let token_address = token_id_to_address(token_id);
         let token_id = U256::from(token_id);
-        self.emit_event(TIP20FactoryEvent::TokenCreated(
-            ITIP20Factory::TokenCreated {
-                token: token_address,
-                tokenId: token_id,
-                name: call.name,
-                symbol: call.symbol,
-                currency: call.currency,
-                quoteToken: call.quoteToken,
-                admin: call.admin,
-            },
-        ))?;
+        self.emit_event(TIP20FactoryEvent::TokenCreated(ITIP20Factory::TokenCreated {
+            token: token_address,
+            tokenId: token_id,
+            name: call.name,
+            symbol: call.symbol,
+            currency: call.currency,
+            quoteToken: call.quoteToken,
+            admin: call.admin,
+        }))?;
 
         // increase the token counter
         self.token_id_counter.write(
-            token_id
-                .checked_add(U256::ONE)
-                .ok_or(TempoPrecompileError::under_overflow())?,
+            token_id.checked_add(U256::ONE).ok_or(TempoPrecompileError::under_overflow())?,
         )?;
 
         Ok(token_address)
@@ -263,7 +259,8 @@ mod tests {
         let mut storage = HashMapStorageProvider::new(1).with_spec(TempoHardfork::Moderato);
         let sender = Address::random();
         StorageCtx::enter(&mut storage, || {
-            // Test the off-by-one bug fix: using token_id as quote token should be rejected post-Moderato
+            // Test the off-by-one bug fix: using token_id as quote token should be rejected
+            // post-Moderato
             let mut factory = TIP20Setup::factory()?;
 
             // Get the current token_id (should be 1)
@@ -282,7 +279,8 @@ mod tests {
             };
 
             let result = factory.create_token(sender, call);
-            // Should fail with InvalidQuoteToken error because token 1 doesn't exist yet (off-by-one)
+            // Should fail with InvalidQuoteToken error because token 1 doesn't exist yet
+            // (off-by-one)
             assert_eq!(
                 result.unwrap_err(),
                 TempoPrecompileError::TIP20(TIP20Error::invalid_quote_token())
@@ -309,7 +307,8 @@ mod tests {
             let call = ITIP20Factory::createTokenCall {
                 name: "Test Token".to_string(),
                 symbol: "TEST".to_string(),
-                currency: "EUR".to_string(), // Use non-USD to avoid TIP20Token::initialize validation
+                currency: "EUR".to_string(), /* Use non-USD to avoid TIP20Token::initialize
+                                              * validation */
                 quoteToken: future_quote_token,
                 admin: sender,
             };
@@ -317,7 +316,8 @@ mod tests {
             let result = factory.create_token(sender, call);
 
             // This should fail with InvalidQuoteToken from factory validation
-            // Currently this test will PASS (not fail) because factory validation is skipped pre-Moderato
+            // Currently this test will PASS (not fail) because factory validation is skipped
+            // pre-Moderato
             assert!(
                 result.is_err(),
                 "Should fail when using a not-yet-created token as quote token"
@@ -367,10 +367,7 @@ mod tests {
                 Err(e) => {
                     // If it fails, it should NOT be due to InvalidQuoteToken validation
                     assert!(
-                        !matches!(
-                            e,
-                            TempoPrecompileError::TIP20(TIP20Error::InvalidQuoteToken(_))
-                        ),
+                        !matches!(e, TempoPrecompileError::TIP20(TIP20Error::InvalidQuoteToken(_))),
                         "Pre-Moderato should not reject with InvalidQuoteToken when quote_token_id == token_id (buggy > logic)"
                     );
                 }
@@ -469,7 +466,8 @@ mod tests {
             // PATH_USD (token ID 0) should be valid
             assert!(factory.is_tip20(crate::PATH_USD_ADDRESS)?);
 
-            // Token ID >= tokenIdCounter should still be valid (only checks prefix pre-AllegroModerato)
+            // Token ID >= tokenIdCounter should still be valid (only checks prefix
+            // pre-AllegroModerato)
             let token_id_counter: u64 = factory.token_id_counter()?.to();
             let non_existent_tip20 = token_id_to_address(token_id_counter + 100);
             assert!(

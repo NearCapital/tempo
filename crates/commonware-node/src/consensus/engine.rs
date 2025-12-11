@@ -56,7 +56,6 @@ const BUFFER_POOL_CAPACITY: NonZeroUsize = NonZeroUsize::new(8_192).expect("valu
 const MAX_REPAIR: NonZeroU64 = NonZeroU64::new(20).expect("value is not zero");
 
 /// Settings for [`Engine`].
-///
 // XXX: Mostly a one-to-one copy of alto for now. We also put the context in here
 // because there doesn't really seem to be a point putting it into an extra initializer.
 #[derive(Clone)]
@@ -337,16 +336,10 @@ where
             Peers = OrderedAssociated<PublicKey, SocketAddr>,
         >,
 {
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "following commonware's style of writing"
-    )]
+    #[expect(clippy::too_many_arguments, reason = "following commonware's style of writing")]
     pub fn start(
         mut self,
-        pending_network: (
-            impl Sender<PublicKey = PublicKey>,
-            impl Receiver<PublicKey = PublicKey>,
-        ),
+        pending_network: (impl Sender<PublicKey = PublicKey>, impl Receiver<PublicKey = PublicKey>),
         recovered_network: (
             impl Sender<PublicKey = PublicKey>,
             impl Receiver<PublicKey = PublicKey>,
@@ -359,14 +352,8 @@ where
             impl Sender<PublicKey = PublicKey>,
             impl Receiver<PublicKey = PublicKey>,
         ),
-        marshal_network: (
-            impl Sender<PublicKey = PublicKey>,
-            impl Receiver<PublicKey = PublicKey>,
-        ),
-        dkg_channel: (
-            impl Sender<PublicKey = PublicKey>,
-            impl Receiver<PublicKey = PublicKey>,
-        ),
+        marshal_network: (impl Sender<PublicKey = PublicKey>, impl Receiver<PublicKey = PublicKey>),
+        dkg_channel: (impl Sender<PublicKey = PublicKey>, impl Receiver<PublicKey = PublicKey>),
         boundary_certificates_channel: (
             impl Sender<PublicKey = PublicKey>,
             impl Receiver<PublicKey = PublicKey>,
@@ -392,16 +379,10 @@ where
         )
     }
 
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "following commonware's style of writing"
-    )]
+    #[expect(clippy::too_many_arguments, reason = "following commonware's style of writing")]
     async fn run(
         self,
-        pending_channel: (
-            impl Sender<PublicKey = PublicKey>,
-            impl Receiver<PublicKey = PublicKey>,
-        ),
+        pending_channel: (impl Sender<PublicKey = PublicKey>, impl Receiver<PublicKey = PublicKey>),
         recovered_channel: (
             impl Sender<PublicKey = PublicKey>,
             impl Receiver<PublicKey = PublicKey>,
@@ -414,14 +395,8 @@ where
             impl Sender<PublicKey = PublicKey>,
             impl Receiver<PublicKey = PublicKey>,
         ),
-        marshal_channel: (
-            impl Sender<PublicKey = PublicKey>,
-            impl Receiver<PublicKey = PublicKey>,
-        ),
-        dkg_channel: (
-            impl Sender<PublicKey = PublicKey>,
-            impl Receiver<PublicKey = PublicKey>,
-        ),
+        marshal_channel: (impl Sender<PublicKey = PublicKey>, impl Receiver<PublicKey = PublicKey>),
+        dkg_channel: (impl Sender<PublicKey = PublicKey>, impl Receiver<PublicKey = PublicKey>),
         boundary_certificates_channel: (
             impl Sender<PublicKey = PublicKey>,
             impl Receiver<PublicKey = PublicKey>,
@@ -450,24 +425,15 @@ where
             boundary_certificates_channel,
         );
 
-        let subblocks = self
-            .context
-            .spawn(|_| self.subblocks.run(subblocks_channel));
+        let subblocks = self.context.spawn(|_| self.subblocks.run(subblocks_channel));
 
         let dkg_manager = self.dkg_manager.start(dkg_channel);
 
-        try_join_all(vec![
-            application,
-            broadcast,
-            epoch_manager,
-            marshal,
-            dkg_manager,
-            subblocks,
-        ])
-        .await
-        .map(|_| ())
-        // TODO: look into adding error context so that we know which
-        // component failed.
-        .wrap_err("one of the consensus engine's actors failed")
+        try_join_all(vec![application, broadcast, epoch_manager, marshal, dkg_manager, subblocks])
+            .await
+            .map(|_| ())
+            // TODO: look into adding error context so that we know which
+            // component failed.
+            .wrap_err("one of the consensus engine's actors failed")
     }
 }

@@ -182,7 +182,9 @@ impl GenesisArgs {
             })
             .collect::<eyre::Result<Vec<Address>>>()?;
 
-        // system contracts/precompiles must be initialized bottom up, if an init function (e.g. mint_pairwise_liquidity) uses another system contract/precompiles internally (tip403 registry), the registry must be initialized first.
+        // system contracts/precompiles must be initialized bottom up, if an init function (e.g.
+        // mint_pairwise_liquidity) uses another system contract/precompiles internally (tip403
+        // registry), the registry must be initialized first.
 
         // Deploy TestUSD fee token
         let admin = addresses[0];
@@ -195,7 +197,8 @@ impl GenesisArgs {
         println!("Initializing TIP20Factory");
         initialize_tip20_factory(&mut evm)?;
 
-        // Post-Allegretto: PathUSD is created through the factory as token_id=0 with address(0) as quote token
+        // Post-Allegretto: PathUSD is created through the factory as token_id=0 with address(0) as
+        // quote token
         println!("Creating PathUSD through factory");
         create_path_usd_token(admin, &addresses, &mut evm)?;
 
@@ -236,10 +239,7 @@ impl GenesisArgs {
         println!("Initializing TIP20RewardsRegistry");
         initialize_tip20_rewards_registry(&mut evm)?;
 
-        println!(
-            "generating consensus config for validators: {:?}",
-            self.validators
-        );
+        println!("generating consensus config for validators: {:?}", self.validators);
         let consensus_config = generate_consensus_config(&self.validators, self.seed);
 
         println!("Initializing validator config");
@@ -382,19 +382,16 @@ impl GenesisArgs {
         };
 
         // Add Tempo hardfork times to extra_fields
-        chain_config.extra_fields.insert(
-            "adagioTime".to_string(),
-            serde_json::json!(self.adagio_time),
-        );
-        chain_config.extra_fields.insert(
-            "moderatoTime".to_string(),
-            serde_json::json!(self.moderato_time),
-        );
+        chain_config
+            .extra_fields
+            .insert("adagioTime".to_string(), serde_json::json!(self.adagio_time));
+        chain_config
+            .extra_fields
+            .insert("moderatoTime".to_string(), serde_json::json!(self.moderato_time));
         if let Some(allegretto_time) = self.allegretto_time {
-            chain_config.extra_fields.insert(
-                "allegrettoTime".to_string(),
-                serde_json::json!(allegretto_time),
-            );
+            chain_config
+                .extra_fields
+                .insert("allegrettoTime".to_string(), serde_json::json!(allegretto_time));
         }
         if let Some(allegro_moderato_time) = self.allegro_moderato_time {
             chain_config.extra_fields.insert(
@@ -403,9 +400,7 @@ impl GenesisArgs {
             );
         }
 
-        chain_config
-            .extra_fields
-            .insert_value("epochLength".to_string(), self.epoch_length)?;
+        chain_config.extra_fields.insert_value("epochLength".to_string(), self.epoch_length)?;
         let mut extra_data = Bytes::from_static(b"tempo-genesis");
 
         if let Some(consensus_config) = &consensus_config {
@@ -420,12 +415,8 @@ impl GenesisArgs {
             if self.no_dkg_in_genesis {
                 println!("no-initial-dkg-in-genesis passed; not writing to header extra_data");
             } else {
-                extra_data = consensus_config
-                    .to_genesis_dkg_outcome()
-                    .encode()
-                    .freeze()
-                    .to_vec()
-                    .into();
+                extra_data =
+                    consensus_config.to_genesis_dkg_outcome().encode().freeze().to_vec().into();
             }
         }
 
@@ -472,7 +463,8 @@ fn create_path_usd_token(
 ) -> eyre::Result<()> {
     let ctx = evm.ctx_mut();
     StorageCtx::enter_evm(&mut ctx.journaled_state, &ctx.block, &ctx.cfg, || {
-        // Create PathUSD through factory with address(0) as quote token (required for first token post-Allegretto)
+        // Create PathUSD through factory with address(0) as quote token (required for first token
+        // post-Allegretto)
         let token_address = TIP20Factory::new()
             .create_token(
                 admin,
@@ -498,13 +490,7 @@ fn create_path_usd_token(
         // Mint to all recipients
         for recipient in recipients.iter().progress() {
             token
-                .mint(
-                    admin,
-                    ITIP20::mintCall {
-                        to: *recipient,
-                        amount: U256::from(u64::MAX),
-                    },
-                )
+                .mint(admin, ITIP20::mintCall { to: *recipient, amount: U256::from(u64::MAX) })
                 .expect("Could not mint pathUSD");
         }
 
@@ -528,9 +514,7 @@ fn create_and_mint_token(
     StorageCtx::enter_evm(&mut ctx.journaled_state, &ctx.block, &ctx.cfg, || {
         let mut factory = TIP20Factory::new();
         assert!(
-            factory
-                .is_initialized()
-                .expect("Could not check factory initialization"),
+            factory.is_initialized().expect("Could not check factory initialization"),
             "TIP20Factory must be initialized before creating tokens"
         );
         let token_address = factory
@@ -553,31 +537,17 @@ fn create_and_mint_token(
 
         let result = token.set_supply_cap(
             admin,
-            ITIP20::setSupplyCapCall {
-                newSupplyCap: U256::from(u128::MAX),
-            },
+            ITIP20::setSupplyCapCall { newSupplyCap: U256::from(u128::MAX) },
         );
         assert!(result.is_ok());
 
         token
-            .mint(
-                admin,
-                ITIP20::mintCall {
-                    to: admin,
-                    amount: mint_amount,
-                },
-            )
+            .mint(admin, ITIP20::mintCall { to: admin, amount: mint_amount })
             .expect("Token minting failed");
 
         for address in recipients.iter().progress() {
             token
-                .mint(
-                    admin,
-                    ITIP20::mintCall {
-                        to: *address,
-                        amount: U256::from(u64::MAX),
-                    },
-                )
+                .mint(admin, ITIP20::mintCall { to: *address, amount: U256::from(u64::MAX) })
                 .expect("Could not mint fee token");
         }
 
@@ -604,16 +574,12 @@ fn initialize_fee_manager(
     let ctx = evm.ctx_mut();
     StorageCtx::enter_evm(&mut ctx.journaled_state, &ctx.block, &ctx.cfg, || {
         let mut fee_manager = TipFeeManager::new();
-        fee_manager
-            .initialize()
-            .expect("Could not init fee manager");
+        fee_manager.initialize().expect("Could not init fee manager");
         for address in initial_accounts.iter().progress() {
             fee_manager
                 .set_user_token(
                     *address,
-                    IFeeManager::setUserTokenCall {
-                        token: default_fee_address,
-                    },
+                    IFeeManager::setUserTokenCall { token: default_fee_address },
                 )
                 .expect("Could not set fee token");
         }
@@ -623,9 +589,7 @@ fn initialize_fee_manager(
             fee_manager
                 .set_validator_token(
                     validator,
-                    IFeeManager::setValidatorTokenCall {
-                        token: PATH_USD_ADDRESS,
-                    },
+                    IFeeManager::setValidatorTokenCall { token: PATH_USD_ADDRESS },
                     // use random address to avoid `CannotChangeWithinBlock` error
                     Address::random(),
                 )
@@ -686,10 +650,7 @@ fn initialize_validator_config(
         }
 
         if let Some(consensus_config) = consensus_config.clone() {
-            println!(
-                "writing {} validators into contract",
-                consensus_config.validators.len()
-            );
+            println!("writing {} validators into contract", consensus_config.validators.len());
             for (i, validator) in consensus_config.validators.iter().enumerate() {
                 #[expect(non_snake_case, reason = "field of a snakeCase smart contract call")]
                 let newValidatorAddress = *addresses.get(i).ok_or_else(|| {
@@ -744,9 +705,8 @@ fn generate_consensus_config(
     }
 
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed.unwrap_or_else(rand::random::<u64>));
-    let mut signers = (0..validators.len())
-        .map(|_| PrivateKey::from_rng(&mut rng))
-        .collect::<Vec<_>>();
+    let mut signers =
+        (0..validators.len()).map(|_| PrivateKey::from_rng(&mut rng)).collect::<Vec<_>>();
 
     // generate consensus key
     let threshold = commonware_utils::quorum(validators.len() as u32);
@@ -771,11 +731,7 @@ fn generate_consensus_config(
         });
     }
 
-    Some(ConsensusConfig {
-        peers: peers.into(),
-        public_polynomial: polynomial.into(),
-        validators,
-    })
+    Some(ConsensusConfig { peers: peers.into(), public_polynomial: polynomial.into(), validators })
 }
 
 fn mint_pairwise_liquidity(

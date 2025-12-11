@@ -34,12 +34,7 @@ struct RestartSetup {
 /// Runs a validator restart test with the given configuration
 #[track_caller]
 fn run_restart_test(
-    RestartSetup {
-        node_setup,
-        shutdown_height,
-        restart_height,
-        final_height,
-    }: RestartSetup,
+    RestartSetup { node_setup, shutdown_height, restart_height, final_height }: RestartSetup,
 ) -> String {
     let cfg = deterministic::Config::default().with_seed(node_setup.seed);
     let executor = Runner::from(cfg);
@@ -256,9 +251,7 @@ fn pre_allegretto_validator_catches_up_across_epochs() {
 
     let epoch_length = 30;
     let setup = RestartSetup {
-        node_setup: Setup::new()
-            .epoch_length(epoch_length)
-            .no_validators_in_genesis(),
+        node_setup: Setup::new().epoch_length(epoch_length).no_validators_in_genesis(),
         shutdown_height: epoch_length + 1,
         restart_height: 2 * epoch_length + 1,
         final_height: 3 * epoch_length + 1,
@@ -477,9 +470,7 @@ impl AssertNodeRecoversAfterFinalizingBlock {
             "awaiting a hardfork transition and setting allegretto at genesis is mutually exclusive"
         );
 
-        let setup = Setup::new()
-            .how_many_signers(n_validators)
-            .epoch_length(epoch_length);
+        let setup = Setup::new().how_many_signers(n_validators).epoch_length(epoch_length);
 
         let setup = if allegretto_at_genesis {
             setup.allegretto_time(0)
@@ -487,11 +478,7 @@ impl AssertNodeRecoversAfterFinalizingBlock {
             setup.no_validators_in_genesis()
         };
 
-        let setup = if await_transition {
-            setup.allegretto_in_seconds(10)
-        } else {
-            setup
-        };
+        let setup = if await_transition { setup.allegretto_in_seconds(10) } else { setup };
 
         let cfg = deterministic::Config::default().with_seed(setup.seed);
         let executor = Runner::from(cfg);
@@ -588,10 +575,7 @@ impl AssertNodeRecoversAfterFinalizingBlock {
                 "found a node that reached the pre-to-last height; restarting it"
             );
             // Now restart the node for which we found the metric.
-            let idx = validators
-                .iter()
-                .position(|node| metric.contains(node.uid()))
-                .unwrap();
+            let idx = validators.iter().position(|node| metric.contains(node.uid())).unwrap();
             validators[idx].stop().await;
             validators[idx].start().await;
 

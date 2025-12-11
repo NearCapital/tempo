@@ -110,11 +110,7 @@ where
             let chunk_bytes = chunk_value.to_be_bytes::<32>();
 
             // For the last chunk, only take the remaining bytes
-            let bytes_to_take = if i == chunks - 1 {
-                length - (i * 32)
-            } else {
-                32
-            };
+            let bytes_to_take = if i == chunks - 1 { length - (i * 32) } else { 32 };
             data.extend_from_slice(&chunk_bytes[..bytes_to_take]);
         }
 
@@ -312,27 +308,18 @@ mod tests {
         // Manual computation
         let expected = U256::from_be_bytes(keccak256(base_slot.to_be_bytes::<32>()).0);
 
-        assert_eq!(
-            data_slot, expected,
-            "calc_data_slot should match manual keccak256 computation"
-        );
+        assert_eq!(data_slot, expected, "calc_data_slot should match manual keccak256 computation");
     }
 
     #[test]
     fn test_is_long_string_boundaries() {
         // Short string (31 bytes): length * 2 = 62 (0x3E), bit 0 = 0
         let short_31_bytes = encode_short_string(&[b'a'; 31]);
-        assert!(
-            !is_long_string(short_31_bytes),
-            "31-byte string should be short"
-        );
+        assert!(!is_long_string(short_31_bytes), "31-byte string should be short");
 
         // Long string (32 bytes): length * 2 + 1 = 65 (0x41), bit 0 = 1
         let long_32_bytes = encode_long_string_length(32);
-        assert!(
-            is_long_string(long_32_bytes),
-            "32-byte string should be long"
-        );
+        assert!(is_long_string(long_32_bytes), "32-byte string should be long");
 
         // Edge case: empty string
         let empty = encode_short_string(&[]);
@@ -350,10 +337,7 @@ mod tests {
             let bytes = vec![b'a'; len];
             let encoded = encode_short_string(&bytes);
             let decoded_len = calc_string_length(encoded, false);
-            assert_eq!(
-                decoded_len, len,
-                "Short string length mismatch for {len} bytes"
-            );
+            assert_eq!(decoded_len, len, "Short string length mismatch for {len} bytes");
         }
     }
 
@@ -363,10 +347,7 @@ mod tests {
         for len in [32, 33, 63, 64, 65, 100, 1000, 10000] {
             let encoded = encode_long_string_length(len);
             let decoded_len = calc_string_length(encoded, true);
-            assert_eq!(
-                decoded_len, len,
-                "Long string length mismatch for {len} bytes"
-            );
+            assert_eq!(decoded_len, len, "Long string length mismatch for {len} bytes");
         }
     }
 
@@ -395,11 +376,7 @@ mod tests {
         assert_eq!(&bytes[5..31], &[0u8; 26], "Padding should be zero");
 
         // Verify LSB contains length * 2
-        assert_eq!(
-            bytes[31],
-            (test_str.len() * 2) as u8,
-            "LSB should be length * 2"
-        );
+        assert_eq!(bytes[31], (test_str.len() * 2) as u8, "LSB should be length * 2");
 
         // Verify bit 0 is 0 (short string marker)
         assert_eq!(bytes[31] & 1, 0, "Bit 0 should be 0 for short strings");
@@ -419,10 +396,7 @@ mod tests {
         for len in [32, 33, 100, 1000, 10000] {
             let encoded = encode_long_string_length(len);
             let expected = U256::from(len * 2 + 1);
-            assert_eq!(
-                encoded, expected,
-                "Long string length encoding mismatch for {len} bytes"
-            );
+            assert_eq!(encoded, expected, "Long string length encoding mismatch for {len} bytes");
 
             // Verify bit 0 is 1 (long string marker)
             assert_eq!(encoded.byte(0) & 1, 1, "Bit 0 should be 1 for long strings");
@@ -436,20 +410,14 @@ mod tests {
             let bytes = vec![b'x'; len];
             let encoded = encode_short_string(&bytes);
             let decoded_len = calc_string_length(encoded, false);
-            assert_eq!(
-                decoded_len, len,
-                "Short string roundtrip failed for {len} bytes"
-            );
+            assert_eq!(decoded_len, len, "Short string roundtrip failed for {len} bytes");
         }
 
         // Long strings roundtrip
         for len in [32, 33, 64, 100] {
             let encoded = encode_long_string_length(len);
             let decoded_len = calc_string_length(encoded, true);
-            assert_eq!(
-                decoded_len, len,
-                "Long string roundtrip failed for {len} bytes"
-            );
+            assert_eq!(decoded_len, len, "Long string roundtrip failed for {len} bytes");
         }
     }
 

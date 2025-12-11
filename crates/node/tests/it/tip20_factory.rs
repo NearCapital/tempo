@@ -10,10 +10,8 @@ use tempo_precompiles::{PATH_USD_ADDRESS, TIP20_FACTORY_ADDRESS, tip20::token_id
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_token() -> eyre::Result<()> {
-    let setup = crate::utils::TestNodeBuilder::new()
-        .allegretto_activated()
-        .build_http_only()
-        .await?;
+    let setup =
+        crate::utils::TestNodeBuilder::new().allegretto_activated().build_http_only().await?;
     let http_url = setup.http_url;
 
     let wallet = MnemonicBuilder::from_phrase(crate::utils::TEST_MNEMONIC).build()?;
@@ -72,10 +70,8 @@ async fn test_create_token() -> eyre::Result<()> {
 /// Post-AllegroModerato: isTIP20 should check both prefix and tokenIdCounter
 #[tokio::test(flavor = "multi_thread")]
 async fn test_is_tip20_checks_token_id_counter_post_allegro_moderato() -> eyre::Result<()> {
-    let setup = crate::utils::TestNodeBuilder::new()
-        .allegro_moderato_activated()
-        .build_http_only()
-        .await?;
+    let setup =
+        crate::utils::TestNodeBuilder::new().allegro_moderato_activated().build_http_only().await?;
     let http_url = setup.http_url;
 
     let wallet = MnemonicBuilder::from_phrase(crate::utils::TEST_MNEMONIC).build()?;
@@ -91,9 +87,7 @@ async fn test_is_tip20_checks_token_id_counter_post_allegro_moderato() -> eyre::
 
     // Verify this address has valid TIP20 prefix
     assert!(
-        non_existent_tip20_addr
-            .as_slice()
-            .starts_with(&[0x20, 0xC0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+        non_existent_tip20_addr.as_slice().starts_with(&[0x20, 0xC0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
         "Address should have valid TIP20 prefix"
     );
 
@@ -114,10 +108,8 @@ async fn test_is_tip20_checks_token_id_counter_post_allegro_moderato() -> eyre::
 /// Pre-AllegroModerato: isTIP20 should only check the prefix for backwards compatibility
 #[tokio::test(flavor = "multi_thread")]
 async fn test_is_tip20_only_checks_prefix_pre_allegro_moderato() -> eyre::Result<()> {
-    let setup = crate::utils::TestNodeBuilder::new()
-        .allegretto_activated()
-        .build_http_only()
-        .await?;
+    let setup =
+        crate::utils::TestNodeBuilder::new().allegretto_activated().build_http_only().await?;
     let http_url = setup.http_url;
 
     let wallet = MnemonicBuilder::from_phrase(crate::utils::TEST_MNEMONIC).build()?;

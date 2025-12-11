@@ -37,7 +37,8 @@ pub struct AuthorizedKey {
     pub is_revoked: bool,
 }
 
-// TODO(rusowsky): remove this and create a read-only wrapper that is callable from read-only ctx with db access
+// TODO(rusowsky): remove this and create a read-only wrapper that is callable from read-only ctx
+// with db access
 impl AuthorizedKey {
     /// Decode AuthorizedKey from a storage slot value
     ///
@@ -61,9 +62,10 @@ pub struct AccountKeychain {
     // Using a hash of account and keyId as the key to avoid triple nesting
     spending_limits: Mapping<B256, Mapping<Address, U256>>,
 
-    // WARNING(rusowsky): transient storage slots must always be placed at the very end until the `contract`
-    // macro is refactored and has 2 independent layouts (persistent and transient).
-    // If new (persistent) storage fields need to be added to the precompile, they must go above this one.
+    // WARNING(rusowsky): transient storage slots must always be placed at the very end until the
+    // `contract` macro is refactored and has 2 independent layouts (persistent and transient).
+    // If new (persistent) storage fields need to be added to the precompile, they must go above
+    // this one.
     transaction_key: Address,
 }
 
@@ -131,22 +133,17 @@ impl AccountKeychain {
         if call.enforceLimits {
             let limit_key = Self::spending_limit_key(msg_sender, call.keyId);
             for limit in call.limits {
-                self.spending_limits
-                    .at(limit_key)
-                    .at(limit.token)
-                    .write(limit.amount)?;
+                self.spending_limits.at(limit_key).at(limit.token).write(limit.amount)?;
             }
         }
 
         // Emit event
-        self.emit_event(AccountKeychainEvent::KeyAuthorized(
-            IAccountKeychain::KeyAuthorized {
-                account: msg_sender,
-                publicKey: call.keyId.into_word(),
-                signatureType: signature_type,
-                expiry: call.expiry,
-            },
-        ))
+        self.emit_event(AccountKeychainEvent::KeyAuthorized(IAccountKeychain::KeyAuthorized {
+            account: msg_sender,
+            publicKey: call.keyId.into_word(),
+            signatureType: signature_type,
+            expiry: call.expiry,
+        }))
     }
 
     /// Revoke an authorized key
@@ -171,21 +168,16 @@ impl AccountKeychain {
         // Mark the key as revoked - this prevents replay attacks by ensuring
         // the same key_id can never be re-authorized for this account.
         // We keep is_revoked=true but clear other fields.
-        let revoked_key = AuthorizedKey {
-            is_revoked: true,
-            ..Default::default()
-        };
+        let revoked_key = AuthorizedKey { is_revoked: true, ..Default::default() };
         self.keys.at(msg_sender).at(call.keyId).write(revoked_key)?;
 
         // Note: We don't clear spending limits here - they become inaccessible
 
         // Emit event
-        self.emit_event(AccountKeychainEvent::KeyRevoked(
-            IAccountKeychain::KeyRevoked {
-                account: msg_sender,
-                publicKey: call.keyId.into_word(),
-            },
-        ))
+        self.emit_event(AccountKeychainEvent::KeyRevoked(IAccountKeychain::KeyRevoked {
+            account: msg_sender,
+            publicKey: call.keyId.into_word(),
+        }))
     }
 
     /// Update spending limit for a key-token pair
@@ -219,10 +211,7 @@ impl AccountKeychain {
 
         // Update the spending limit
         let limit_key = Self::spending_limit_key(msg_sender, call.keyId);
-        self.spending_limits
-            .at(limit_key)
-            .at(call.token)
-            .write(call.newLimit)?;
+        self.spending_limits.at(limit_key).at(call.token).write(call.newLimit)?;
 
         // Emit event
         self.emit_event(AccountKeychainEvent::SpendingLimitUpdated(
@@ -367,10 +356,7 @@ impl AccountKeychain {
         }
 
         // Update remaining limit
-        self.spending_limits
-            .at(limit_key)
-            .at(token)
-            .write(remaining - amount)
+        self.spending_limits.at(limit_key).at(token).write(remaining - amount)
     }
 
     /// Authorize a token transfer with access key spending limits
@@ -482,11 +468,7 @@ mod tests {
 
             // Test 1: Initially transaction key should be zero
             let initial_key = keychain.transaction_key.t_read()?;
-            assert_eq!(
-                initial_key,
-                Address::ZERO,
-                "Initial transaction key should be zero"
-            );
+            assert_eq!(initial_key, Address::ZERO, "Initial transaction key should be zero");
 
             // Test 2: Set transaction key to an access key address
             keychain.set_transaction_key(access_key_addr)?;
@@ -498,19 +480,12 @@ mod tests {
             // Test 4: Verify getTransactionKey works
             let get_tx_key_call = getTransactionKeyCall {};
             let result = keychain.get_transaction_key(get_tx_key_call, Address::ZERO)?;
-            assert_eq!(
-                result, access_key_addr,
-                "getTransactionKey should return the set key"
-            );
+            assert_eq!(result, access_key_addr, "getTransactionKey should return the set key");
 
             // Test 5: Clear transaction key
             keychain.set_transaction_key(Address::ZERO)?;
             let cleared_key = keychain.transaction_key.t_read()?;
-            assert_eq!(
-                cleared_key,
-                Address::ZERO,
-                "Transaction key should be cleared"
-            );
+            assert_eq!(cleared_key, Address::ZERO, "Transaction key should be cleared");
 
             Ok(())
         })
@@ -552,29 +527,18 @@ mod tests {
                 limits: vec![],
             };
             let auth_result = keychain.authorize_key(msg_sender, auth_call);
-            assert!(
-                auth_result.is_err(),
-                "authorize_key should fail when using access key"
-            );
+            assert!(auth_result.is_err(), "authorize_key should fail when using access key");
             assert_unauthorized_error(auth_result.unwrap_err());
 
             // Test 2: revoke_key should fail with access key
-            let revoke_call = revokeKeyCall {
-                keyId: existing_key,
-            };
+            let revoke_call = revokeKeyCall { keyId: existing_key };
             let revoke_result = keychain.revoke_key(msg_sender, revoke_call);
-            assert!(
-                revoke_result.is_err(),
-                "revoke_key should fail when using access key"
-            );
+            assert!(revoke_result.is_err(), "revoke_key should fail when using access key");
             assert_unauthorized_error(revoke_result.unwrap_err());
 
             // Test 3: update_spending_limit should fail with access key
-            let update_call = updateSpendingLimitCall {
-                keyId: existing_key,
-                token,
-                newLimit: U256::from(1000),
-            };
+            let update_call =
+                updateSpendingLimitCall { keyId: existing_key, token, newLimit: U256::from(1000) };
             let update_result = keychain.update_spending_limit(msg_sender, update_call);
             assert!(
                 update_result.is_err(),
@@ -609,10 +573,7 @@ mod tests {
             keychain.authorize_key(account, auth_call.clone())?;
 
             // Verify key exists
-            let key_info = keychain.get_key(getKeyCall {
-                account,
-                keyId: key_id,
-            })?;
+            let key_info = keychain.get_key(getKeyCall { account, keyId: key_id })?;
             assert_eq!(key_info.expiry, u64::MAX);
             assert!(!key_info.isRevoked);
 
@@ -621,20 +582,14 @@ mod tests {
             keychain.revoke_key(account, revoke_call)?;
 
             // Verify key is revoked
-            let key_info = keychain.get_key(getKeyCall {
-                account,
-                keyId: key_id,
-            })?;
+            let key_info = keychain.get_key(getKeyCall { account, keyId: key_id })?;
             assert_eq!(key_info.expiry, 0);
             assert!(key_info.isRevoked);
 
             // Step 3: Try to re-authorize the same key (replay attack)
             // This should fail because the key was revoked
             let replay_result = keychain.authorize_key(account, auth_call);
-            assert!(
-                replay_result.is_err(),
-                "Re-authorizing a revoked key should fail"
-            );
+            assert!(replay_result.is_err(), "Re-authorizing a revoked key should fail");
 
             // Verify it's the correct error
             match replay_result.unwrap_err() {
@@ -687,10 +642,7 @@ mod tests {
             keychain.authorize_key(account, auth_call_2)?;
 
             // Verify key 2 is authorized
-            let key_info = keychain.get_key(getKeyCall {
-                account,
-                keyId: key_id_2,
-            })?;
+            let key_info = keychain.get_key(getKeyCall { account, keyId: key_id_2 })?;
             assert_eq!(key_info.expiry, 1000);
             assert!(!key_info.isRevoked);
 

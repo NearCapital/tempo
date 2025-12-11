@@ -49,9 +49,7 @@ impl TIP20RewardsRegistry {
 
         let stream_ending_at = self.ending_streams.at(end_time);
         let length = stream_ending_at.len()?;
-        let last_index = length
-            .checked_sub(1)
-            .ok_or(TempoPrecompileError::under_overflow())?;
+        let last_index = length.checked_sub(1).ok_or(TempoPrecompileError::under_overflow())?;
 
         // If removing element that's not the last, swap with last element
         if index != last_index {
@@ -60,9 +58,7 @@ impl TIP20RewardsRegistry {
 
             // Update stream_index for the moved element
             let last_stream_key = keccak256((last_token, end_time).abi_encode());
-            self.stream_index
-                .at(last_stream_key)
-                .write(U256::from(index))?;
+            self.stream_index.at(last_stream_key).write(U256::from(index))?;
         }
 
         // Remove last element and clear its index
@@ -89,9 +85,8 @@ impl TIP20RewardsRegistry {
             return Ok(());
         }
 
-        let mut next_timestamp = last_updated
-            .checked_add(1)
-            .ok_or(TempoPrecompileError::under_overflow())?;
+        let mut next_timestamp =
+            last_updated.checked_add(1).ok_or(TempoPrecompileError::under_overflow())?;
 
         while current_timestamp >= next_timestamp {
             let tokens = self.ending_streams.at(next_timestamp).read()?;
@@ -108,9 +103,8 @@ impl TIP20RewardsRegistry {
             // Clear all elements from the vec
             self.ending_streams.at(next_timestamp).delete()?;
 
-            next_timestamp = next_timestamp
-                .checked_add(1)
-                .ok_or(TempoPrecompileError::under_overflow())?;
+            next_timestamp =
+                next_timestamp.checked_add(1).ok_or(TempoPrecompileError::under_overflow())?;
         }
 
         self.last_updated_timestamp.write(current_timestamp)?;

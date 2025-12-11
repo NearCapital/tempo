@@ -99,17 +99,11 @@ impl Setup {
     }
 
     pub fn how_many_signers(self, how_many_signers: u32) -> Self {
-        Self {
-            how_many_signers,
-            ..self
-        }
+        Self { how_many_signers, ..self }
     }
 
     pub fn how_many_verifiers(self, how_many_verifiers: u32) -> Self {
-        Self {
-            how_many_verifiers,
-            ..self
-        }
+        Self { how_many_verifiers, ..self }
     }
 
     pub fn seed(self, seed: u64) -> Self {
@@ -121,27 +115,18 @@ impl Setup {
     }
 
     pub fn epoch_length(self, epoch_length: u64) -> Self {
-        Self {
-            epoch_length,
-            ..self
-        }
+        Self { epoch_length, ..self }
     }
 
     pub fn connect_execution_layer_nodes(self, connect_execution_layer_nodes: bool) -> Self {
-        Self {
-            connect_execution_layer_nodes,
-            ..self
-        }
+        Self { connect_execution_layer_nodes, ..self }
     }
 
     /// Instructs setup to set chainspec allegretto time to `seconds` from now.
     ///
     /// Do not provide `allegretto_time` together with this option.
     pub fn allegretto_in_seconds(self, seconds: u64) -> Self {
-        Self {
-            allegretto_in_seconds: Some(seconds),
-            ..self
-        }
+        Self { allegretto_in_seconds: Some(seconds), ..self }
     }
 
     /// Sets `allegretto_time`.
@@ -151,17 +136,11 @@ impl Setup {
     ///
     /// Do not provide `allegretto_in_seconds` together with this option.
     pub fn allegretto_time(self, allegretto_time: u64) -> Self {
-        Self {
-            allegretto_time: Some(allegretto_time),
-            ..self
-        }
+        Self { allegretto_time: Some(allegretto_time), ..self }
     }
 
     pub fn no_validators_in_genesis(self) -> Self {
-        Self {
-            no_validators_in_genesis: true,
-            ..self
-        }
+        Self { no_validators_in_genesis: true, ..self }
     }
 }
 
@@ -223,12 +202,7 @@ pub async fn setup_validators(
         .take(how_many_signers as usize)
         .cloned()
         .enumerate()
-        .map(|(i, signer)| {
-            (
-                signer.public_key(),
-                SocketAddr::from(([127, 0, 0, 1], i as u16 + 1)),
-            )
-        })
+        .map(|(i, signer)| (signer.public_key(), SocketAddr::from(([127, 0, 0, 1], i as u16 + 1))))
         .collect::<Vec<_>>()
         .into();
 
@@ -262,10 +236,8 @@ pub async fn setup_validators(
         .with_peers(connect_execution_layer_nodes)
         .generate();
 
-    for ((private_key, share), execution_config) in private_keys
-        .into_iter()
-        .zip_eq(shares)
-        .zip_eq(execution_configs)
+    for ((private_key, share), execution_config) in
+        private_keys.into_iter().zip_eq(shares).zip_eq(execution_configs)
     {
         let oracle = oracle.clone();
         let uid = format!("{CONSENSUS_NODE_PREFIX}-{}", private_key.public_key());
@@ -372,27 +344,25 @@ pub async fn link_validators(
             }
 
             // Restrict to certain connections
-            if let Some(f) = restrict_to
-                && !f(validators.len(), i1, i2)
+            if let Some(f) = restrict_to &&
+                !f(validators.len(), i1, i2)
             {
                 continue;
             }
 
             // Add link
             match oracle
-                .add_link(
-                    v1.public_key().clone(),
-                    v2.public_key().clone(),
-                    link.clone(),
-                )
+                .add_link(v1.public_key().clone(), v2.public_key().clone(), link.clone())
                 .await
             {
                 Ok(()) => (),
-                // TODO: it should be possible to remove the below if Commonware simulated network exposes list of registered peers.
+                // TODO: it should be possible to remove the below if Commonware simulated network
+                // exposes list of registered peers.
                 //
                 // This is fine because some of the peers might be registered later
                 Err(commonware_p2p::simulated::Error::PeerMissing) => (),
-                // This is fine because we might call this multiple times as peers are joining the network.
+                // This is fine because we might call this multiple times as peers are joining the
+                // network.
                 Err(commonware_p2p::simulated::Error::LinkExists) => (),
                 res @ Err(_) => res.unwrap(),
             }

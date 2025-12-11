@@ -20,17 +20,16 @@ impl Precompile for PathUSD {
                 .deduct_gas(input_cost(calldata.len()))
                 .map_err(|_| PrecompileError::OutOfGas)?;
 
-            return Err(PrecompileError::Other(
-                "Invalid input: missing function selector".into(),
-            ));
+            return Err(PrecompileError::Other("Invalid input: missing function selector".into()));
         };
 
         // Post allegretto hardfork, treat pathUSD as a default TIP20 without extra permissions
         // For calls to name() or symbol(), since this contract is already deployed pre hardfork,
-        // we override name/symbol to PathUSD rather than treating these calls with default TIP20 logic
-        if self.token.storage().spec().is_allegretto()
-            && selector != ITIP20::nameCall::SELECTOR
-            && selector != ITIP20::symbolCall::SELECTOR
+        // we override name/symbol to PathUSD rather than treating these calls with default TIP20
+        // logic
+        if self.token.storage().spec().is_allegretto() &&
+            selector != ITIP20::nameCall::SELECTOR &&
+            selector != ITIP20::symbolCall::SELECTOR
         {
             return self.token.call(calldata, msg_sender);
         }
@@ -299,11 +298,8 @@ mod tests {
             let mut token = PathUSD::new();
             token.initialize(sender)?;
 
-            let calldata = ITIP20::startRewardCall {
-                amount: U256::from(1000),
-                secs: 100,
-            }
-            .abi_encode();
+            let calldata =
+                ITIP20::startRewardCall { amount: U256::from(1000), secs: 100 }.abi_encode();
 
             let output = token.call(&calldata, sender)?;
             assert!(output.reverted);

@@ -39,12 +39,7 @@ impl<T> Slot<T> {
     /// Creates a full-slot accessor. For packed fields, use `new_at_loc` instead.
     #[inline]
     pub fn new(slot: U256, address: Address) -> Self {
-        Self {
-            slot,
-            ctx: LayoutCtx::FULL,
-            address,
-            _ty: PhantomData,
-        }
+        Self { slot, ctx: LayoutCtx::FULL, address, _ty: PhantomData }
     }
 
     /// Creates a new `Slot` with the given slot number, layout context, and address.
@@ -52,12 +47,7 @@ impl<T> Slot<T> {
     /// This is used by the handler system to create slots with specific packing contexts.
     #[inline]
     pub fn new_with_ctx(slot: U256, ctx: LayoutCtx, address: Address) -> Self {
-        Self {
-            slot,
-            ctx,
-            address,
-            _ty: PhantomData,
-        }
+        Self { slot, ctx, address, _ty: PhantomData }
     }
 
     /// Creates a new `Slot` with the given base slot number with the given offset and address.
@@ -85,10 +75,7 @@ impl<T> Slot<T> {
     where
         T: StorableType,
     {
-        debug_assert!(
-            T::IS_PACKABLE,
-            "`fn new_at_loc` can only be used with packable types"
-        );
+        debug_assert!(T::IS_PACKABLE, "`fn new_at_loc` can only be used with packable types");
         Self {
             slot: base_slot.saturating_add(U256::from_limbs([loc.offset_slots as u64, 0, 0, 0])),
             ctx: LayoutCtx::packed(loc.offset_bytes),
@@ -148,9 +135,7 @@ impl StorageOps for TransientOps {
 impl<T: Storable> Slot<T> {
     /// Returns a transient storage operations wrapper for this slot's address.
     fn transient(&self) -> TransientOps {
-        TransientOps {
-            address: self.address,
-        }
+        TransientOps { address: self.address }
     }
 }
 
@@ -251,7 +236,8 @@ mod tests {
 
     #[test]
     fn test_slot_size() {
-        // slot (U256) 32 bytes + LayoutCtx (usize) 8 bytes + Address 20 bytes (+4 for byte alignment)
+        // slot (U256) 32 bytes + LayoutCtx (usize) 8 bytes + Address 20 bytes (+4 for byte
+        // alignment)
         assert_eq!(std::mem::size_of::<Slot<U256>>(), 64);
         assert_eq!(std::mem::size_of::<Slot<Address>>(), 64);
         assert_eq!(std::mem::size_of::<Slot<bool>>(), 64);
@@ -451,18 +437,9 @@ mod tests {
             Slot::<u64>::new_at_offset(base, 1, address).write(field_1)?;
             Slot::<U256>::new_at_offset(base, 2, address).write(field_2)?;
 
-            assert_eq!(
-                Slot::<Address>::new_at_offset(base, 0, address).read()?,
-                field_0
-            );
-            assert_eq!(
-                Slot::<u64>::new_at_offset(base, 1, address).read()?,
-                field_1
-            );
-            assert_eq!(
-                Slot::<U256>::new_at_offset(base, 2, address).read()?,
-                field_2
-            );
+            assert_eq!(Slot::<Address>::new_at_offset(base, 0, address).read()?, field_0);
+            assert_eq!(Slot::<u64>::new_at_offset(base, 1, address).read()?, field_1);
+            assert_eq!(Slot::<U256>::new_at_offset(base, 2, address).read()?, field_2);
 
             Ok(())
         })

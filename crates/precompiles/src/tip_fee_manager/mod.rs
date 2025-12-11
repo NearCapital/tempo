@@ -80,11 +80,7 @@ impl TipFeeManager {
     pub fn get_validator_token(&self, beneficiary: Address) -> Result<Address> {
         let token = self.validator_tokens.at(beneficiary).read()?;
 
-        if token.is_zero() {
-            Ok(self.default_fee_token())
-        } else {
-            Ok(token)
-        }
+        if token.is_zero() { Ok(self.default_fee_token()) } else { Ok(token) }
     }
 
     pub fn set_validator_token(
@@ -113,12 +109,10 @@ impl TipFeeManager {
         self.validator_tokens.at(sender).write(call.token)?;
 
         // Emit ValidatorTokenSet event
-        self.emit_event(FeeManagerEvent::ValidatorTokenSet(
-            IFeeManager::ValidatorTokenSet {
-                validator: sender,
-                token: call.token,
-            },
-        ))
+        self.emit_event(FeeManagerEvent::ValidatorTokenSet(IFeeManager::ValidatorTokenSet {
+            validator: sender,
+            token: call.token,
+        }))
     }
 
     pub fn set_user_token(
@@ -134,9 +128,9 @@ impl TipFeeManager {
         // Pre moderato: Allow
         // Post moderato: Disallow
         // Post allegro moderato: Allow
-        if self.storage.spec().is_moderato()
-            && !self.storage.spec().is_allegro_moderato()
-            && call.token == PATH_USD_ADDRESS
+        if self.storage.spec().is_moderato() &&
+            !self.storage.spec().is_allegro_moderato() &&
+            call.token == PATH_USD_ADDRESS
         {
             return Err(FeeManagerError::invalid_token().into());
         }
@@ -226,7 +220,8 @@ impl TipFeeManager {
                 self.increment_collected_fees(beneficiary, actual_spending)?;
             }
         } else {
-            // Post-Allegretto: calculate the actual fee amount and save it in per-validator collected fees
+            // Post-Allegretto: calculate the actual fee amount and save it in per-validator
+            // collected fees
             let amount = if fee_token == validator_token {
                 actual_spending
             } else {
@@ -285,9 +280,7 @@ impl TipFeeManager {
             // If FeeManager or validator are blacklisted, we are not transferring any fees
             if token.is_transfer_authorized(self.address, beneficiary)? {
                 // Bound fee transfer to contract balance
-                let balance = token.balance_of(ITIP20::balanceOfCall {
-                    account: self.address,
-                })?;
+                let balance = token.balance_of(ITIP20::balanceOfCall { account: self.address })?;
 
                 if !balance.is_zero() {
                     token
@@ -373,9 +366,7 @@ impl TipFeeManager {
 
         let collected_fees = self.collected_fees.at(validator).read()?;
         self.collected_fees.at(validator).write(
-            collected_fees
-                .checked_add(amount)
-                .ok_or(TempoPrecompileError::under_overflow())?,
+            collected_fees.checked_add(amount).ok_or(TempoPrecompileError::under_overflow())?,
         )?;
 
         // If this is the first fee for the validator, record it in validators with fees
@@ -394,11 +385,7 @@ impl TipFeeManager {
     pub fn validator_tokens(&self, call: IFeeManager::validatorTokensCall) -> Result<Address> {
         let token = self.validator_tokens.at(call.validator).read()?;
 
-        if token.is_zero() {
-            Ok(self.default_fee_token())
-        } else {
-            Ok(token)
-        }
+        if token.is_zero() { Ok(self.default_fee_token()) } else { Ok(token) }
     }
 
     pub fn get_fee_token_balance(
@@ -421,14 +408,10 @@ impl TipFeeManager {
         }
 
         let tip20_token = TIP20Token::from_address(token)?;
-        let token_balance = tip20_token.balance_of(ITIP20::balanceOfCall {
-            account: call.sender,
-        })?;
+        let token_balance =
+            tip20_token.balance_of(ITIP20::balanceOfCall { account: call.sender })?;
 
-        Ok(IFeeManager::getFeeTokenBalanceReturn {
-            _0: token,
-            _1: token_balance,
-        })
+        Ok(IFeeManager::getFeeTokenBalanceReturn { _0: token, _1: token_balance })
     }
 }
 
@@ -455,9 +438,7 @@ mod tests {
 
             let mut fee_manager = TipFeeManager::new();
 
-            let call = IFeeManager::setUserTokenCall {
-                token: token.address(),
-            };
+            let call = IFeeManager::setUserTokenCall { token: token.address() };
             let result = fee_manager.set_user_token(user, call);
             assert!(result.is_ok());
 
@@ -477,9 +458,7 @@ mod tests {
             let mut fee_manager = TipFeeManager::new();
 
             // Try to set PathUSD as user token - should fail post-Moderato
-            let call = IFeeManager::setUserTokenCall {
-                token: path_usd.address(),
-            };
+            let call = IFeeManager::setUserTokenCall { token: path_usd.address() };
             let result = fee_manager.set_user_token(user, call);
             assert!(result.is_err_and(|err| err.to_string().contains("InvalidToken")));
 
@@ -496,9 +475,7 @@ mod tests {
             let mut fee_manager = TipFeeManager::new();
 
             // Try to set PathUSD as user token - should succeed pre-Moderato
-            let call = IFeeManager::setUserTokenCall {
-                token: path_usd.address(),
-            };
+            let call = IFeeManager::setUserTokenCall { token: path_usd.address() };
 
             // Pre-Moderato: should be allowed to set PathUSD as user token
             let result = fee_manager.set_user_token(user, call);
@@ -518,9 +495,7 @@ mod tests {
             let token = TIP20Setup::create("Test", "TST", admin).apply()?;
             let mut fee_manager = TipFeeManager::new();
 
-            let call = IFeeManager::setValidatorTokenCall {
-                token: token.address(),
-            };
+            let call = IFeeManager::setValidatorTokenCall { token: token.address() };
 
             // Should fail when validator == beneficiary (same block check)
             let result = fee_manager.set_validator_token(validator, call.clone(), validator);
@@ -554,15 +529,11 @@ mod tests {
             let mut fee_manager = TipFeeManager::new();
 
             // Simulate validator having pending fees by setting validator_in_fees_array
-            fee_manager
-                .validator_in_fees_array
-                .at(validator)
-                .write(true)?;
+            fee_manager.validator_in_fees_array.at(validator).write(true)?;
 
-            // Try to set validator token when validator has pending fees (but is not the beneficiary)
-            let call = IFeeManager::setValidatorTokenCall {
-                token: token.address(),
-            };
+            // Try to set validator token when validator has pending fees (but is not the
+            // beneficiary)
+            let call = IFeeManager::setValidatorTokenCall { token: token.address() };
             let result = fee_manager.set_validator_token(validator, call.clone(), beneficiary);
 
             // Should fail with CannotChangeWithPendingFees
@@ -574,10 +545,7 @@ mod tests {
             );
 
             // Now clear the pending fees flag and try again - should succeed
-            fee_manager
-                .validator_in_fees_array
-                .at(validator)
-                .write(false)?;
+            fee_manager.validator_in_fees_array.at(validator).write(false)?;
             let result = fee_manager.set_validator_token(validator, call.clone(), beneficiary);
             assert!(result.is_ok());
 
@@ -614,19 +582,13 @@ mod tests {
             // Set validator token (use beneficiary to avoid CannotChangeWithinBlock)
             fee_manager.set_validator_token(
                 validator,
-                IFeeManager::setValidatorTokenCall {
-                    token: token.address(),
-                },
+                IFeeManager::setValidatorTokenCall { token: token.address() },
                 beneficiary,
             )?;
 
             // Set user token
-            fee_manager.set_user_token(
-                user,
-                IFeeManager::setUserTokenCall {
-                    token: token.address(),
-                },
-            )?;
+            fee_manager
+                .set_user_token(user, IFeeManager::setUserTokenCall { token: token.address() })?;
 
             // Call collect_fee_pre_tx directly
             let result =
@@ -660,19 +622,13 @@ mod tests {
             // Set validator token (use beneficiary to avoid CannotChangeWithinBlock)
             fee_manager.set_validator_token(
                 validator,
-                IFeeManager::setValidatorTokenCall {
-                    token: token.address(),
-                },
+                IFeeManager::setValidatorTokenCall { token: token.address() },
                 beneficiary,
             )?;
 
             // Set user token
-            fee_manager.set_user_token(
-                user,
-                IFeeManager::setUserTokenCall {
-                    token: token.address(),
-                },
-            )?;
+            fee_manager
+                .set_user_token(user, IFeeManager::setUserTokenCall { token: token.address() })?;
 
             // Call collect_fee_post_tx directly
             let result = fee_manager.collect_fee_post_tx(
@@ -705,16 +661,13 @@ mod tests {
         let beneficiary = Address::random();
         StorageCtx::enter(&mut storage, || {
             // Create a non-USD token
-            let non_usd_token = TIP20Setup::create("NonUSD", "EUR", admin)
-                .currency("EUR")
-                .apply()?;
+            let non_usd_token =
+                TIP20Setup::create("NonUSD", "EUR", admin).currency("EUR").apply()?;
 
             let mut fee_manager = TipFeeManager::new();
 
             // Try to set non-USD as user token - should fail
-            let call = IFeeManager::setUserTokenCall {
-                token: non_usd_token.address(),
-            };
+            let call = IFeeManager::setUserTokenCall { token: non_usd_token.address() };
             let result = fee_manager.set_user_token(user, call);
             assert!(matches!(
                 result,
@@ -722,9 +675,7 @@ mod tests {
             ));
 
             // Try to set non-USD as validator token - should also fail
-            let call = IFeeManager::setValidatorTokenCall {
-                token: non_usd_token.address(),
-            };
+            let call = IFeeManager::setValidatorTokenCall { token: non_usd_token.address() };
             let result = fee_manager.set_validator_token(validator, call, beneficiary);
             assert!(matches!(
                 result,
@@ -757,9 +708,7 @@ mod tests {
             // Set validator token
             fee_manager.set_validator_token(
                 validator,
-                IFeeManager::setValidatorTokenCall {
-                    token: token.address(),
-                },
+                IFeeManager::setValidatorTokenCall { token: token.address() },
                 beneficiary,
             )?;
 
@@ -780,9 +729,8 @@ mod tests {
             assert_eq!(validator_balance, balance);
 
             // Verify FeeManager has no balance left
-            let fee_manager_balance = token.balance_of(ITIP20::balanceOfCall {
-                account: TIP_FEE_MANAGER_ADDRESS,
-            })?;
+            let fee_manager_balance =
+                token.balance_of(ITIP20::balanceOfCall { account: TIP_FEE_MANAGER_ADDRESS })?;
             assert_eq!(fee_manager_balance, U256::ZERO);
 
             Ok(())

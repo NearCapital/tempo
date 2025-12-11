@@ -15,86 +15,43 @@ fn test_mapping() {
     let layout = Layout::__new(address);
 
     StorageCtx::enter(&mut storage, || {
-        let block1 = TestBlock {
-            field1: U256::from(111),
-            field2: U256::from(222),
-            field3: 333,
-        };
-        let block2 = TestBlock {
-            field1: U256::from(444),
-            field2: U256::from(555),
-            field3: 666,
-        };
+        let block1 = TestBlock { field1: U256::from(111), field2: U256::from(222), field3: 333 };
+        let block2 = TestBlock { field1: U256::from(444), field2: U256::from(555), field3: 666 };
 
-        let profile1 = UserProfile {
-            owner: test_address(10),
-            active: true,
-            balance: U256::from(1000),
-        };
-        let profile2 = UserProfile {
-            owner: test_address(20),
-            active: false,
-            balance: U256::from(2000),
-        };
+        let profile1 =
+            UserProfile { owner: test_address(10), active: true, balance: U256::from(1000) };
+        let profile2 =
+            UserProfile { owner: test_address(20), active: false, balance: U256::from(2000) };
 
         // Store multiple entries
         layout.block_mapping.at(1u64).write(block1.clone()).unwrap();
         layout.block_mapping.at(2u64).write(block2.clone()).unwrap();
-        layout
-            .profile_mapping
-            .at(test_address(10))
-            .write(profile1.clone())
-            .unwrap();
-        layout
-            .profile_mapping
-            .at(test_address(20))
-            .write(profile2.clone())
-            .unwrap();
+        layout.profile_mapping.at(test_address(10)).write(profile1.clone()).unwrap();
+        layout.profile_mapping.at(test_address(20)).write(profile2.clone()).unwrap();
 
         // Verify all entries
         assert_eq!(layout.block_mapping.at(1u64).read().unwrap(), block1);
         assert_eq!(layout.block_mapping.at(2u64).read().unwrap(), block2);
-        assert_eq!(
-            layout.profile_mapping.at(test_address(10)).read().unwrap(),
-            profile1
-        );
-        assert_eq!(
-            layout.profile_mapping.at(test_address(20)).read().unwrap(),
-            profile2
-        );
+        assert_eq!(layout.profile_mapping.at(test_address(10)).read().unwrap(), profile1);
+        assert_eq!(layout.profile_mapping.at(test_address(20)).read().unwrap(), profile2);
 
         // Delete specific entries
         layout.block_mapping.at(1u64).delete().unwrap();
-        layout
-            .profile_mapping
-            .at(test_address(10))
-            .delete()
-            .unwrap();
+        layout.profile_mapping.at(test_address(10)).delete().unwrap();
 
         // Verify deleted entries return defaults
         assert_eq!(
             layout.block_mapping.at(1u64).read().unwrap(),
-            TestBlock {
-                field1: U256::ZERO,
-                field2: U256::ZERO,
-                field3: 0,
-            }
+            TestBlock { field1: U256::ZERO, field2: U256::ZERO, field3: 0 }
         );
         assert_eq!(
             layout.profile_mapping.at(test_address(10)).read().unwrap(),
-            UserProfile {
-                owner: Address::ZERO,
-                active: false,
-                balance: U256::ZERO,
-            }
+            UserProfile { owner: Address::ZERO, active: false, balance: U256::ZERO }
         );
 
         // Verify non-deleted entries are intact
         assert_eq!(layout.block_mapping.at(2u64).read().unwrap(), block2);
-        assert_eq!(
-            layout.profile_mapping.at(test_address(20)).read().unwrap(),
-            profile2
-        );
+        assert_eq!(layout.profile_mapping.at(test_address(20)).read().unwrap(), profile2);
 
         Ok::<(), tempo_precompiles::error::TempoPrecompileError>(())
     })

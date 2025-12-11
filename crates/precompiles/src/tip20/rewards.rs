@@ -44,9 +44,8 @@ impl TIP20Token {
                 .and_then(|v| v.checked_div(opted_in_supply))
                 .ok_or(TempoPrecompileError::under_overflow())?;
             let current_rpt = self.get_global_reward_per_token()?;
-            let new_rpt = current_rpt
-                .checked_add(delta_rpt)
-                .ok_or(TempoPrecompileError::under_overflow())?;
+            let new_rpt =
+                current_rpt.checked_add(delta_rpt).ok_or(TempoPrecompileError::under_overflow())?;
             self.set_global_reward_per_token(new_rpt)?;
 
             // Emit reward scheduled event for immediate payout
@@ -70,15 +69,13 @@ impl TIP20Token {
                 .and_then(|v| v.checked_div(U256::from(call.secs)))
                 .ok_or(TempoPrecompileError::under_overflow())?;
             let stream_id = self.get_next_stream_id()?;
-            let next_stream_id = stream_id
-                .checked_add(1)
-                .ok_or(TempoPrecompileError::under_overflow())?;
+            let next_stream_id =
+                stream_id.checked_add(1).ok_or(TempoPrecompileError::under_overflow())?;
             self.set_next_stream_id(next_stream_id)?;
 
             let current_total = self.get_total_reward_per_second()?;
-            let new_total = current_total
-                .checked_add(rate)
-                .ok_or(TempoPrecompileError::under_overflow())?;
+            let new_total =
+                current_total.checked_add(rate).ok_or(TempoPrecompileError::under_overflow())?;
             self.set_total_reward_per_second(new_total)?;
 
             let current_time = self.storage.timestamp().to::<u128>();
@@ -95,9 +92,8 @@ impl TIP20Token {
             ))?;
 
             let current_decrease = self.get_scheduled_rate_decrease_at(end_time)?;
-            let new_decrease = current_decrease
-                .checked_add(rate)
-                .ok_or(TempoPrecompileError::under_overflow())?;
+            let new_decrease =
+                current_decrease.checked_add(rate).ok_or(TempoPrecompileError::under_overflow())?;
             self.set_scheduled_rate_decrease_at(end_time, new_decrease)?;
 
             // If the stream has not been added before, add it to the registry
@@ -147,9 +143,8 @@ impl TIP20Token {
                 .and_then(|v| v.checked_div(opted_in_supply))
                 .ok_or(TempoPrecompileError::under_overflow())?;
             let current_rpt = self.get_global_reward_per_token()?;
-            let new_rpt = current_rpt
-                .checked_add(delta_rpt)
-                .ok_or(TempoPrecompileError::under_overflow())?;
+            let new_rpt =
+                current_rpt.checked_add(delta_rpt).ok_or(TempoPrecompileError::under_overflow())?;
             self.set_global_reward_per_token(new_rpt)?;
         }
 
@@ -192,9 +187,7 @@ impl TIP20Token {
                         .reward_balance
                         .checked_add(reward)
                         .ok_or(TempoPrecompileError::under_overflow())?;
-                    self.user_reward_info
-                        .at(cached_delegate)
-                        .write(delegate_info)?;
+                    self.user_reward_info.at(cached_delegate).write(delegate_info)?;
                 }
             }
             info.reward_per_token = global_reward_per_token;
@@ -241,9 +234,7 @@ impl TIP20Token {
                 .checked_add(holder_balance)
                 .ok_or(TempoPrecompileError::under_overflow())?;
             self.set_opted_in_supply(
-                opted_in_supply
-                    .try_into()
-                    .map_err(|_| TempoPrecompileError::under_overflow())?,
+                opted_in_supply.try_into().map_err(|_| TempoPrecompileError::under_overflow())?,
             )?;
         }
 
@@ -419,9 +410,8 @@ impl TIP20Token {
         let max_amount = amount.min(contract_balance);
 
         let reward_recipient = info.reward_recipient;
-        info.reward_balance = amount
-            .checked_sub(max_amount)
-            .ok_or(TempoPrecompileError::under_overflow())?;
+        info.reward_balance =
+            amount.checked_sub(max_amount).ok_or(TempoPrecompileError::under_overflow())?;
         self.user_reward_info.at(msg_sender).write(info)?;
 
         if max_amount > U256::ZERO {
@@ -543,9 +533,7 @@ impl TIP20Token {
                 .checked_add(amount)
                 .ok_or(TempoPrecompileError::under_overflow())?;
             self.set_opted_in_supply(
-                opted_in_supply
-                    .try_into()
-                    .map_err(|_| TempoPrecompileError::under_overflow())?,
+                opted_in_supply.try_into().map_err(|_| TempoPrecompileError::under_overflow())?,
             )?;
         }
 
@@ -561,9 +549,7 @@ impl TIP20Token {
                 .checked_add(amount)
                 .ok_or(TempoPrecompileError::under_overflow())?;
             self.set_opted_in_supply(
-                opted_in_supply
-                    .try_into()
-                    .map_err(|_| TempoPrecompileError::under_overflow())?,
+                opted_in_supply.try_into().map_err(|_| TempoPrecompileError::under_overflow())?,
             )?;
         }
 
@@ -606,13 +592,7 @@ impl RewardStream {
         rate_per_second_scaled: U256,
         amount_total: U256,
     ) -> Self {
-        Self {
-            funder,
-            start_time,
-            end_time,
-            rate_per_second_scaled,
-            amount_total,
-        }
+        Self { funder, start_time, end_time, rate_per_second_scaled, amount_total }
     }
 }
 
@@ -669,22 +649,11 @@ mod tests {
             token.grant_role_internal(admin, *ISSUER_ROLE)?;
 
             let mint_amount = U256::from(1000e18);
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: admin,
-                    amount: mint_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: admin, amount: mint_amount })?;
 
             let reward_amount = U256::from(100e18);
-            let stream_id = token.start_reward(
-                admin,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: 10,
-                },
-            )?;
+            let stream_id = token
+                .start_reward(admin, ITIP20::startRewardCall { amount: reward_amount, secs: 10 })?;
             assert_eq!(stream_id, 1);
 
             let token_address = token.address;
@@ -733,9 +702,7 @@ mod tests {
 
             token.set_reward_recipient(
                 alice,
-                ITIP20::setRewardRecipientCall {
-                    recipient: Address::ZERO,
-                },
+                ITIP20::setRewardRecipientCall { recipient: Address::ZERO },
             )?;
 
             let info = token.user_reward_info.at(alice).read()?;
@@ -762,22 +729,11 @@ mod tests {
 
             let mint_amount = (U256::random().min(U256::from(u128::MAX)) % token.supply_cap()?)
                 .min(U256::from(10));
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: admin,
-                    amount: mint_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: admin, amount: mint_amount })?;
 
             let reward_amount = mint_amount / U256::from(10);
-            let stream_id = token.start_reward(
-                admin,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: 10,
-                },
-            )?;
+            let stream_id = token
+                .start_reward(admin, ITIP20::startRewardCall { amount: reward_amount, secs: 10 })?;
 
             let remaining =
                 token.cancel_reward(admin, ITIP20::cancelRewardCall { id: stream_id })?;
@@ -818,34 +774,17 @@ mod tests {
 
             let mint_amount = (U256::random().min(U256::from(u128::MAX)) % token.supply_cap()?)
                 .min(U256::from(10));
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: alice,
-                    amount: mint_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: alice, amount: mint_amount })?;
 
             token
                 .set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
 
             let reward_amount = mint_amount / U256::from(10);
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: admin,
-                    amount: reward_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: admin, amount: reward_amount })?;
 
             // Distribute the reward immediately
-            token.start_reward(
-                admin,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: 0,
-                },
-            )?;
+            token
+                .start_reward(admin, ITIP20::startRewardCall { amount: reward_amount, secs: 0 })?;
 
             token.update_rewards(alice)?;
             let info_after = token.user_reward_info.at(alice).read()?;
@@ -873,32 +812,17 @@ mod tests {
 
             let mint_amount = (U256::random().min(U256::from(u128::MAX)) % token.supply_cap()?)
                 .min(U256::from(10));
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: alice,
-                    amount: mint_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: alice, amount: mint_amount })?;
 
             token
                 .set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
 
             let reward_amount = mint_amount / U256::from(10);
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: admin,
-                    amount: reward_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: admin, amount: reward_amount })?;
 
             token.start_reward(
                 admin,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: 100,
-                },
+                ITIP20::startRewardCall { amount: reward_amount, secs: 100 },
             )?;
 
             let rpt_before = token.get_global_reward_per_token()?;
@@ -941,33 +865,18 @@ mod tests {
 
             let mint_amount = (U256::random().min(U256::from(u128::MAX)) % token.supply_cap()?)
                 .min(U256::from(10));
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: alice,
-                    amount: mint_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: alice, amount: mint_amount })?;
 
             token
                 .set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
 
             let reward_amount = mint_amount / U256::from(10);
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: admin,
-                    amount: reward_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: admin, amount: reward_amount })?;
 
             let stream_duration = 10u32;
             token.start_reward(
                 admin,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: stream_duration,
-                },
+                ITIP20::startRewardCall { amount: reward_amount, secs: stream_duration },
             )?;
 
             let end_time = current_time + stream_duration as u64;
@@ -1011,35 +920,18 @@ mod tests {
 
             let mint_amount = (U256::random().min(U256::from(u128::MAX)) % token.supply_cap()?)
                 .min(U256::from(10));
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: alice,
-                    amount: mint_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: alice, amount: mint_amount })?;
 
             token
                 .set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
 
             // Mint reward tokens to admin
             let reward_amount = mint_amount / U256::from(10);
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: admin,
-                    amount: reward_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: admin, amount: reward_amount })?;
 
             // Start immediate reward
-            let id = token.start_reward(
-                admin,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: 0,
-                },
-            )?;
+            let id = token
+                .start_reward(admin, ITIP20::startRewardCall { amount: reward_amount, secs: 0 })?;
 
             assert_eq!(id, 0);
 
@@ -1066,52 +958,31 @@ mod tests {
 
             // Mint tokens to Alice and have her opt in as reward recipient
             let mint_amount = U256::from(1000e18);
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: alice,
-                    amount: mint_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: alice, amount: mint_amount })?;
 
             token
                 .set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
 
             // Mint reward tokens to admin
             let reward_amount = U256::from(100e18);
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: admin,
-                    amount: reward_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: admin, amount: reward_amount })?;
 
             // Start streaming reward for 20 seconds
-            let stream_id = token.start_reward(
-                admin,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: 20,
-                },
-            )?;
+            let stream_id = token
+                .start_reward(admin, ITIP20::startRewardCall { amount: reward_amount, secs: 20 })?;
 
             assert_eq!(stream_id, 1);
 
             // Simulate 10 blocks
             let current_timestamp = token.storage.timestamp();
-            token
-                .storage
-                .set_timestamp(current_timestamp + uint!(10_U256));
+            token.storage.set_timestamp(current_timestamp + uint!(10_U256));
 
             token.finalize_streams(
                 TIP20_REWARDS_REGISTRY_ADDRESS,
                 token.storage.timestamp().to::<u128>(),
             )?;
 
-            token
-                .storage
-                .set_timestamp(current_timestamp + uint!(20_U256));
+            token.storage.set_timestamp(current_timestamp + uint!(20_U256));
 
             token.finalize_streams(
                 TIP20_REWARDS_REGISTRY_ADDRESS,
@@ -1140,33 +1011,18 @@ mod tests {
             token.grant_role_internal(admin, *ISSUER_ROLE)?;
 
             let alice_balance = U256::from(1000e18);
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: alice,
-                    amount: alice_balance,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: alice, amount: alice_balance })?;
 
             token
                 .set_reward_recipient(alice, ITIP20::setRewardRecipientCall { recipient: alice })?;
             assert_eq!(token.get_opted_in_supply()?, alice_balance.to::<u128>());
 
             let reward_amount = U256::from(100e18);
-            token.mint(
-                admin,
-                ITIP20::mintCall {
-                    to: funder,
-                    amount: reward_amount,
-                },
-            )?;
+            token.mint(admin, ITIP20::mintCall { to: funder, amount: reward_amount })?;
 
             token.start_reward(
                 funder,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: 100,
-                },
+                ITIP20::startRewardCall { amount: reward_amount, secs: 100 },
             )?;
 
             let current_time = token.storage.timestamp();
@@ -1176,10 +1032,7 @@ mod tests {
             let claimed_amount = token.claim_rewards(alice)?;
 
             assert!(claimed_amount > U256::ZERO);
-            assert_eq!(
-                token.get_balance(alice)?,
-                alice_balance_before_claim + claimed_amount
-            );
+            assert_eq!(token.get_balance(alice)?, alice_balance_before_claim + claimed_amount);
 
             let alice_info = token.get_user_reward_info(alice)?;
             assert_eq!(alice_info.reward_balance, U256::ZERO);
@@ -1206,13 +1059,8 @@ mod tests {
                 .apply()?;
 
             let reward_amount = U256::from(100e18);
-            let stream_id = token.start_reward(
-                admin,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: 10,
-                },
-            )?;
+            let stream_id = token
+                .start_reward(admin, ITIP20::startRewardCall { amount: reward_amount, secs: 10 })?;
             let stream = token.get_stream(stream_id)?;
             let end_time = stream.end_time as u128;
 
@@ -1222,10 +1070,7 @@ mod tests {
             // Verify the token is in the registry before cancellation
             let registry = TIP20RewardsRegistry::new();
             let count_before = registry.ending_streams.at(end_time).len()?;
-            assert_eq!(
-                count_before, 1,
-                "Registry should have 1 stream before cancellation"
-            );
+            assert_eq!(count_before, 1, "Registry should have 1 stream before cancellation");
 
             // Cancel the stream
             token.cancel_reward(admin, ITIP20::cancelRewardCall { id: stream_id })?;
@@ -1257,23 +1102,15 @@ mod tests {
                 .apply()?;
 
             let reward_amount = U256::from(100e18);
-            let stream_id = token.start_reward(
-                admin,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: 10,
-                },
-            )?;
+            let stream_id = token
+                .start_reward(admin, ITIP20::startRewardCall { amount: reward_amount, secs: 10 })?;
             let stream = token.get_stream(stream_id)?;
             let end_time = stream.end_time as u128;
 
             // Verify the token is in the registry before cancellation
             let registry = TIP20RewardsRegistry::new();
             let count_before = registry.ending_streams.at(end_time).len()?;
-            assert_eq!(
-                count_before, 1,
-                "Registry should have 1 stream before cancellation"
-            );
+            assert_eq!(count_before, 1, "Registry should have 1 stream before cancellation");
 
             // Cancel the stream
             token.cancel_reward(admin, ITIP20::cancelRewardCall { id: stream_id })?;
@@ -1303,13 +1140,8 @@ mod tests {
                 .apply()?;
 
             let reward_amount = U256::from(100e18);
-            let result = token.start_reward(
-                admin,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: 10,
-                },
-            );
+            let result = token
+                .start_reward(admin, ITIP20::startRewardCall { amount: reward_amount, secs: 10 });
 
             assert!(result.is_err());
             let error = result.unwrap_err();
@@ -1343,29 +1175,21 @@ mod tests {
             )?;
 
             // setup token with the blacklist policy and start a reward stream
-            let mut token = TIP20Setup::create("TestToken", "TEST", admin)
-                .with_issuer(admin)
-                .apply()?;
+            let mut token =
+                TIP20Setup::create("TestToken", "TEST", admin).with_issuer(admin).apply()?;
 
             token.change_transfer_policy_id(
                 admin,
-                ITIP20::changeTransferPolicyIdCall {
-                    newPolicyId: policy_id,
-                },
+                ITIP20::changeTransferPolicyIdCall { newPolicyId: policy_id },
             )?;
 
             let mint_amount = U256::from(1000e18);
-            TIP20Setup::config(token.address())
-                .with_mint(admin, mint_amount)
-                .apply()?;
+            TIP20Setup::config(token.address()).with_mint(admin, mint_amount).apply()?;
 
             let reward_amount = U256::from(100e18);
             let stream_id = token.start_reward(
                 admin,
-                ITIP20::startRewardCall {
-                    amount: reward_amount,
-                    secs: STREAM_DURATION,
-                },
+                ITIP20::startRewardCall { amount: reward_amount, secs: STREAM_DURATION },
             )?;
 
             // blacklist the token address

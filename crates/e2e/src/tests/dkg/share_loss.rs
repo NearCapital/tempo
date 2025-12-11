@@ -30,23 +30,14 @@ fn assert_validator_lost_key_but_gets_key_in_next_epoch(allegretto_at_genesis: b
     executor.start(|context| async move {
         let epoch_length = 30;
         let setup = Setup::new().seed(seed).epoch_length(epoch_length);
-        let setup = if allegretto_at_genesis {
-            setup.allegretto_time(0)
-        } else {
-            setup
-        };
+        let setup = if allegretto_at_genesis { setup.allegretto_time(0) } else { setup };
 
         let (mut validators, _execution_runtime) =
             setup_validators(context.clone(), setup.clone()).await;
         let last_node = {
-            let last_node = validators
-                .last_mut()
-                .expect("we just asked for a couple of validators");
-            last_node
-                .consensus_config_mut()
-                .share
-                .take()
-                .expect("the node must have had a share");
+            let last_node =
+                validators.last_mut().expect("we just asked for a couple of validators");
+            last_node.consensus_config_mut().share.take().expect("the node must have had a share");
             last_node.uid().to_string()
         };
 
@@ -93,8 +84,8 @@ fn assert_validator_lost_key_but_gets_key_in_next_epoch(allegretto_at_genesis: b
                 }
 
                 // Ensures that node has no share.
-                if !node_forgot_share
-                    && metric.ends_with(&format!(
+                if !node_forgot_share &&
+                    metric.ends_with(&format!(
                         "{last_node}_epoch_manager_how_often_verifier_total"
                     ))
                 {
@@ -103,8 +94,8 @@ fn assert_validator_lost_key_but_gets_key_in_next_epoch(allegretto_at_genesis: b
                 }
 
                 // Double check that the node is indeed not a signer.
-                if !node_is_not_signer
-                    && metric
+                if !node_is_not_signer &&
+                    metric
                         .ends_with(&format!("{last_node}_epoch_manager_how_often_signer_total"))
                 {
                     let value = value.parse::<u64>().unwrap();
@@ -112,10 +103,10 @@ fn assert_validator_lost_key_but_gets_key_in_next_epoch(allegretto_at_genesis: b
                 }
 
                 // Ensure that the node gets a share by becoming a signer.
-                if node_forgot_share
-                    && node_is_not_signer
-                    && !node_got_new_share
-                    && metric
+                if node_forgot_share &&
+                    node_is_not_signer &&
+                    !node_got_new_share &&
+                    metric
                         .ends_with(&format!("{last_node}_epoch_manager_how_often_signer_total"))
                 {
                     let value = value.parse::<u64>().unwrap();
@@ -141,11 +132,11 @@ fn assert_validator_lost_key_but_gets_key_in_next_epoch(allegretto_at_genesis: b
                 }
             }
 
-            success = epoch_reached
-                && height_reached
-                && dkg_successful
-                && node_forgot_share
-                && node_got_new_share;
+            success = epoch_reached &&
+                height_reached &&
+                dkg_successful &&
+                node_forgot_share &&
+                node_got_new_share;
         }
     });
 }

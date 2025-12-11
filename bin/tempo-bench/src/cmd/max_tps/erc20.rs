@@ -17,9 +17,7 @@ pub(super) async fn setup(
     max_concurrent_requests: usize,
     max_concurrent_transactions: usize,
 ) -> eyre::Result<Vec<Address>> {
-    let (_signer, provider) = signer_providers
-        .first()
-        .ok_or_eyre("No signer providers found")?;
+    let (_signer, provider) = signer_providers.first().ok_or_eyre("No signer providers found")?;
 
     info!(num_tokens, "Deploying ERC-20 tokens");
     let progress = ProgressBar::new(num_tokens as u64);

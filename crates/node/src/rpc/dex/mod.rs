@@ -67,20 +67,11 @@ impl<
             let quote_token = params.filters.as_ref().and_then(|f| f.quote_token);
             let book_keys = get_book_keys_for_iteration(&exchange, base_token, quote_token)?;
 
-            let is_bid = params
-                .filters
-                .as_ref()
-                .is_none_or(|f| f.is_bid.unwrap_or(false));
+            let is_bid = params.filters.as_ref().is_none_or(|f| f.is_bid.unwrap_or(false));
 
-            let cursor = params
-                .cursor
-                .map(|cursor| parse_order_cursor(&cursor))
-                .transpose()?;
+            let cursor = params.cursor.map(|cursor| parse_order_cursor(&cursor)).transpose()?;
 
-            let limit = params
-                .limit
-                .map(|l| l.min(MAX_LIMIT))
-                .unwrap_or(DEFAULT_LIMIT);
+            let limit = params.limit.map(|l| l.min(MAX_LIMIT)).unwrap_or(DEFAULT_LIMIT);
 
             let mut all_orders: Vec<Order> = Vec::new();
             let mut next_cursor = None;
@@ -134,10 +125,7 @@ impl<
             all_orders.truncate(limit);
             let orders = all_orders;
 
-            let response = OrdersResponse {
-                next_cursor,
-                orders,
-            };
+            let response = OrdersResponse { next_cursor, orders };
             Ok(response)
         })?;
         Ok(response)
@@ -152,16 +140,10 @@ impl<
         let (items, next_cursor) = self.apply_pagination_to_orderbooks(params)?;
 
         // Convert PrecompileOrderbooks to RPC Orderbooks
-        let orderbooks = items
-            .into_iter()
-            .map(|book| self.to_rpc_orderbook(&book))
-            .collect();
+        let orderbooks = items.into_iter().map(|book| self.to_rpc_orderbook(&book)).collect();
 
         // Create response with next cursor
-        Ok(OrderbooksResponse {
-            next_cursor,
-            orderbooks,
-        })
+        Ok(OrderbooksResponse { next_cursor, orderbooks })
     }
 
     /// Creates an `EvmPrecompileStorageProvider` at the given block.
@@ -234,10 +216,7 @@ impl<
 
             // Convert keys to orderbooks, starting from cursor position
             let mut orderbooks = Vec::new();
-            let limit = params
-                .limit
-                .map(|l| l.min(MAX_LIMIT))
-                .unwrap_or(DEFAULT_LIMIT);
+            let limit = params.limit.map(|l| l.min(MAX_LIMIT)).unwrap_or(DEFAULT_LIMIT);
 
             let mut iter = keys.into_iter().skip(start_idx);
 
@@ -246,8 +225,8 @@ impl<
                 let book = exchange.books(key).map_err(DexApiError::Precompile)?;
 
                 // Apply filters if present
-                if let Some(ref filter) = params.filters
-                    && !orderbook_matches_filter(&book, filter)
+                if let Some(ref filter) = params.filters &&
+                    !orderbook_matches_filter(&book, filter)
                 {
                     continue;
                 }
@@ -336,10 +315,7 @@ impl<
         // Get all orderbooks and filter them
         let all_books = self.get_all_books()?;
 
-        Ok(all_books
-            .into_iter()
-            .filter(|book| orderbook_matches_filter(book, &filter))
-            .collect())
+        Ok(all_books.into_iter().filter(|book| orderbook_matches_filter(book, &filter)).collect())
     }
 
     /// Returns all orderbooks.
@@ -480,17 +456,12 @@ impl<'b> BookIterator<'b> {
 
     /// Get a PrecompileOrder from an order ID
     pub fn get_order(&self, order_id: u128) -> Result<PrecompileOrder, DexApiError> {
-        StablecoinExchange::new()
-            .get_order(order_id)
-            .map_err(DexApiError::Precompile)
+        StablecoinExchange::new().get_order(order_id).map_err(DexApiError::Precompile)
     }
 
     /// Get a TickLevel from a tick
     pub fn get_price_level(&self, tick: i16) -> Result<TickLevel, DexApiError> {
-        self.handler
-            .get_tick_level_handler(tick, self.bids)
-            .read()
-            .map_err(DexApiError::Precompile)
+        self.handler.get_tick_level_handler(tick, self.bids).read().map_err(DexApiError::Precompile)
     }
 
     /// Get the next initialized tick after the given tick
@@ -511,11 +482,8 @@ impl<'b> BookIterator<'b> {
 
         // If there is no current order we get the first one based on the best bid or ask tick
         let Some(current_id) = self.order else {
-            let tick = if self.bids {
-                self.orderbook.best_bid_tick
-            } else {
-                self.orderbook.best_ask_tick
-            };
+            let tick =
+                if self.bids { self.orderbook.best_bid_tick } else { self.orderbook.best_ask_tick };
 
             let price_level = self.get_price_level(tick)?;
 
@@ -634,10 +602,7 @@ fn order_matches_filter(order: &PrecompileOrder, filter: &OrdersFilters) -> bool
     }
 
     // Check flip filter
-    if filter
-        .is_flip
-        .is_some_and(|is_flip| is_flip != order.is_flip)
-    {
+    if filter.is_flip.is_some_and(|is_flip| is_flip != order.is_flip) {
         return false;
     }
 
@@ -656,11 +621,7 @@ fn order_matches_filter(order: &PrecompileOrder, filter: &OrdersFilters) -> bool
     }
 
     // Check tick range
-    if filter
-        .tick
-        .as_ref()
-        .is_some_and(|tick_range| !tick_range.in_range(order.tick))
-    {
+    if filter.tick.as_ref().is_some_and(|tick_range| !tick_range.in_range(order.tick)) {
         return false;
     }
 
@@ -678,9 +639,7 @@ fn parse_order_cursor(cursor: &str) -> Result<u128, DexApiError> {
 
 /// Parses a cursor string into a B256 for orderbooks
 fn parse_orderbook_cursor(cursor: &str) -> Result<B256, DexApiError> {
-    cursor
-        .parse::<B256>()
-        .map_err(|_| DexApiError::InvalidOrderbookCursor(cursor.to_string()))
+    cursor.parse::<B256>().map_err(|_| DexApiError::InvalidOrderbookCursor(cursor.to_string()))
 }
 
 /// Gets book keys to iterate over. If both base and quote are specified, returns only that book.

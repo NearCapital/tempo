@@ -40,18 +40,13 @@ impl Parse for ContractConfig {
 
         let ident: Ident = input.parse()?;
         if ident != "addr" && ident != "address" {
-            return Err(syn::Error::new(
-                ident.span(),
-                "only `addr` attribute is supported",
-            ));
+            return Err(syn::Error::new(ident.span(), "only `addr` attribute is supported"));
         }
 
         input.parse::<Token![=]>()?;
         let address: Expr = input.parse()?;
 
-        Ok(Self {
-            address: Some(address),
-        })
+        Ok(Self { address: Some(address) })
     }
 }
 
@@ -59,7 +54,8 @@ const RESERVED: &[&str] = &["address", "storage", "msg_sender"];
 
 /// Transforms a struct that represents a storage layout into a contract with helper methods to
 /// easily interact with the EVM storage.
-/// Its packing and encoding schemes aim to be an exact representation of the storage model used by Solidity.
+/// Its packing and encoding schemes aim to be an exact representation of the storage model used by
+/// Solidity.
 ///
 /// # Input: Storage Layout
 ///
@@ -139,8 +135,8 @@ fn parse_fields(input: DeriveInput) -> syn::Result<Vec<FieldInfo>> {
     }
 
     // Ensure struct with named fields
-    let named_fields = if let Data::Struct(data) = input.data
-        && let Fields::Named(fields) = data.fields
+    let named_fields = if let Data::Struct(data) = input.data &&
+        let Fields::Named(fields) = data.fields
     {
         fields.named
     } else {
@@ -167,12 +163,7 @@ fn parse_fields(input: DeriveInput) -> syn::Result<Vec<FieldInfo>> {
             }
 
             let (slot, base_slot) = extract_attributes(&field.attrs)?;
-            Ok(FieldInfo {
-                name: name.to_owned(),
-                ty: field.ty,
-                slot,
-                base_slot,
-            })
+            Ok(FieldInfo { name: name.to_owned(), ty: field.ty, slot, base_slot })
         })
         .collect()
 }

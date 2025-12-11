@@ -56,9 +56,8 @@ impl TestingNode {
         execution_runtime: ExecutionRuntimeHandle,
         execution_config: ExecutionNodeConfig,
     ) -> Self {
-        let execution_node_datadir = execution_runtime
-            .nodes_dir()
-            .join(execution_runtime::execution_node_name(&public_key));
+        let execution_node_datadir =
+            execution_runtime.nodes_dir().join(execution_runtime::execution_node_name(&public_key));
 
         Self {
             uid,
@@ -160,10 +159,8 @@ impl TestingNode {
         }
 
         // Update consensus config to point to the new execution node
-        self.consensus_config = self
-            .consensus_config
-            .clone()
-            .with_execution_node(execution_node.node.clone());
+        self.consensus_config =
+            self.consensus_config.clone().with_execution_node(execution_node.node.clone());
         self.execution_node = Some(execution_node);
         debug!(%self.uid, "started execution node for testing node");
     }
@@ -173,11 +170,7 @@ impl TestingNode {
     /// # Panics
     /// Panics if consensus is already running.
     async fn start_consensus(&mut self) {
-        assert!(
-            self.consensus_handle.is_none(),
-            "consensus is already running for {}",
-            self.uid
-        );
+        assert!(self.consensus_handle.is_none(), "consensus is already running for {}", self.uid);
         let engine = self
             .consensus_config
             .clone()
@@ -185,54 +178,15 @@ impl TestingNode {
             .await
             .expect("must be able to start the engine");
 
-        let pending = self
-            .oracle
-            .control(self.public_key.clone())
-            .register(0)
-            .await
-            .unwrap();
-        let recovered = self
-            .oracle
-            .control(self.public_key.clone())
-            .register(1)
-            .await
-            .unwrap();
-        let resolver = self
-            .oracle
-            .control(self.public_key.clone())
-            .register(2)
-            .await
-            .unwrap();
-        let broadcast = self
-            .oracle
-            .control(self.public_key.clone())
-            .register(3)
-            .await
-            .unwrap();
-        let marshal = self
-            .oracle
-            .control(self.public_key.clone())
-            .register(4)
-            .await
-            .unwrap();
-        let dkg = self
-            .oracle
-            .control(self.public_key.clone())
-            .register(5)
-            .await
-            .unwrap();
-        let boundary_certs = self
-            .oracle
-            .control(self.public_key.clone())
-            .register(6)
-            .await
-            .unwrap();
-        let subblocks = self
-            .oracle
-            .control(self.public_key.clone())
-            .register(7)
-            .await
-            .unwrap();
+        let pending = self.oracle.control(self.public_key.clone()).register(0).await.unwrap();
+        let recovered = self.oracle.control(self.public_key.clone()).register(1).await.unwrap();
+        let resolver = self.oracle.control(self.public_key.clone()).register(2).await.unwrap();
+        let broadcast = self.oracle.control(self.public_key.clone()).register(3).await.unwrap();
+        let marshal = self.oracle.control(self.public_key.clone()).register(4).await.unwrap();
+        let dkg = self.oracle.control(self.public_key.clone()).register(5).await.unwrap();
+        let boundary_certs =
+            self.oracle.control(self.public_key.clone()).register(6).await.unwrap();
+        let subblocks = self.oracle.control(self.public_key.clone()).register(7).await.unwrap();
 
         let consensus_handle = engine.start(
             pending,
@@ -287,10 +241,7 @@ impl TestingNode {
     async fn stop_execution(&mut self) {
         debug!(%self.uid, "stopping execution node for testing node");
         let execution_node = self.execution_node.take().unwrap_or_else(|| {
-            panic!(
-                "execution node is not running for {}, cannot stop",
-                self.uid
-            )
+            panic!("execution node is not running for {}, cannot stop", self.uid)
         });
 
         let last_db_block = execution_node
@@ -300,10 +251,7 @@ impl TestingNode {
             .expect("failed to get database provider")
             .last_block_number()
             .expect("failed to get last block number from database");
-        tracing::debug!(
-            last_db_block,
-            "storing last block block number to verify restart"
-        );
+        tracing::debug!(last_db_block, "storing last block block number to verify restart");
         self.last_db_block_on_stop = Some(last_db_block);
 
         execution_node.shutdown().await;
@@ -344,11 +292,7 @@ impl TestingNode {
     /// # Panics
     /// Panics if the execution node is not running.
     pub fn execution(&self) -> &tempo_node::TempoFullNode {
-        &self
-            .execution_node
-            .as_ref()
-            .expect("execution node is not running")
-            .node
+        &self.execution_node.as_ref().expect("execution node is not running").node
     }
 
     /// Get a reference to the running consensus handle.
@@ -356,9 +300,7 @@ impl TestingNode {
     /// # Panics
     /// Panics if the consensus engine is not running.
     pub fn consensus(&self) -> &Handle<eyre::Result<()>> {
-        self.consensus_handle
-            .as_ref()
-            .expect("consensus is not running")
+        self.consensus_handle.as_ref().expect("consensus is not running")
     }
 
     /// Get a blockchain provider for the execution node.
@@ -381,12 +323,9 @@ impl TestingNode {
         // Note: MDBX allows multiple readers, so this is safe even if another process
         // has the database open for reading
         let database = Arc::new(
-            open_db_read_only(
-                self.execution_node_datadir.join("db"),
-                DatabaseArguments::default(),
-            )
-            .expect("failed to open execution node database")
-            .with_metrics(),
+            open_db_read_only(self.execution_node_datadir.join("db"), DatabaseArguments::default())
+                .expect("failed to open execution node database")
+                .with_metrics(),
         );
 
         let static_file_provider =

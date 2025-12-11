@@ -19,9 +19,7 @@ async fn run_validator_late_join_test(
 ) {
     let metrics_recorder = install_prometheus_recorder();
 
-    let setup = Setup::new()
-        .epoch_length(100)
-        .connect_execution_layer_nodes(should_pipeline_sync);
+    let setup = Setup::new().epoch_length(100).connect_execution_layer_nodes(should_pipeline_sync);
 
     let (mut nodes, _execution_runtime) = setup_validators(context.clone(), setup.clone()).await;
 
@@ -45,15 +43,9 @@ async fn run_validator_late_join_test(
     // Verify backfill behavior
     let actual_runs = get_pipeline_runs(metrics_recorder);
     if should_pipeline_sync {
-        assert!(
-            actual_runs > 0,
-            "at least one backfill must have been triggered"
-        );
+        assert!(actual_runs > 0, "at least one backfill must have been triggered");
     } else {
-        assert_eq!(
-            0, actual_runs,
-            "Expected no backfill, got {actual_runs} runs"
-        );
+        assert_eq!(0, actual_runs, "Expected no backfill, got {actual_runs} runs");
     }
 
     // Verify that the node is still progressing after sync

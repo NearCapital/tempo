@@ -39,33 +39,28 @@ fn subblocks_are_included() {
     Runner::from(deterministic::Config::default().with_seed(0)).start(|context| async move {
         let how_many_signers = 5;
 
-        let setup = Setup::new()
-            .how_many_signers(how_many_signers)
-            .epoch_length(10);
+        let setup = Setup::new().how_many_signers(how_many_signers).epoch_length(10);
 
         // Setup and start all nodes.
         let (mut nodes, _execution_runtime) = setup_validators(context.clone(), setup).await;
 
         join_all(nodes.iter_mut().map(|node| {
-            // Due to how Commonware deterministic runtime behaves in CI, we need to bump this timeout
-            // to ensure that payload builder has enough time to accumulate subblocks.
+            // Due to how Commonware deterministic runtime behaves in CI, we need to bump this
+            // timeout to ensure that payload builder has enough time to accumulate
+            // subblocks.
             node.consensus_config_mut().new_payload_wait_time = Duration::from_millis(500);
             node.start()
         }))
         .await;
 
-        let mut stream = nodes[0]
-            .execution()
-            .add_ons_handle
-            .engine_events
-            .new_listener();
+        let mut stream = nodes[0].execution().add_ons_handle.engine_events.new_listener();
 
         let mut expected_transactions: Vec<TxHash> = Vec::new();
         while let Some(update) = stream.next().await {
             let block = match update {
-                ConsensusEngineEvent::BlockReceived(_)
-                | ConsensusEngineEvent::ForkchoiceUpdated(_, _)
-                | ConsensusEngineEvent::CanonicalChainCommitted(_, _) => continue,
+                ConsensusEngineEvent::BlockReceived(_) |
+                ConsensusEngineEvent::ForkchoiceUpdated(_, _) |
+                ConsensusEngineEvent::CanonicalChainCommitted(_, _) => continue,
                 ConsensusEngineEvent::ForkBlockAdded(_, _) => unreachable!("unexpected reorg"),
                 ConsensusEngineEvent::InvalidBlock(_) => unreachable!("unexpected invalid block"),
                 ConsensusEngineEvent::CanonicalBlockAdded(block, _) => block,
@@ -73,13 +68,7 @@ fn subblocks_are_included() {
 
             // Assert that all expected transactions are included in the block.
             for tx in expected_transactions.drain(..) {
-                if !block
-                    .sealed_block()
-                    .body()
-                    .transactions
-                    .iter()
-                    .any(|t| *t.tx_hash() == *tx)
-                {
+                if !block.sealed_block().body().transactions.iter().any(|t| *t.tx_hash() == *tx) {
                     panic!("transaction {tx} was not included");
                 }
             }
@@ -118,8 +107,9 @@ fn subblocks_are_included_post_allegretto() {
         let mut fee_recipients = Vec::new();
 
         for node in &mut nodes {
-            // Due to how Commonware deterministic runtime behaves in CI, we need to bump this timeout
-            // to ensure that payload builder has enough time to accumulate subblocks.
+            // Due to how Commonware deterministic runtime behaves in CI, we need to bump this
+            // timeout to ensure that payload builder has enough time to accumulate
+            // subblocks.
             node.consensus_config_mut().new_payload_wait_time = Duration::from_millis(500);
 
             let fee_recipient = Address::random();
@@ -129,18 +119,14 @@ fn subblocks_are_included_post_allegretto() {
 
         join_all(nodes.iter_mut().map(|node| node.start())).await;
 
-        let mut stream = nodes[0]
-            .execution()
-            .add_ons_handle
-            .engine_events
-            .new_listener();
+        let mut stream = nodes[0].execution().add_ons_handle.engine_events.new_listener();
 
         let mut expected_transactions: Vec<TxHash> = Vec::new();
         while let Some(update) = stream.next().await {
             let block = match update {
-                ConsensusEngineEvent::BlockReceived(_)
-                | ConsensusEngineEvent::ForkchoiceUpdated(_, _)
-                | ConsensusEngineEvent::CanonicalChainCommitted(_, _) => continue,
+                ConsensusEngineEvent::BlockReceived(_) |
+                ConsensusEngineEvent::ForkchoiceUpdated(_, _) |
+                ConsensusEngineEvent::CanonicalChainCommitted(_, _) => continue,
                 ConsensusEngineEvent::ForkBlockAdded(_, _) => unreachable!("unexpected reorg"),
                 ConsensusEngineEvent::InvalidBlock(_) => unreachable!("unexpected invalid block"),
                 ConsensusEngineEvent::CanonicalBlockAdded(block, _) => block,
@@ -156,13 +142,7 @@ fn subblocks_are_included_post_allegretto() {
 
             // Assert that all expected transactions are included in the block.
             for tx in expected_transactions.drain(..) {
-                if !block
-                    .sealed_block()
-                    .body()
-                    .transactions
-                    .iter()
-                    .any(|t| t.tx_hash() == *tx)
-                {
+                if !block.sealed_block().body().transactions.iter().any(|t| t.tx_hash() == *tx) {
                     panic!("transaction {tx} was not included");
                 }
             }
@@ -227,8 +207,9 @@ fn subblocks_are_included_post_allegretto_with_failing_txs() {
         let mut fee_recipients = Vec::new();
 
         for node in &mut nodes {
-            // Due to how Commonware deterministic runtime behaves in CI, we need to bump this timeout
-            // to ensure that payload builder has enough time to accumulate subblocks.
+            // Due to how Commonware deterministic runtime behaves in CI, we need to bump this
+            // timeout to ensure that payload builder has enough time to accumulate
+            // subblocks.
             node.consensus_config_mut().new_payload_wait_time = Duration::from_millis(500);
 
             let fee_recipient = Address::random();
@@ -238,19 +219,15 @@ fn subblocks_are_included_post_allegretto_with_failing_txs() {
 
         join_all(nodes.iter_mut().map(|node| node.start())).await;
 
-        let mut stream = nodes[0]
-            .execution()
-            .add_ons_handle
-            .engine_events
-            .new_listener();
+        let mut stream = nodes[0].execution().add_ons_handle.engine_events.new_listener();
 
         let mut expected_transactions: Vec<TxHash> = Vec::new();
         let mut failing_transactions: Vec<TxHash> = Vec::new();
         while let Some(update) = stream.next().await {
             let block = match update {
-                ConsensusEngineEvent::BlockReceived(_)
-                | ConsensusEngineEvent::ForkchoiceUpdated(_, _)
-                | ConsensusEngineEvent::CanonicalChainCommitted(_, _) => continue,
+                ConsensusEngineEvent::BlockReceived(_) |
+                ConsensusEngineEvent::ForkchoiceUpdated(_, _) |
+                ConsensusEngineEvent::CanonicalChainCommitted(_, _) => continue,
                 ConsensusEngineEvent::ForkBlockAdded(_, _) => unreachable!("unexpected reorg"),
                 ConsensusEngineEvent::InvalidBlock(_) => unreachable!("unexpected invalid block"),
                 ConsensusEngineEvent::CanonicalBlockAdded(block, _) => block,
@@ -265,51 +242,32 @@ fn subblocks_are_included_post_allegretto_with_failing_txs() {
 
             // Assert that all expected transactions are included in the block.
             for tx in expected_transactions.drain(..) {
-                if !block
-                    .sealed_block()
-                    .body()
-                    .transactions
-                    .iter()
-                    .any(|t| t.tx_hash() == *tx)
-                {
+                if !block.sealed_block().body().transactions.iter().any(|t| t.tx_hash() == *tx) {
                     panic!("transaction {tx} was not included");
                 }
             }
 
             let fee_recipients = Vec::<SubBlockMetadata>::decode(
-                &mut block
-                    .sealed_block()
-                    .body()
-                    .transactions
-                    .last()
-                    .unwrap()
-                    .input()
-                    .as_ref(),
+                &mut block.sealed_block().body().transactions.last().unwrap().input().as_ref(),
             )
             .unwrap()
             .into_iter()
             .map(|metadata| {
-                (
-                    PartialValidatorKey::from_slice(&metadata.validator[..15]),
-                    metadata.fee_recipient,
-                )
+                (PartialValidatorKey::from_slice(&metadata.validator[..15]), metadata.fee_recipient)
             })
             .collect::<HashMap<_, _>>();
 
             let mut expected_fees = HashMap::new();
             let mut cumulative_gas_used = 0;
 
-            for (receipt, tx) in receipts
-                .iter()
-                .zip(block.recovered_block().transactions_recovered())
+            for (receipt, tx) in
+                receipts.iter().zip(block.recovered_block().transactions_recovered())
             {
                 if !expected_transactions.contains(tx.tx_hash()) {
                     continue;
                 }
 
-                let fee_recipient = fee_recipients
-                    .get(&tx.subblock_proposer().unwrap())
-                    .unwrap();
+                let fee_recipient = fee_recipients.get(&tx.subblock_proposer().unwrap()).unwrap();
                 *expected_fees.entry(fee_recipient).or_insert(U256::ZERO) +=
                     calc_gas_balance_spending(
                         receipt.cumulative_gas_used - cumulative_gas_used,
@@ -335,7 +293,8 @@ fn subblocks_are_included_post_allegretto_with_failing_txs() {
                     .get(&nonce_slot)
                     .unwrap();
 
-                // Assert that all failing transactions have bumped the nonce and resulted in a failing receipt
+                // Assert that all failing transactions have bumped the nonce and resulted in a
+                // failing receipt
                 assert!(slot.present_value == slot.original_value() + U256::ONE);
                 assert!(!receipt.status());
                 assert!(receipt.logs().is_empty());
@@ -369,7 +328,8 @@ fn subblocks_are_included_post_allegretto_with_failing_txs() {
             // Send subblock transactions to all nodes.
             for node in nodes.iter() {
                 for _ in 0..5 {
-                    // Randomly submit some of the transactions from a new signer that doesn't have any funds
+                    // Randomly submit some of the transactions from a new signer that doesn't have
+                    // any funds
                     if rand::random::<bool>() {
                         let tx = submit_subblock_tx_from(node, &PrivateKeySigner::random()).await;
                         failing_transactions.push(tx);
@@ -427,11 +387,7 @@ async fn submit_subblock_tx_from(node: &TestingNode, wallet: &PrivateKeySigner) 
 
     let tx = TempoTxEnvelope::AA(tx.into_signed(signature.into()));
     let tx_hash = *tx.tx_hash();
-    node.execution()
-        .eth_api()
-        .send_raw_transaction(tx.encoded_2718().into())
-        .await
-        .unwrap();
+    node.execution().eth_api().send_raw_transaction(tx.encoded_2718().into()).await.unwrap();
 
     tx_hash
 }

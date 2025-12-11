@@ -44,8 +44,8 @@ pub fn check_selector_coverage<P: Precompile>(
             false
         };
 
-        if (is_unsupported_old || is_unsupported_new)
-            && let Some(name) = name_lookup(*selector)
+        if (is_unsupported_old || is_unsupported_new) &&
+            let Some(name) = name_lookup(*selector)
         {
             unsupported_selectors.push((*selector, name));
         }
@@ -66,11 +66,8 @@ pub fn check_selector_coverage<P: Precompile>(
 ///
 /// Takes an iterator of unsupported selector results and panics if any are found.
 pub fn assert_full_coverage(results: impl IntoIterator<Item = Vec<([u8; 4], &'static str)>>) {
-    let all_unsupported: Vec<_> = results
-        .into_iter()
-        .flat_map(|r| r.into_iter())
-        .map(|(_, name)| name)
-        .collect();
+    let all_unsupported: Vec<_> =
+        results.into_iter().flat_map(|r| r.into_iter()).map(|(_, name)| name).collect();
 
     assert!(
         all_unsupported.is_empty(),
@@ -94,11 +91,7 @@ enum Action {
     PathUSD,
 
     /// Create and configure a new token using the TIP20Factory.
-    CreateToken {
-        name: &'static str,
-        symbol: &'static str,
-        currency: &'static str,
-    },
+    CreateToken { name: &'static str, symbol: &'static str, currency: &'static str },
     /// Configure an existing token at the given address
     ConfigureToken { address: Address },
 }
@@ -144,11 +137,7 @@ pub struct TIP20Setup {
 impl TIP20Setup {
     /// Configure PathUSD (token 0).
     pub fn path_usd(admin: Address) -> Self {
-        Self {
-            action: Action::PathUSD,
-            admin: Some(admin),
-            ..Default::default()
-        }
+        Self { action: Action::PathUSD, admin: Some(admin), ..Default::default() }
     }
 
     /// Create a new token via factory. Ensures that `PathUSD` and `TIP20Factory` are initialized.
@@ -156,11 +145,7 @@ impl TIP20Setup {
     /// Defaults to `currency: "USD"`, `quote_token: PathUSD`, `fee_recipient: Address::ZERO`
     pub fn create(name: &'static str, symbol: &'static str, admin: Address) -> Self {
         Self {
-            action: Action::CreateToken {
-                name,
-                symbol,
-                currency: "USD",
-            },
+            action: Action::CreateToken { name, symbol, currency: "USD" },
             admin: Some(admin),
             ..Default::default()
         }
@@ -168,19 +153,12 @@ impl TIP20Setup {
 
     /// Configure an existing token at the given address.
     pub fn config(address: Address) -> Self {
-        Self {
-            action: Action::ConfigureToken { address },
-            ..Default::default()
-        }
+        Self { action: Action::ConfigureToken { address }, ..Default::default() }
     }
 
     /// Set the token currency (default: "USD"). Only applies to new tokens.
     pub fn currency(mut self, currency: &'static str) -> Self {
-        if let Action::CreateToken {
-            currency: ref mut c,
-            ..
-        } = self.action
-        {
+        if let Action::CreateToken { currency: ref mut c, .. } = self.action {
             *c = currency;
         }
         self
@@ -241,9 +219,7 @@ impl TIP20Setup {
             return TIP20Token::from_address(PATH_USD_ADDRESS);
         }
 
-        let admin = self
-            .admin
-            .expect("pathUSD is uninitialized and requires an admin");
+        let admin = self.admin.expect("pathUSD is uninitialized and requires an admin");
 
         // In Allegretto, PathUSD is token 0 created via factory with quoteToken=0
         if StorageCtx.spec().is_allegretto() {
@@ -291,11 +267,7 @@ impl TIP20Setup {
     pub fn apply_with_id(self) -> Result<(u64, TIP20Token)> {
         let mut token = match self.action {
             Action::PathUSD => self.path_usd_inner()?,
-            Action::CreateToken {
-                name,
-                symbol,
-                currency,
-            } => {
+            Action::CreateToken { name, symbol, currency } => {
                 let mut factory = Self::factory()?;
                 self.path_usd_inner()?;
 
@@ -314,10 +286,7 @@ impl TIP20Setup {
                 TIP20Token::from_address(token_address)?
             }
             Action::ConfigureToken { address } => {
-                assert!(
-                    is_initialized(address),
-                    "token not initialized, use `fn create` instead"
-                );
+                assert!(is_initialized(address), "token not initialized, use `fn create` instead");
                 TIP20Token::from_address(address)?
             }
         };
@@ -371,8 +340,8 @@ fn get_tip20_admin(token: Address) -> Option<Address> {
 
     let events = StorageCtx.get_events(TIP20_FACTORY_ADDRESS);
     for log in events {
-        if let Ok(event) = ITIP20Factory::TokenCreated::decode_log_data(log)
-            && event.token == token
+        if let Ok(event) = ITIP20Factory::TokenCreated::decode_log_data(log) &&
+            event.token == token
         {
             return Some(event.admin);
         }
@@ -402,10 +371,7 @@ pub fn gen_word_from(values: &[&str]) -> U256 {
         let hex_str = value.strip_prefix("0x").unwrap_or(value);
 
         // Parse hex string to bytes
-        assert!(
-            hex_str.len() % 2 == 0,
-            "Hex string '{value}' has odd length"
-        );
+        assert!(hex_str.len() % 2 == 0, "Hex string '{value}' has odd length");
 
         for i in (0..hex_str.len()).step_by(2) {
             let byte_str = &hex_str[i..i + 2];
@@ -415,11 +381,7 @@ pub fn gen_word_from(values: &[&str]) -> U256 {
         }
     }
 
-    assert!(
-        bytes.len() <= 32,
-        "Total bytes ({}) exceed 32-byte slot limit",
-        bytes.len()
-    );
+    assert!(bytes.len() <= 32, "Total bytes ({}) exceed 32-byte slot limit", bytes.len());
 
     // Left-pad with zeros to 32 bytes
     let mut slot_bytes = [0u8; 32];

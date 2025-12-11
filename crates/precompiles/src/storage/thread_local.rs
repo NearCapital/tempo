@@ -16,7 +16,8 @@ use crate::{
 
 scoped_thread_local!(static STORAGE: RefCell<&mut dyn PrecompileStorageProvider>);
 
-/// Thread-local storage accessor that implements `PrecompileStorageProvider` without the trait bound.
+/// Thread-local storage accessor that implements `PrecompileStorageProvider` without the trait
+/// bound.
 ///
 /// This is the only type that exposes access to the thread-local `STORAGE` static.
 ///
@@ -40,8 +41,8 @@ impl StorageCtx {
     ///
     /// The caller must ensure that:
     /// 1. Only one `enter` call is active at a time, in the same thread.
-    /// 2. If multiple storage providers are instantiated in parallel threads,
-    ///    they CANNOT point to the same storage addresses.
+    /// 2. If multiple storage providers are instantiated in parallel threads, they CANNOT point to
+    ///    the same storage addresses.
     pub fn enter<S, R>(storage: &mut S, f: impl FnOnce() -> R) -> R
     where
         S: PrecompileStorageProvider,
@@ -62,10 +63,7 @@ impl StorageCtx {
     where
         F: FnOnce(&mut dyn PrecompileStorageProvider) -> R,
     {
-        assert!(
-            STORAGE.is_set(),
-            "No storage context. 'StorageCtx::enter' must be called first"
-        );
+        assert!(STORAGE.is_set(), "No storage context. 'StorageCtx::enter' must be called first");
         STORAGE.with(|cell| {
             // SAFETY: `scoped_tls` ensures the pointer is only accessible within the closure scope.
             // Holding the guard prevents re-entrant borrows.
