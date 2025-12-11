@@ -47,7 +47,8 @@ use tempo_consensus::{TEMPO_GENERAL_GAS_DIVISOR, TEMPO_SHARED_GAS_DIVISOR};
 use tempo_evm::{TempoEvmConfig, TempoNextBlockEnvAttributes, evm::TempoEvm};
 use tempo_payload_types::TempoPayloadBuilderAttributes;
 use tempo_precompiles::{
-    TIP_FEE_MANAGER_ADDRESS, TIP20_REWARDS_REGISTRY_ADDRESS, tip_fee_manager::IFeeManager,
+    STABLECOIN_EXCHANGE_ADDRESS, TIP_FEE_MANAGER_ADDRESS, TIP20_REWARDS_REGISTRY_ADDRESS,
+    stablecoin_exchange::IStablecoinExchange, tip_fee_manager::IFeeManager,
     tip20_rewards_registry::ITIP20RewardsRegistry,
 };
 use tempo_primitives::{
@@ -98,7 +99,7 @@ impl<Provider> TempoPayloadBuilder<Provider> {
     }
 }
 
-impl<Provider: ChainSpecProvider> TempoPayloadBuilder<Provider> {
+impl<Provider: ChainSpecProvider<ChainSpec = TempoChainSpec>> TempoPayloadBuilder<Provider> {
     /// Builds system transactions to execute at the start of the block.
     ///
     /// Returns a vector of system transactions that must be executed at the beginning of each block:
@@ -144,13 +145,20 @@ impl<Provider: ChainSpecProvider> TempoPayloadBuilder<Provider> {
     ///
     /// Returns a vector of system transactions that must be executed at the end of each block:
     /// 1. Fee manager executeBlock - processes collected fees
-    /// 2. Subblocks signatures - validates subblock signatures
+    /// 2. Stablecoin exchange executeBlock - commits pending orders (pre Allegro-Moderato only)
+    /// 3. Subblocks signatures - validates subblock signatures
     fn build_seal_block_txs(
         &self,
         block_env: &BlockEnv,
         subblocks: &[RecoveredSubBlock],
+        timestamp: u64,
     ) -> Vec<Recovered<TempoTxEnvelope>> {
-        let chain_id = Some(self.provider.chain_spec().chain().id());
+        use tempo_chainspec::hardfork::TempoHardforks;
+
+        let chain_spec = self.provider.chain_spec();
+        let chain_id = Some(chain_spec.chain().id());
+
+        let mut txs = Vec::with_capacity(3);
 
         // Build fee manager system transaction
         let fee_manager_input = IFeeManager::executeBlockCall
@@ -174,6 +182,35 @@ impl<Provider: ChainSpecProvider> TempoPayloadBuilder<Provider> {
             )),
             TEMPO_SYSTEM_TX_SENDER,
         );
+        txs.push(fee_manager_tx);
+
+        // Build stablecoin exchange system transaction (pre Allegro-Moderato only)
+        // Post Allegro-Moderato, orders are immediately active when placed, so execute_block is a no-op.
+        // We skip the system tx entirely to save gas.
+        if !chain_spec.is_allegro_moderato_active_at_timestamp(timestamp) {
+            let stablecoin_exchange_input = IStablecoinExchange::executeBlockCall {}
+                .abi_encode()
+                .into_iter()
+                .chain(block_env.number.to_be_bytes_vec())
+                .collect();
+
+            let stablecoin_exchange_tx = Recovered::new_unchecked(
+                TempoTxEnvelope::Legacy(Signed::new_unhashed(
+                    TxLegacy {
+                        chain_id,
+                        nonce: 0,
+                        gas_price: 0,
+                        gas_limit: 0,
+                        to: STABLECOIN_EXCHANGE_ADDRESS.into(),
+                        value: U256::ZERO,
+                        input: stablecoin_exchange_input,
+                    },
+                    TEMPO_SYSTEM_TX_SIGNATURE,
+                )),
+                TEMPO_SYSTEM_TX_SENDER,
+            );
+            txs.push(stablecoin_exchange_tx);
+        }
 
         // Build subblocks signatures system transaction
         let subblocks_metadata = subblocks
@@ -200,8 +237,9 @@ impl<Provider: ChainSpecProvider> TempoPayloadBuilder<Provider> {
             )),
             TEMPO_SYSTEM_TX_SENDER,
         );
+        txs.push(subblocks_signatures_tx);
 
-        vec![fee_manager_tx, subblocks_signatures_tx]
+        txs
     }
 }
 
@@ -392,7 +430,8 @@ where
 
         // Prepare system transactions before actual block building and account for their size.
         let prepare_system_txs_start = Instant::now();
-        let system_txs = self.build_seal_block_txs(builder.evm().block(), &subblocks);
+        let system_txs =
+            self.build_seal_block_txs(builder.evm().block(), &subblocks, attributes.timestamp());
         for tx in &system_txs {
             block_size_used += tx.inner().length();
         }

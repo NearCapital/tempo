@@ -727,12 +727,21 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
     /// Process all pending orders into the active orderbook
     ///
     /// Only callable by the protocol via system transaction (sender must be Address::ZERO)
+    ///
+    /// Post Allegro-Moderato: This function is a no-op since orders are immediately
+    /// linked into the orderbook when placed.
     pub fn execute_block(&mut self, sender: Address) -> Result<()> {
         // Only protocol can call this
         if sender != Address::ZERO {
             return Err(StablecoinExchangeError::unauthorized().into());
         }
 
+        // Post Allegro-Moderato: orders are immediately active, nothing to process
+        if self.storage.spec().is_allegro_moderato() {
+            return Ok(());
+        }
+
+        // Pre Allegro-Moderato: process pending orders into the active orderbook
         let next_order_id = self.get_active_order_id()?;
 
         let pending_order_id = self.get_pending_order_id()?;
@@ -752,7 +761,7 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
         Ok(())
     }
 
-    /// Process a single pending order into the active orderbook
+    /// Process a single pending order into the active orderbook (pre Allegro-Moderato only)
     fn process_pending_order(&mut self, order_id: u128) -> Result<()> {
         let order = self.sload_orders(order_id)?;
 
