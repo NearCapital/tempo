@@ -376,4 +376,40 @@ mod tests {
             Err(_) => panic!("expected reverted output"),
         }
     }
+
+    #[test]
+    fn test_precompile_static_call() {
+        let (chain_id, spec) = (1, TempoHardfork::default());
+        let precompile =
+            tempo_precompile!("TIP20Token", chain_id, spec, |input| { TIP20Token::new(1) });
+
+        let db = CacheDB::new(EmptyDB::new());
+        let mut evm = EthEvmFactory::default().create_evm(db, EvmEnv::default());
+        let block = evm.block.clone();
+        let evm_internals = EvmInternals::new(evm.journal_mut(), &block);
+
+        let target_address = Address::random();
+        let bytecode_address = Address::random();
+        let input = PrecompileInput {
+            data: &Bytes::new(),
+            caller: Address::ZERO,
+            internals: evm_internals,
+            gas: 0,
+            is_static: true,
+            value: U256::ZERO,
+            target_address,
+            bytecode_address,
+        };
+
+        let result = AlloyEvmPrecompile::call(&precompile, input);
+
+        match result {
+            Ok(output) => {
+                assert!(output.reverted);
+                let decoded = StaticCallNotAllowed::abi_decode(&output.bytes).unwrap();
+                assert!(matches!(decoded, StaticCallNotAllowed {}));
+            }
+            Err(_) => panic!("expected reverted output"),
+        }
+    }
 }
