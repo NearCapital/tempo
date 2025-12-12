@@ -2,7 +2,7 @@
 
 use alloy_primitives::{Address, B256};
 use dashmap::DashMap;
-use metrics::Gauge;
+use metrics::{Counter, Gauge};
 use reth_metrics::Metrics;
 use std::sync::Arc;
 
@@ -10,7 +10,7 @@ use std::sync::Arc;
 ///
 /// This cache is shared between the transaction pool and the EVM executor.
 /// Senders are inserted when transactions are validated in the pool, and
-/// removed when transactions are executed during `newPayload` processing.
+/// removed when transactions are executed and removed from the pool.
 #[derive(Clone, Default)]
 pub struct SenderRecoveryCache {
     cache: Arc<DashMap<B256, Address>>,
@@ -32,10 +32,14 @@ impl SenderRecoveryCache {
         self.metrics.size.set(self.cache.len() as f64);
     }
 
-    /// Removes and returns the sender for the given transaction hash, if present.
-    pub fn remove(&self, tx_hash: &B256) -> Option<Address> {
-        let result = self.cache.remove(tx_hash).map(|(_, sender)| sender);
-        self.metrics.size.set(self.cache.len() as f64);
+    /// Returns the sender for the given transaction hash, if present.
+    pub fn get(&self, tx_hash: &B256) -> Option<Address> {
+        let result = self.cache.get(tx_hash).map(|sender| *sender);
+        if result.is_some() {
+            self.metrics.hits.increment(1);
+        } else {
+            self.metrics.misses.increment(1);
+        }
         result
     }
 
@@ -63,6 +67,10 @@ impl SenderRecoveryCache {
 struct SenderRecoveryCacheMetrics {
     /// The current size of the cache.
     size: Gauge,
+    /// Number of cache hits.
+    hits: Counter,
+    /// Number of cache misses.
+    misses: Counter,
 }
 
 #[cfg(test)]
@@ -78,7 +86,7 @@ mod tests {
         cache.insert(tx_hash, sender);
         assert_eq!(cache.len(), 1);
 
-        let recovered = cache.remove(&tx_hash);
+        let recovered = cache.get(&tx_hash);
         assert_eq!(recovered, Some(sender));
         assert!(cache.is_empty());
     }

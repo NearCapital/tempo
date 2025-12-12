@@ -311,7 +311,7 @@ impl RecoveredInBlock {
         let tx = &block.body().transactions[index];
         let tx_hash = tx.tx_hash();
 
-        let sender = if let Some(cached_sender) = cache.remove(tx_hash) {
+        let sender = if let Some(cached_sender) = cache.get(tx_hash) {
             cached_sender
         } else {
             tx.try_recover()?
