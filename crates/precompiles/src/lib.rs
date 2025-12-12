@@ -113,6 +113,7 @@ pub fn extend_tempo_precompiles(precompiles: &mut PrecompilesMap, cfg: &CfgEnv<T
 
 sol! {
     error DelegateCallNotAllowed();
+    error StaticCallNotAllowed();
 }
 
 macro_rules! tempo_precompile {
@@ -124,6 +125,14 @@ macro_rules! tempo_precompile {
                     DelegateCallNotAllowed {}.abi_encode().into(),
                 ));
             }
+
+            if !$input.is_static_call() {
+                return Ok(PrecompileOutput::new_reverted(
+                    0,
+                    StaticCallNotAllowed {}.abi_encode().into(),
+                ));
+            }
+
             let mut storage = crate::storage::evm::EvmPrecompileStorageProvider::new(
                 $input.internals,
                 $input.gas,
@@ -350,6 +359,7 @@ mod tests {
             caller: Address::ZERO,
             internals: evm_internals,
             gas: 0,
+            is_static: false,
             value: U256::ZERO,
             target_address,
             bytecode_address,
